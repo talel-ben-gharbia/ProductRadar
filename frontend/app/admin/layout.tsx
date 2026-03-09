@@ -1,21 +1,24 @@
-import AdminNavbar from '@/components/admin/adminNavbar'
-import AdminSidebar from '@/components/admin/adminSidebar'
-import { SidebarProvider } from '@/components/ui/sidebar'
-import React from 'react'
+import type { ReactNode } from "react"
 
-function AdminLayout({children}:any) {
+import AdminNavbar from "@/components/admin/adminNavbar"
+import AdminSidebar from "@/components/admin/adminSidebar"
+import { SidebarProvider } from "@/components/ui/sidebar"
+
+type AdminLayoutProps = {
+  children: ReactNode
+}
+
+function AdminLayout({ children }: AdminLayoutProps) {
   return (
-    <div className='w-full'>
     <SidebarProvider>
-    <div className='flex min-h-svh w-full'>
-            <AdminSidebar />
-      <div className='min-w-0 w-full flex-1 p-6'>
-                <AdminNavbar />
-                {children}
-            </div>
+      <div className="flex min-h-svh w-full">
+        <AdminSidebar />
+        <div className="min-w-0 flex-1">
+          <AdminNavbar />
+          <main className="w-full px-4 py-4 sm:px-6 sm:py-5 lg:px-8">{children}</main>
         </div>
-        </SidebarProvider>
-    </div>
+      </div>
+    </SidebarProvider>
   )
 }
 

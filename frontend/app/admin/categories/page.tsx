@@ -33,8 +33,8 @@ export default function CategoriesPage() {
 	}, [])
 
 	return (
-		<section className="w-full max-w-none">
-			<h1 className="mb-6 text-2xl font-bold">Categories</h1>
+		<section className="w-full max-w-none space-y-4">
+			<h1 className="text-2xl font-bold">Categories</h1>
 
 			<CategoriesDataTable
 				categories={categories}

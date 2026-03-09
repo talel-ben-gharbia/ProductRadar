@@ -69,8 +69,8 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
     await loadProductsCategoriesData()
 
   return (
-    <section className="w-full max-w-none">
-      <h1 className="mb-6 text-2xl font-bold">Products</h1>
+    <section className="w-full max-w-none space-y-4">
+      <h1 className="text-2xl font-bold">Products</h1>
 
       <ProductsDataTable
         products={products}

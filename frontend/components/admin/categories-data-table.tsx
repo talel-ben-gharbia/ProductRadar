@@ -6,6 +6,7 @@ import { ChevronDown } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Spinner } from "@/components/ui/spinner"
 import {
   Table,
   TableBody,
@@ -298,7 +299,10 @@ export default function CategoriesDataTable({
             {loading ? (
               <TableRow>
                 <TableCell colSpan={5} className="py-6 text-center text-muted-foreground">
-                  Loading categories...
+                  <div className="flex items-center justify-center gap-2">
+                    <Spinner className="size-4" />
+                    <span>Loading categories...</span>
+                  </div>
                 </TableCell>
               </TableRow>
             ) : fetchError ? (
