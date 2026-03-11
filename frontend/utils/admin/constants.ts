@@ -52,6 +52,10 @@ const SIDEBAR_CONSTANTS: SidebarItem[] = [
         title: "Add Product",
         url: "/admin/products/new",
       },
+      {
+        title: "Product Listings",
+        url: "/admin/product-listings",
+      },
     ],
   },
   {
