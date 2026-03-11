@@ -2,6 +2,7 @@
 /* eslint-disable @next/next/no-img-element */
 
 import { useEffect, useMemo, useRef, useState } from "react"
+import Link from "next/link"
 
 import { ChevronDown } from "lucide-react"
 
@@ -486,6 +487,8 @@ export default function ProductsDataTable({
                         <img
                           src={product.image_url}
                           alt={product.name}
+                          loading="lazy"
+                          referrerPolicy="no-referrer"
                           className="h-12 w-12 rounded-md border object-cover"
                         />
                       ) : (
@@ -497,7 +500,12 @@ export default function ProductsDataTable({
                   ) : null}
                   {visibleColumns.name ? (
                     <TableCell className="max-w-45 truncate" title={product.name}>
-                      {product.name}
+                      <Link
+                        href={`/admin/product-listings?productId=${product.id}`}
+                        className="font-medium underline-offset-4 hover:underline"
+                      >
+                        {product.name}
+                      </Link>
                     </TableCell>
                   ) : null}
                   {visibleColumns.brand ? <TableCell>{product.brand ?? "-"}</TableCell> : null}

@@ -3,6 +3,8 @@
 namespace App\Entity;
 
 use App\Repository\ProductRepository;
+use Doctrine\Common\Collections\ArrayCollection;
+use Doctrine\Common\Collections\Collection;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 
@@ -35,6 +37,17 @@ class Product
     #[ORM\ManyToOne(inversedBy: 'products')]
     #[ORM\JoinColumn(nullable: false)]
     private ?Category $category = null;
+
+    /**
+     * @var Collection<int, ProductListing>
+     */
+    #[ORM\OneToMany(targetEntity: ProductListing::class, mappedBy: 'product')]
+    private Collection $productListings;
+
+    public function __construct()
+    {
+        $this->productListings = new ArrayCollection();
+    }
 
     public function getId(): ?int
     {
@@ -121,6 +134,36 @@ class Product
     public function setCategory(?Category $category): static
     {
         $this->category = $category;
+
+        return $this;
+    }
+
+    /**
+     * @return Collection<int, ProductListing>
+     */
+    public function getProductListings(): Collection
+    {
+        return $this->productListings;
+    }
+
+    public function addProductListing(ProductListing $productListing): static
+    {
+        if (!$this->productListings->contains($productListing)) {
+            $this->productListings->add($productListing);
+            $productListing->setProduct($this);
+        }
+
+        return $this;
+    }
+
+    public function removeProductListing(ProductListing $productListing): static
+    {
+        if ($this->productListings->removeElement($productListing)) {
+            // set the owning side to null (unless already changed)
+            if ($productListing->getProduct() === $this) {
+                $productListing->setProduct(null);
+            }
+        }
 
         return $this;
     }
