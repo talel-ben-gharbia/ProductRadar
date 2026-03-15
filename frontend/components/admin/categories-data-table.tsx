@@ -3,9 +3,21 @@
 import Link from "next/link"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { ChevronDown } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Spinner } from "@/components/ui/spinner"
 import {
   Table,
@@ -15,12 +27,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import type { CategoryWithParent } from "@/services/admin/categories"
+import type { CategoryWithParent } from "@/utils/types"
 
 type CategoriesDataTableProps = {
   categories: CategoryWithParent[]
   loading: boolean
   fetchError: string | null
+  onDataChanged: () => Promise<void>
 }
 
 type DropdownOption = {
@@ -102,13 +115,19 @@ export default function CategoriesDataTable({
   categories,
   loading,
   fetchError,
+  onDataChanged,
 }: CategoriesDataTableProps) {
+  const router = useRouter()
   const [search, setSearch] = useState("")
-  const [pageSize, setPageSize] = useState(100)
+  const [pageSize, setPageSize] = useState(25)
   const [pageIndex, setPageIndex] = useState(0)
   const [selectedCategory, setSelectedCategory] = useState("all")
   const [selectedSubCategory, setSelectedSubCategory] = useState("all")
   const [selectedChildCategory, setSelectedChildCategory] = useState("all")
+  const [createOpen, setCreateOpen] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [newCategoryName, setNewCategoryName] = useState("")
+  const [newParentId, setNewParentId] = useState<string>("")
 
   const categoryOptions = useMemo(() => {
     return Array.from(
@@ -230,8 +249,53 @@ export default function CategoriesDataTable({
     return filteredRows.slice(start, start + pageSize)
   }, [filteredRows, currentPage, pageSize])
 
+  async function handleCategoryCreate() {
+    const name = newCategoryName.trim()
+    if (!name) {
+      toast.error("Category name is required.")
+      return
+    }
+
+    setSubmitting(true)
+    try {
+      const payload: { name: string; parentId?: number } = { name }
+      if (newParentId) {
+        payload.parentId = Number(newParentId)
+      }
+
+      const res = await fetch("/api/categories", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        toast.error((data as { error?: string }).error || "Failed to create category.")
+        return
+      }
+
+      toast.success("Category created.")
+      setCreateOpen(false)
+      setNewCategoryName("")
+      setNewParentId("")
+      await onDataChanged()
+      router.refresh()
+    } catch {
+      toast.error("Failed to create category.")
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   return (
     <div className="space-y-4">
+      <div className="flex items-center justify-end">
+        <Button asChild>
+          <Link href="/admin/categories/new">Add Category</Link>
+        </Button>
+      </div>
+
       <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
         <Input
           value={search}
@@ -352,6 +416,9 @@ export default function CategoriesDataTable({
           >
             Previous
           </Button>
+          <span className="text-sm text-muted-foreground">
+            Page {currentPage + 1} of {totalPages}
+          </span>
           <Button
             variant="outline"
             onClick={() =>
@@ -363,6 +430,59 @@ export default function CategoriesDataTable({
           </Button>
         </div>
       </div>
+
+      <Dialog
+        open={createOpen}
+        onOpenChange={(open) => {
+          if (!submitting) {
+            setCreateOpen(open)
+          }
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Add Category</DialogTitle>
+            <DialogDescription>Create a category using the same admin flow.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="new-category-name">Category Name</Label>
+              <Input
+                id="new-category-name"
+                value={newCategoryName}
+                onChange={(event) => setNewCategoryName(event.target.value)}
+                placeholder="Enter category name"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="new-category-parent">Parent Category (optional)</Label>
+              <select
+                id="new-category-parent"
+                value={newParentId}
+                onChange={(event) => setNewParentId(event.target.value)}
+                className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <option value="">No parent</option>
+                {categories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {[category.category, category.subCategory, category.name]
+                      .filter(Boolean)
+                      .join(" › ")}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline" disabled={submitting}>Cancel</Button>
+            </DialogClose>
+            <Button onClick={handleCategoryCreate} disabled={submitting || !newCategoryName.trim()}>
+              {submitting ? "Creating..." : "Create"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

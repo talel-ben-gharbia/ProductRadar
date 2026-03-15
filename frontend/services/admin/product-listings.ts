@@ -1,21 +1,5 @@
 import { BACKEND_URL } from "@/utils/admin/constants"
-
-export type ProductListing = {
-  id: number
-  price: number | null
-  old_price: number | null
-  product_url: string
-  availability: boolean | null
-  trust_score: number | null
-  created_at: string | null
-  updatet_at: string | null
-  is_active: boolean | null
-  productId: number | null
-  productName: string | null
-  productImageUrl: string | null
-  sellerId: number | null
-  sellerName: string | null
-}
+import type { ProductListing } from "@/utils/types"
 
 async function fetchProductListingsFromApi(
   productId?: number,
@@ -61,10 +45,22 @@ export async function getProductListings(
     const productListings = await fetchProductListingsFromApi(productId, sellerId)
     return productListings
   } catch (error) {
-    const message =
-      error instanceof Error
-        ? error.message
-        : "Unknown product listings service error"
-    throw new Error(`Unable to load product listings from backend. ${message}`)
+    if (error instanceof Error) {
+      if (
+        error.message.startsWith(
+          "Unable to load product listings from backend."
+        )
+      ) {
+        throw error
+      }
+
+      throw new Error(
+        `Unable to load product listings from backend. ${error.message}`
+      )
+    }
+
+    throw new Error(
+      "Unable to load product listings from backend. Unknown product listings service error"
+    )
   }
 }

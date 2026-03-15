@@ -45,6 +45,9 @@ class ProductListing
     #[ORM\JoinColumn(nullable: false)]
     private ?Seller $seller = null;
 
+    #[ORM\Column(length: 255)]
+    private ?string $ref = null;
+
     public function getId(): ?int
     {
         return $this->id;
@@ -166,6 +169,18 @@ class ProductListing
     public function setSeller(?Seller $seller): static
     {
         $this->seller = $seller;
+
+        return $this;
+    }
+
+    public function getRef(): ?string
+    {
+        return $this->ref;
+    }
+
+    public function setRef(string $ref): static
+    {
+        $this->ref = $ref;
 
         return $this;
     }

@@ -28,6 +28,14 @@ export async function middleware(request: NextRequest) {
       return response
     }
 
+    // Protect super-admin-only routes
+    if (
+      pathname.startsWith("/admin/admins") &&
+      session.role !== "ROLE_SUPER_ADMIN"
+    ) {
+      return NextResponse.redirect(new URL("/admin", request.url))
+    }
+
     // Sliding session: refresh token when approaching expiry
     if (shouldRefreshSession(session)) {
       const refreshed = await createSessionToken(session)

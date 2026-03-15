@@ -1,24 +1,22 @@
-import AdminSidebar from "@/components/admin/adminSidebar"
+import Link from "next/link"
 import { Button } from "@/components/ui/button"
-import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 
 export default function Page() {
   return (
-    <SidebarProvider>
-      <AdminSidebar />
-      <SidebarInset className="w-0 min-w-0 flex-1 p-6">
-        <h1 className="text-2xl font-bold">Admin Dashboard</h1>
-        <p className="mt-2 text-muted-foreground">
-          Welcome to the admin dashboard. Here you can manage your categories
-          and products.
-        </p>
-        <div className="mt-4">
-          <Button variant="outline">Go to Categories</Button>
-          <Button variant="outline" className="ml-2">
-            Go to Products
-          </Button>
-        </div>
-      </SidebarInset>
-    </SidebarProvider>
+    <main className="mx-auto flex min-h-svh w-full max-w-4xl flex-col items-start justify-center gap-5 p-6 sm:p-10">
+      <h1 className="text-3xl font-bold tracking-tight">Product Radar</h1>
+      <p className="max-w-2xl text-muted-foreground">
+        Admin routes live under <code>/admin</code>. Use the actions below to
+        open the admin dashboard or sign in.
+      </p>
+      <div className="flex flex-wrap gap-3">
+        <Button asChild>
+          <Link href="/admin">Open Admin</Link>
+        </Button>
+        <Button asChild variant="outline">
+          <Link href="/admin/login">Admin Login</Link>
+        </Button>
+      </div>
+    </main>
   )
 }

@@ -1,12 +1,28 @@
 "use client"
+/* eslint-disable @next/next/no-img-element */
 
 import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useEffect, useMemo, useRef, useState } from "react"
-import { ChevronDown } from "lucide-react"
 
+import { Pencil, Trash2, ChevronDown } from "lucide-react"
+
+import { toast } from "sonner"
+
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
+import { Switch } from "@/components/ui/switch"
 import {
   Table,
   TableBody,
@@ -15,10 +31,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import type { ProductListing } from "@/services/admin/product-listings"
+import { useAdmin } from "@/components/admin/admin-context"
+import type { Product, ProductListing } from "@/utils/types"
+import type { Seller } from "@/services/admin/sellers"
 
 type ProductListingsDataTableProps = {
   productListings: ProductListing[]
+  products: Product[]
+  sellers: Seller[]
   fetchError: string | null
   currentProductId?: number
   currentSellerId?: number
@@ -89,10 +109,12 @@ function toMoney(value: number | null): string {
     return "-"
   }
 
-  return value.toLocaleString("fr-TN", {
-    minimumFractionDigits: 3,
-    maximumFractionDigits: 3,
-  }) + " DT"
+  return (
+    value.toLocaleString("fr-TN", {
+      minimumFractionDigits: 3,
+      maximumFractionDigits: 3,
+    }) + " DT"
+  )
 }
 
 function toDate(value: string | null): string {
@@ -108,8 +130,23 @@ function toDate(value: string | null): string {
   return date.toLocaleString()
 }
 
+function limitWords(value: string | null | undefined, maxWords: number): string {
+  if (!value) {
+    return "-"
+  }
+
+  const words = value.trim().split(/\s+/)
+  if (words.length <= maxWords) {
+    return value
+  }
+
+  return `${words.slice(0, maxWords).join(" ")}...`
+}
+
 export default function ProductListingsDataTable({
   productListings,
+  products,
+  sellers,
   fetchError,
   currentProductId,
   currentSellerId,
@@ -117,15 +154,23 @@ export default function ProductListingsDataTable({
   const pathname = usePathname()
   const router = useRouter()
   const searchParams = useSearchParams()
+  const { admin } = useAdmin()
+  const canManageListings = admin?.role === "ROLE_SUPER_ADMIN"
+
   const [search, setSearch] = useState("")
   const [isColumnsOpen, setIsColumnsOpen] = useState(false)
-  const [pageSize, setPageSize] = useState(100)
+  const [pageSize, setPageSize] = useState(25)
   const [pageIndex, setPageIndex] = useState(0)
-  const [selectedSeller, setSelectedSeller] = useState(currentSellerId ? String(currentSellerId) : "all")
+  const [selectedSeller, setSelectedSeller] = useState(
+    currentSellerId ? String(currentSellerId) : "all"
+  )
   const [selectedAvailability, setSelectedAvailability] = useState("all")
   const [selectedActive, setSelectedActive] = useState("all")
+  const [activeOverrides, setActiveOverrides] = useState<Record<number, boolean>>({})
+  const [pendingIds, setPendingIds] = useState<Set<number>>(new Set())
   const [visibleColumns, setVisibleColumns] = useState({
     id: true,
+    ref: true,
     product: true,
     image: true,
     seller: true,
@@ -139,6 +184,23 @@ export default function ProductListingsDataTable({
     productLink: true,
   })
   const columnsMenuRef = useRef<HTMLDivElement | null>(null)
+
+  const [editingListing, setEditingListing] = useState<ProductListing | null>(null)
+  const [deletingListingId, setDeletingListingId] = useState<number | null>(null)
+  const [createOpen, setCreateOpen] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [newProductId, setNewProductId] = useState<number | null>(currentProductId ?? null)
+  const [newSellerId, setNewSellerId] = useState<number | null>(currentSellerId ?? null)
+  const [newRef, setNewRef] = useState("")
+  const [newPrice, setNewPrice] = useState("")
+  const [newOldPrice, setNewOldPrice] = useState("")
+  const [newProductUrl, setNewProductUrl] = useState("")
+  const [newAvailability, setNewAvailability] = useState("")
+  const [newActive, setNewActive] = useState(true)
+  const [editRef, setEditRef] = useState("")
+  const [editPrice, setEditPrice] = useState("")
+  const [editOldPrice, setEditOldPrice] = useState("")
+  const [editProductUrl, setEditProductUrl] = useState("")
 
   const sellerFilterOptions = useMemo<DropdownOption[]>(() => {
     const sellerMap = new Map<number, string>()
@@ -201,11 +263,152 @@ export default function ProductListingsDataTable({
       if (!normalizedSearch) return true
       return (
         String(listing.id).includes(normalizedSearch) ||
+        (listing.ref ?? "").toLowerCase().includes(normalizedSearch) ||
         (listing.productName ?? "").toLowerCase().includes(normalizedSearch) ||
         (listing.sellerName ?? "").toLowerCase().includes(normalizedSearch)
       )
     })
   }, [productListings, search, selectedSeller, selectedAvailability, selectedActive])
+
+  async function handleToggleActive(id: number, newValue: boolean) {
+    if (!canManageListings) {
+      return
+    }
+
+    setActiveOverrides((prev) => ({ ...prev, [id]: newValue }))
+    setPendingIds((prev) => new Set(prev).add(id))
+    try {
+      const res = await fetch(`/api/product-listings/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ is_active: newValue }),
+      })
+      if (!res.ok) {
+        setActiveOverrides((prev) => {
+          const next = { ...prev }
+          delete next[id]
+          return next
+        })
+        toast.error("Failed to update active status.")
+      }
+    } catch {
+      setActiveOverrides((prev) => {
+        const next = { ...prev }
+        delete next[id]
+        return next
+      })
+      toast.error("Failed to update active status.")
+    } finally {
+      setPendingIds((prev) => {
+        const next = new Set(prev)
+        next.delete(id)
+        return next
+      })
+    }
+  }
+
+  async function handleListingCreate() {
+    if (!newProductId || !newSellerId || !newRef.trim() || !newPrice.trim() || !newProductUrl.trim()) {
+      toast.error("Product, seller, ref, price and product URL are required.")
+      return
+    }
+
+    setSubmitting(true)
+    try {
+      const availability =
+        newAvailability === ""
+          ? null
+          : newAvailability === "true"
+
+      const res = await fetch("/api/product-listings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          productId: newProductId,
+          sellerId: newSellerId,
+          ref: newRef.trim(),
+          price: Number(newPrice),
+          old_price: newOldPrice.trim() ? Number(newOldPrice) : null,
+          product_url: newProductUrl.trim(),
+          availability,
+          is_active: newActive,
+        }),
+      })
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        toast.error((data as { error?: string }).error || "Failed to create listing.")
+        return
+      }
+
+      toast.success("Listing created.")
+      setCreateOpen(false)
+      setNewProductId(currentProductId ?? null)
+      setNewSellerId(currentSellerId ?? null)
+      setNewRef("")
+      setNewPrice("")
+      setNewOldPrice("")
+      setNewProductUrl("")
+      setNewAvailability("")
+      setNewActive(true)
+      router.refresh()
+    } catch {
+      toast.error("Failed to create listing.")
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  async function handleListingUpdate() {
+    if (!editingListing) return
+    setSubmitting(true)
+    try {
+      const res = await fetch(`/api/product-listings/${editingListing.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ref: editRef || null,
+          price: editPrice ? Number(editPrice) : null,
+          old_price: editOldPrice ? Number(editOldPrice) : null,
+          product_url: editProductUrl || null,
+        }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        toast.error((data as { error?: string }).error || "Failed to update listing.")
+        return
+      }
+      toast.success("Listing updated.")
+      setEditingListing(null)
+      router.refresh()
+    } catch {
+      toast.error("Failed to update listing.")
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  async function handleListingDelete() {
+    if (deletingListingId === null) return
+    setSubmitting(true)
+    try {
+      const res = await fetch(`/api/product-listings/${deletingListingId}`, {
+        method: "DELETE",
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        toast.error((data as { error?: string }).error || "Failed to delete listing.")
+        return
+      }
+      toast.success("Listing deleted.")
+      setDeletingListingId(null)
+      router.refresh()
+    } catch {
+      toast.error("Failed to delete listing.")
+    } finally {
+      setSubmitting(false)
+    }
+  }
 
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize))
   const currentPage = Math.min(pageIndex, totalPages - 1)
@@ -248,59 +451,68 @@ export default function ProductListingsDataTable({
             setSearch(event.target.value)
             setPageIndex(0)
           }}
-          placeholder="Search by listing id, product, or seller"
+          placeholder="Search by listing id, ref, product, or seller"
           className="max-w-md"
         />
 
-        <div className="relative" ref={columnsMenuRef}>
-          <Button
-            variant="outline"
-            className="gap-2"
-            onClick={() => setIsColumnsOpen((prev) => !prev)}
-          >
-            Columns
-            <ChevronDown
-              className={`size-4 transition-transform duration-200 ${
-                isColumnsOpen ? "rotate-180" : "rotate-0"
-              }`}
-            />
-          </Button>
+        <div className="flex items-center gap-2">
+          {canManageListings ? (
+            <Button asChild>
+              <Link href="/admin/product-listings/new">Add Product Listing</Link>
+            </Button>
+          ) : null}
 
-          <div
-            className={`absolute right-0 z-20 mt-2 w-52 origin-top-right rounded-md border bg-background p-2 shadow transition-all duration-200 ease-out ${
-              isColumnsOpen
-                ? "pointer-events-auto translate-y-0 scale-100 opacity-100"
-                : "pointer-events-none -translate-y-1 scale-95 opacity-0"
-            }`}
-          >
-            {(
-              [
-                ["id", "ID"],
-                ["product", "Product"],
-                ["image", "Image"],
-                ["seller", "Seller"],
-                ["price", "Price"],
-                ["oldPrice", "Old Price"],
-                ["available", "Available"],
-                ["trustScore", "Trust Score"],
-                ["active", "Active"],
-                ["createdAt", "Created At"],
-                ["updatedAt", "Updated At"],
-                ["productLink", "Product Link"],
-              ] as const
-            ).map(([key, label]) => (
-              <label
-                key={key}
-                className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-muted"
-              >
-                <input
-                  type="checkbox"
-                  checked={visibleColumns[key]}
-                  onChange={() => toggleColumn(key)}
-                />
-                <span>{label}</span>
-              </label>
-            ))}
+          <div className="relative" ref={columnsMenuRef}>
+            <Button
+              variant="outline"
+              className="gap-2"
+              onClick={() => setIsColumnsOpen((prev) => !prev)}
+            >
+              Columns
+              <ChevronDown
+                className={`size-4 transition-transform duration-200 ${
+                  isColumnsOpen ? "rotate-180" : "rotate-0"
+                }`}
+              />
+            </Button>
+
+            <div
+              className={`absolute right-0 z-20 mt-2 w-52 origin-top-right rounded-md border bg-background p-2 shadow transition-all duration-200 ease-out ${
+                isColumnsOpen
+                  ? "pointer-events-auto translate-y-0 scale-100 opacity-100"
+                  : "pointer-events-none -translate-y-1 scale-95 opacity-0"
+              }`}
+            >
+              {(
+                [
+                  ["id", "ID"],
+                  ["ref", "Ref"],
+                  ["product", "Product"],
+                  ["image", "Image"],
+                  ["seller", "Seller"],
+                  ["price", "Price"],
+                  ["oldPrice", "Old Price"],
+                  ["available", "Available"],
+                  ["trustScore", "Trust Score"],
+                  ["active", "Active"],
+                  ["createdAt", "Created At"],
+                  ["updatedAt", "Updated At"],
+                  ["productLink", "Product Link"],
+                ] as const
+              ).map(([key, label]) => (
+                <label
+                  key={key}
+                  className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-muted"
+                >
+                  <input
+                    type="checkbox"
+                    checked={visibleColumns[key]}
+                    onChange={() => toggleColumn(key)}
+                  />
+                  <span>{label}</span>
+                </label>
+              ))}
+            </div>
           </div>
         </div>
       </div>
@@ -345,49 +557,67 @@ export default function ProductListingsDataTable({
       </div>
 
       <div className="w-full rounded-lg border bg-card">
-        <Table>
+        <Table className="min-w-330 table-fixed">
           <TableHeader>
             <TableRow>
-              {visibleColumns.id ? <TableHead>ID</TableHead> : null}
-              {visibleColumns.product ? <TableHead className="w-56">Product</TableHead> : null}
-              {visibleColumns.image ? <TableHead>Image</TableHead> : null}
-              {visibleColumns.seller ? <TableHead>Seller</TableHead> : null}
-              {visibleColumns.price ? <TableHead>Price</TableHead> : null}
-              {visibleColumns.oldPrice ? <TableHead>Old Price</TableHead> : null}
-              {visibleColumns.available ? <TableHead>Available</TableHead> : null}
-              {visibleColumns.trustScore ? <TableHead>Trust Score</TableHead> : null}
-              {visibleColumns.active ? <TableHead>Active</TableHead> : null}
-              {visibleColumns.createdAt ? <TableHead>Created At</TableHead> : null}
-              {visibleColumns.updatedAt ? <TableHead>Updated At</TableHead> : null}
-              {visibleColumns.productLink ? <TableHead>Product Link</TableHead> : null}
+              {visibleColumns.id ? <TableHead className="w-22">ID</TableHead> : null}
+              {visibleColumns.ref ? <TableHead className="w-28">Ref</TableHead> : null}
+              {visibleColumns.product ? <TableHead className="w-72">Product</TableHead> : null}
+              {visibleColumns.image ? <TableHead className="w-20">Image</TableHead> : null}
+              {visibleColumns.seller ? <TableHead className="w-44">Seller</TableHead> : null}
+              {visibleColumns.price ? <TableHead className="w-26">Price</TableHead> : null}
+              {visibleColumns.oldPrice ? <TableHead className="w-28">Old Price</TableHead> : null}
+              {visibleColumns.available ? <TableHead className="w-24">Available</TableHead> : null}
+              {visibleColumns.trustScore ? <TableHead className="w-28">Trust Score</TableHead> : null}
+              {visibleColumns.active ? <TableHead className="w-20">Active</TableHead> : null}
+              {visibleColumns.createdAt ? <TableHead className="w-44">Created At</TableHead> : null}
+              {visibleColumns.updatedAt ? <TableHead className="w-44">Updated At</TableHead> : null}
+              {visibleColumns.productLink ? <TableHead className="w-28">Product Link</TableHead> : null}
+              <TableHead className="w-20">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {fetchError ? (
               <TableRow>
-                <TableCell colSpan={visibleColumnCount || 1} className="py-6 text-center text-destructive">
+                <TableCell
+                  colSpan={visibleColumnCount + 1 || 1}
+                  className="py-6 text-center text-destructive"
+                >
                   {fetchError}
                 </TableCell>
               </TableRow>
             ) : paginatedRows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={visibleColumnCount || 1} className="py-6 text-center text-muted-foreground">
+                <TableCell
+                  colSpan={visibleColumnCount + 1 || 1}
+                  className="py-6 text-center text-muted-foreground"
+                >
                   No product listings found
                 </TableCell>
               </TableRow>
             ) : (
               paginatedRows.map((listing) => (
                 <TableRow key={listing.id}>
-                  {visibleColumns.id ? <TableCell>{listing.id}</TableCell> : null}
+                  {visibleColumns.id ? <TableCell className="w-22">{listing.id}</TableCell> : null}
+                  {visibleColumns.ref ? (
+                    <TableCell className="w-28">
+                      <span className="block overflow-hidden text-ellipsis" title={listing.ref ?? "-"}>
+                        {listing.ref ?? "-"}
+                      </span>
+                    </TableCell>
+                  ) : null}
                   {visibleColumns.product ? (
-                    <TableCell className="max-w-56 truncate">
+                    <TableCell className="w-72">
                       {listing.productId ? (
                         <Link
                           href={`/admin/product-listings?productId=${listing.productId}`}
-                          className="block truncate font-medium underline-offset-4 hover:underline"
+                          className="block overflow-hidden text-ellipsis font-medium underline-offset-4 hover:underline"
                           title={listing.productName ?? `Product #${listing.productId}`}
                         >
-                          {listing.productName ?? `Product #${listing.productId}`}
+                          {limitWords(
+                            listing.productName ?? `Product #${listing.productId}`,
+                            5
+                          )}
                         </Link>
                       ) : (
                         "-"
@@ -395,7 +625,7 @@ export default function ProductListingsDataTable({
                     </TableCell>
                   ) : null}
                   {visibleColumns.image ? (
-                    <TableCell>
+                    <TableCell className="w-20">
                       {listing.productImageUrl ? (
                         <img
                           src={listing.productImageUrl}
@@ -411,30 +641,97 @@ export default function ProductListingsDataTable({
                       )}
                     </TableCell>
                   ) : null}
-                  {visibleColumns.seller ? <TableCell>{listing.sellerName ?? "-"}</TableCell> : null}
-                  {visibleColumns.price ? <TableCell>{toMoney(listing.price)}</TableCell> : null}
-                  {visibleColumns.oldPrice ? <TableCell>{toMoney(listing.old_price)}</TableCell> : null}
+                  {visibleColumns.seller ? (
+                    <TableCell className="w-44">
+                      <span className="block overflow-hidden text-ellipsis" title={listing.sellerName ?? "-"}>
+                        {limitWords(listing.sellerName, 4)}
+                      </span>
+                    </TableCell>
+                  ) : null}
+                  {visibleColumns.price ? (
+                    <TableCell className="w-26">{toMoney(listing.price)}</TableCell>
+                  ) : null}
+                  {visibleColumns.oldPrice ? (
+                    <TableCell className="w-28">{toMoney(listing.old_price)}</TableCell>
+                  ) : null}
                   {visibleColumns.available ? (
-                    <TableCell>{listing.availability === null ? "-" : listing.availability ? "Yes" : "No"}</TableCell>
+                    <TableCell className="w-24">
+                      {listing.availability === null ? (
+                        "-"
+                      ) : listing.availability ? (
+                        <Badge variant="secondary">Yes</Badge>
+                      ) : (
+                        <Badge variant="destructive">No</Badge>
+                      )}
+                    </TableCell>
                   ) : null}
-                  {visibleColumns.trustScore ? <TableCell>{listing.trust_score ?? "-"}</TableCell> : null}
+                  {visibleColumns.trustScore ? (
+                    <TableCell className="w-28">{listing.trust_score ?? "-"}</TableCell>
+                  ) : null}
                   {visibleColumns.active ? (
-                    <TableCell>{listing.is_active === null ? "-" : listing.is_active ? "Yes" : "No"}</TableCell>
+                    <TableCell className="w-20">
+                      {listing.is_active === null ? (
+                        "-"
+                      ) : (
+                        <Switch
+                          checked={activeOverrides[listing.id] ?? listing.is_active}
+                          onCheckedChange={(checked) => handleToggleActive(listing.id, checked)}
+                          disabled={!canManageListings || pendingIds.has(listing.id)}
+                        />
+                      )}
+                    </TableCell>
                   ) : null}
-                  {visibleColumns.createdAt ? <TableCell>{toDate(listing.created_at)}</TableCell> : null}
-                  {visibleColumns.updatedAt ? <TableCell>{toDate(listing.updatet_at)}</TableCell> : null}
+                  {visibleColumns.createdAt ? (
+                    <TableCell className="w-44">{toDate(listing.created_at)}</TableCell>
+                  ) : null}
+                  {visibleColumns.updatedAt ? (
+                    <TableCell className="w-44">{toDate(listing.updatet_at)}</TableCell>
+                  ) : null}
                   {visibleColumns.productLink ? (
-                    <TableCell>
+                    <TableCell className="w-28">
                       <a
                         href={listing.product_url}
                         target="_blank"
                         rel="noreferrer"
-                        className="underline-offset-4 hover:underline"
+                        className="block overflow-hidden text-ellipsis underline-offset-4 hover:underline"
+                        title={listing.product_url ?? ""}
                       >
                         Open listing
                       </a>
                     </TableCell>
                   ) : null}
+                  <TableCell className="w-20">
+                    {canManageListings ? (
+                      <div className="flex items-center justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => {
+                            setEditingListing(listing)
+                            setEditRef(listing.ref ?? "")
+                            setEditPrice(listing.price !== null ? String(listing.price) : "")
+                            setEditOldPrice(
+                              listing.old_price !== null ? String(listing.old_price) : ""
+                            )
+                            setEditProductUrl(listing.product_url ?? "")
+                          }}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-destructive hover:text-destructive"
+                          onClick={() => setDeletingListingId(listing.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">-</span>
+                    )}
+                  </TableCell>
                 </TableRow>
               ))
             )}
@@ -455,6 +752,9 @@ export default function ProductListingsDataTable({
           >
             Previous
           </Button>
+          <span className="text-sm text-muted-foreground">
+            Page {currentPage + 1} of {totalPages}
+          </span>
           <Button
             variant="outline"
             onClick={() =>
@@ -466,6 +766,228 @@ export default function ProductListingsDataTable({
           </Button>
         </div>
       </div>
+
+      {/* Edit Listing Dialog */}
+      <Dialog
+        open={createOpen}
+        onOpenChange={(open) => {
+          if (!submitting) {
+            setCreateOpen(open)
+          }
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Add Product Listing</DialogTitle>
+            <DialogDescription>Create a listing using the same admin design.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="new-listing-product">Product</Label>
+              <select
+                id="new-listing-product"
+                value={newProductId ?? ""}
+                onChange={(e) => setNewProductId(e.target.value ? Number(e.target.value) : null)}
+                className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <option value="">Select product</option>
+                {products.map((product) => (
+                  <option key={product.id} value={product.id}>
+                    #{product.id} - {product.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="new-listing-seller">Seller</Label>
+              <select
+                id="new-listing-seller"
+                value={newSellerId ?? ""}
+                onChange={(e) => setNewSellerId(e.target.value ? Number(e.target.value) : null)}
+                className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <option value="">Select seller</option>
+                {sellers.map((seller) => (
+                  <option key={seller.id} value={seller.id}>
+                    #{seller.id} - {seller.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="new-listing-ref">Ref</Label>
+              <Input id="new-listing-ref" value={newRef} onChange={(e) => setNewRef(e.target.value)} />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="new-listing-price">Price (DT)</Label>
+              <Input
+                id="new-listing-price"
+                type="number"
+                step="0.001"
+                min="0"
+                value={newPrice}
+                onChange={(e) => setNewPrice(e.target.value)}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="new-listing-old-price">Old Price (optional)</Label>
+              <Input
+                id="new-listing-old-price"
+                type="number"
+                step="0.001"
+                min="0"
+                value={newOldPrice}
+                onChange={(e) => setNewOldPrice(e.target.value)}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="new-listing-url">Product URL</Label>
+              <Input
+                id="new-listing-url"
+                value={newProductUrl}
+                onChange={(e) => setNewProductUrl(e.target.value)}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="new-listing-availability">Availability</Label>
+              <select
+                id="new-listing-availability"
+                value={newAvailability}
+                onChange={(e) => setNewAvailability(e.target.value)}
+                className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <option value="">Unknown</option>
+                <option value="true">Available</option>
+                <option value="false">Unavailable</option>
+              </select>
+            </div>
+            <div className="flex items-center justify-between rounded-md border px-3 py-2">
+              <Label htmlFor="new-listing-active">Active</Label>
+              <Switch
+                id="new-listing-active"
+                checked={newActive}
+                onCheckedChange={setNewActive}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline" disabled={submitting}>
+                Cancel
+              </Button>
+            </DialogClose>
+            <Button
+              onClick={handleListingCreate}
+              disabled={
+                submitting ||
+                !newProductId ||
+                !newSellerId ||
+                !newRef.trim() ||
+                !newPrice.trim() ||
+                !newProductUrl.trim()
+              }
+            >
+              {submitting ? "Creating..." : "Create"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Listing Dialog */}
+      <Dialog
+        open={editingListing !== null}
+        onOpenChange={(open) => {
+          if (!open) setEditingListing(null)
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Edit Listing</DialogTitle>
+            <DialogDescription>Update the listing details below.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="edit-ref">Ref</Label>
+              <Input
+                id="edit-ref"
+                value={editRef}
+                onChange={(e) => setEditRef(e.target.value)}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-price">Price (DT)</Label>
+              <Input
+                id="edit-price"
+                type="number"
+                step="0.001"
+                min="0"
+                value={editPrice}
+                onChange={(e) => setEditPrice(e.target.value)}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-old-price">Old Price (DT, optional)</Label>
+              <Input
+                id="edit-old-price"
+                type="number"
+                step="0.001"
+                min="0"
+                value={editOldPrice}
+                onChange={(e) => setEditOldPrice(e.target.value)}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-product-url">Product URL</Label>
+              <Input
+                id="edit-product-url"
+                value={editProductUrl}
+                onChange={(e) => setEditProductUrl(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline" disabled={submitting}>
+                Cancel
+              </Button>
+            </DialogClose>
+            <Button onClick={handleListingUpdate} disabled={submitting}>
+              {submitting ? "Saving…" : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Listing Dialog */}
+      <Dialog
+        open={deletingListingId !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeletingListingId(null)
+        }}
+      >
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Delete Listing</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this listing? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline" disabled={submitting}>
+                Cancel
+              </Button>
+            </DialogClose>
+            <Button
+              variant="destructive"
+              onClick={handleListingDelete}
+              disabled={submitting}
+            >
+              {submitting ? "Deleting…" : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

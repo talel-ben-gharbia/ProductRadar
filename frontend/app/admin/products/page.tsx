@@ -1,9 +1,10 @@
 import ProductsDataTable from "@/components/admin/products-data-table"
 import {
   getCategoriesWithParents,
-  type CategoryWithParent,
 } from "@/services/admin/categories"
-import { getProducts, type Product } from "@/services/admin/products"
+import { getProductListings } from "@/services/admin/product-listings"
+import { getProducts } from "@/services/admin/products"
+import type { CategoryWithParent, Product } from "@/utils/types"
 
 type ProductsPageProps = {
   searchParams?: Promise<{
@@ -14,6 +15,23 @@ type ProductsPageProps = {
 type ProductsPageData = {
   products: Product[]
   fetchError: string | null
+}
+
+function deduplicateProducts(products: Product[]): Product[] {
+  const uniqueProducts = new Map<string, Product>()
+
+  products.forEach((product) => {
+    const normalizedName = product.name.trim().toLowerCase()
+    const normalizedDescription = product.description.trim().toLowerCase()
+
+    const dedupeKey = `name-desc:${normalizedName}|${normalizedDescription}`
+
+    if (!uniqueProducts.has(dedupeKey)) {
+      uniqueProducts.set(dedupeKey, product)
+    }
+  })
+
+  return Array.from(uniqueProducts.values())
 }
 
 type ProductsCategoriesData = {
@@ -28,7 +46,27 @@ async function loadProductsPageData(
   let fetchError: string | null = null
 
   try {
-    products = await getProducts(categoryId)
+    const [allProducts, allListings] = await Promise.all([
+      getProducts(categoryId),
+      getProductListings(),
+    ])
+
+    const listingCounts = new Map<number, number>()
+    for (const listing of allListings) {
+      if (listing.productId === null) {
+        continue
+      }
+
+      listingCounts.set(
+        listing.productId,
+        (listingCounts.get(listing.productId) ?? 0) + 1,
+      )
+    }
+
+    products = deduplicateProducts(allProducts).map((product) => ({
+      ...product,
+      listingCount: listingCounts.get(product.id) ?? 0,
+    }))
   } catch (error) {
     fetchError =
       error instanceof Error
