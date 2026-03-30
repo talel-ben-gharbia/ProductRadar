@@ -1,18 +1,13 @@
 import { BACKEND_URL } from "@/utils/admin/constants"
+import type { CategoryWithParent } from "@/utils/types"
 
-type CategoryApiItem = {
+export type CategoryRaw = {
 	id: number
 	name: string
 	parentId: number | null
 }
 
-export type CategoryWithParent = {
-	id: number
-	name: string
-	childCategory: string | null
-	subCategory: string | null
-	category: string | null
-}
+type CategoryApiItem = CategoryRaw
 
 async function fetchCategoriesFromApi(): Promise<CategoryApiItem[]> {
 	try {
@@ -95,4 +90,8 @@ export async function getCategoriesWithParents(): Promise<CategoryWithParent[]> 
 			"Unable to load categories from backend. Unknown categories transform error"
 		)
 	}
+}
+
+export async function getRawCategories(): Promise<CategoryRaw[]> {
+	return fetchCategoriesFromApi()
 }

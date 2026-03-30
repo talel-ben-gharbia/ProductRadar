@@ -1,20 +1,15 @@
 import { BACKEND_URL } from "@/utils/admin/constants"
-
-export type Product = {
-  id: number
-  ref: string
-  name: string
-  brand: string | null
-  description: string
-  specs_json: Record<string, unknown> | null
-  image_url: string | null
-  categoryId: number | null
-}
+import type { Product } from "@/utils/types"
 
 async function fetchProductsFromApi(categoryId?: number): Promise<Product[]> {
   try {
     const query = categoryId ? `?categoryId=${categoryId}` : ""
-    const response = await fetch(`${BACKEND_URL}/products${query}`, {
+    const endpoint =
+      typeof window === "undefined"
+        ? `${BACKEND_URL}/products${query}`
+        : `/api/products${query}`
+
+    const response = await fetch(endpoint, {
       cache: "no-store",
     })
 
@@ -36,8 +31,16 @@ export async function getProducts(categoryId?: number): Promise<Product[]> {
     const products = await fetchProductsFromApi(categoryId)
     return products
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Unknown products service error"
-    throw new Error(`Unable to load products from backend. ${message}`)
+    if (error instanceof Error) {
+      if (error.message.startsWith("Unable to load products from backend.")) {
+        throw error
+      }
+
+      throw new Error(`Unable to load products from backend. ${error.message}`)
+    }
+
+    throw new Error(
+      "Unable to load products from backend. Unknown products service error"
+    )
   }
 }

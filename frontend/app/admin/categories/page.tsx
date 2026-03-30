@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import CategoriesDataTable from "@/components/admin/categories-data-table"
+import CategoryTree from "@/components/admin/category-tree"
 import { getCategoriesWithParents } from "@/services/admin/categories"
 
 export default function CategoriesPage() {
@@ -36,11 +37,16 @@ export default function CategoriesPage() {
 		<section className="w-full max-w-none space-y-4">
 			<h1 className="text-2xl font-bold">Categories</h1>
 
-			<CategoriesDataTable
-				categories={categories}
-				loading={loading}
-				fetchError={fetchError}
-			/>
+			<div className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_300px]">
+				<CategoriesDataTable
+					categories={categories}
+					loading={loading}
+					fetchError={fetchError}
+					onDataChanged={handleFetchCategory}
+				/>
+
+				<CategoryTree />
+			</div>
 		</section>
 	)
 }

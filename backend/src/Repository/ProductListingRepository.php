@@ -44,7 +44,7 @@ class ProductListingRepository extends ServiceEntityRepository
 
     /**
      * Return one best listing per seller for the target product.
-     * Matching priority: ref, then name+description, then name, then description.
+        * Matching priority: id, then name+description, then name, then description.
      *
      * @return array<int, array<string, mixed>>
      */
@@ -53,7 +53,7 @@ class ProductListingRepository extends ServiceEntityRepository
         $entityManager = $this->getEntityManager();
         $targetProduct = $entityManager
             ->createQueryBuilder()
-            ->select('p.id AS id, p.ref AS ref, p.name AS name, p.description AS description')
+            ->select('p.id AS id, p.name AS name, p.description AS description')
             ->from('App\\Entity\\Product', 'p')
             ->where('p.id = :productId')
             ->setParameter('productId', $productId)
@@ -64,7 +64,6 @@ class ProductListingRepository extends ServiceEntityRepository
             return [];
         }
 
-        $targetRef = trim((string) ($targetProduct['ref'] ?? ''));
         $targetName = mb_strtolower(trim((string) ($targetProduct['name'] ?? '')));
         $targetDescription = trim((string) ($targetProduct['description'] ?? ''));
 
@@ -72,15 +71,13 @@ class ProductListingRepository extends ServiceEntityRepository
             ->addSelect(
                 "CASE\n" .
                 " WHEN p.id = :targetProductId THEN 5\n" .
-                " WHEN p.ref = :targetRef THEN 4\n" .
                 " WHEN LOWER(p.name) = :targetName AND p.description = :targetDescription THEN 3\n" .
                 " WHEN LOWER(p.name) = :targetName THEN 2\n" .
                 " WHEN p.description = :targetDescription THEN 1\n" .
                 " ELSE 0 END AS HIDDEN matchRank"
             )
-            ->andWhere('p.id = :targetProductId OR p.ref = :targetRef OR LOWER(p.name) = :targetName OR p.description = :targetDescription')
+            ->andWhere('p.id = :targetProductId OR LOWER(p.name) = :targetName OR p.description = :targetDescription')
             ->setParameter('targetProductId', $productId)
-            ->setParameter('targetRef', $targetRef)
             ->setParameter('targetName', $targetName)
             ->setParameter('targetDescription', $targetDescription)
             ->orderBy('s.id', 'ASC')
@@ -114,6 +111,7 @@ class ProductListingRepository extends ServiceEntityRepository
     {
         return $this->createQueryBuilder('pl')
             ->select('pl.id AS id')
+            ->addSelect('pl.ref AS ref')
             ->addSelect('pl.price AS price')
             ->addSelect('pl.old_price AS old_price')
             ->addSelect('pl.product_url AS product_url')
