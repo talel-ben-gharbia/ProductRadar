@@ -27,6 +27,17 @@ export type ProductListing = {
   sellerName: string | null
 }
 
+export type PriceHistoryEntry = {
+  id: number
+  recorded_price: number | null
+  recorded_at: string | null
+  out_of_stock: boolean | null
+  anomaly: boolean | null
+  productListingId: number | null
+  sellerId: number | null
+  sellerName: string | null
+}
+
 export type CategoryWithParent = {
   id: number
   name: string

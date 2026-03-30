@@ -3,6 +3,8 @@
 namespace App\Entity;
 
 use App\Repository\ProductListingRepository;
+use Doctrine\Common\Collections\ArrayCollection;
+use Doctrine\Common\Collections\Collection;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 
@@ -47,6 +49,17 @@ class ProductListing
 
     #[ORM\Column(length: 255)]
     private ?string $ref = null;
+
+    /**
+     * @var Collection<int, PriceHistory>
+     */
+    #[ORM\OneToMany(targetEntity: PriceHistory::class, mappedBy: 'productListing')]
+    private Collection $priceHistories;
+
+    public function __construct()
+    {
+        $this->priceHistories = new ArrayCollection();
+    }
 
     public function getId(): ?int
     {
@@ -181,6 +194,36 @@ class ProductListing
     public function setRef(string $ref): static
     {
         $this->ref = $ref;
+
+        return $this;
+    }
+
+    /**
+     * @return Collection<int, PriceHistory>
+     */
+    public function getPriceHistories(): Collection
+    {
+        return $this->priceHistories;
+    }
+
+    public function addPriceHistory(PriceHistory $priceHistory): static
+    {
+        if (!$this->priceHistories->contains($priceHistory)) {
+            $this->priceHistories->add($priceHistory);
+            $priceHistory->setProductListing($this);
+        }
+
+        return $this;
+    }
+
+    public function removePriceHistory(PriceHistory $priceHistory): static
+    {
+        if ($this->priceHistories->removeElement($priceHistory)) {
+            // set the owning side to null (unless already changed)
+            if ($priceHistory->getProductListing() === $this) {
+                $priceHistory->setProductListing(null);
+            }
+        }
 
         return $this;
     }

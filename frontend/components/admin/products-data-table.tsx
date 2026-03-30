@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 
-import { Pencil, Trash2, ChevronDown } from "lucide-react"
+import { Pencil, Trash2, ChevronDown, Info } from "lucide-react"
 
 import { toast } from "sonner"
 
@@ -629,7 +629,7 @@ export default function ProductsDataTable({
               {visibleColumns.subCategory ? <TableHead className="w-32">Sub Category</TableHead> : null}
               {visibleColumns.childCategory ? <TableHead className="w-34">Child Category</TableHead> : null}
               {visibleColumns.description ? <TableHead className="w-64">Description</TableHead> : null}
-              <TableHead className="w-20">Actions</TableHead>
+              <TableHead className="w-30">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -723,36 +723,51 @@ export default function ProductsDataTable({
                       </span>
                     </TableCell>
                   ) : null}
-                  <TableCell className="w-20 whitespace-nowrap text-right">
-                    {canManageProducts ? (
-                      <div className="flex items-center justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          onClick={() => {
-                            setEditingProduct(product)
-                            setEditName(product.name)
-                            setEditBrand(product.brand ?? "")
-                            setEditDescription(product.description ?? "")
-                            setEditImageUrl(product.image_url ?? "")
-                            setEditCategoryId(product.categoryId)
-                          }}
+                  <TableCell className="w-30 whitespace-nowrap text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        asChild
+                      >
+                        <Link
+                          href={`/admin/products/${product.id}`}
+                          aria-label={`View details for product ${product.name}`}
+                          title="Product info"
                         >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-destructive hover:text-destructive"
-                          onClick={() => setDeletingProductId(product.id)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">-</span>
-                    )}
+                          <Info className="h-4 w-4" />
+                        </Link>
+                      </Button>
+
+                      {canManageProducts ? (
+                        <>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => {
+                              setEditingProduct(product)
+                              setEditName(product.name)
+                              setEditBrand(product.brand ?? "")
+                              setEditDescription(product.description ?? "")
+                              setEditImageUrl(product.image_url ?? "")
+                              setEditCategoryId(product.categoryId)
+                            }}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-destructive hover:text-destructive"
+                            onClick={() => setDeletingProductId(product.id)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </>
+                      ) : null}
+                    </div>
                   </TableCell>
                 </TableRow>
               ))
