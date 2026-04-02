@@ -16,6 +16,45 @@ async function isSuperAdmin(): Promise<boolean> {
   return session?.role === "ROLE_SUPER_ADMIN"
 }
 
+export async function GET(request: NextRequest) {
+  try {
+    const productId = request.nextUrl.searchParams.get("productId")
+    const sellerId = request.nextUrl.searchParams.get("sellerId")
+
+    const params = new URLSearchParams()
+    if (productId) {
+      params.set("productId", productId)
+    }
+    if (sellerId) {
+      params.set("sellerId", sellerId)
+    }
+
+    const query = params.toString()
+    const endpoint = query
+      ? `${BACKEND_URL}/product-listings?${query}`
+      : `${BACKEND_URL}/product-listings`
+
+    const response = await fetch(endpoint, {
+      cache: "no-store",
+    })
+
+    if (!response.ok) {
+      return NextResponse.json(
+        { message: `Failed to fetch product listings: ${response.status}` },
+        { status: response.status }
+      )
+    }
+
+    const data = await response.json()
+    return NextResponse.json(data)
+  } catch {
+    return NextResponse.json(
+      { message: "Unable to load product listings from backend. Failed to fetch" },
+      { status: 502 }
+    )
+  }
+}
+
 export async function POST(request: NextRequest) {
   if (!(await isSuperAdmin())) {
     return NextResponse.json({ error: "Only super admins can create listings." }, { status: 403 })

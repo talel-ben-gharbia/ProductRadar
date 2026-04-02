@@ -5,6 +5,7 @@ namespace App\Controller;
 use App\Entity\Product;
 use App\Repository\CategoryRepository;
 use App\Repository\ProductRepository;
+use Doctrine\DBAL\Exception\ForeignKeyConstraintViolationException;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -132,8 +133,14 @@ final class ProductController extends AbstractController
             return $this->json(['error' => 'Product not found.'], 404);
         }
 
-        $entityManager->remove($product);
-        $entityManager->flush();
+        try {
+            $entityManager->remove($product);
+            $entityManager->flush();
+        } catch (ForeignKeyConstraintViolationException) {
+            return $this->json([
+                'error' => 'Cannot delete product while related listings or history records still exist.',
+            ], 409);
+        }
 
         return $this->json(['success' => true]);
     }

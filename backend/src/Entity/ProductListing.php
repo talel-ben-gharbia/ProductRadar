@@ -53,7 +53,7 @@ class ProductListing
     /**
      * @var Collection<int, PriceHistory>
      */
-    #[ORM\OneToMany(targetEntity: PriceHistory::class, mappedBy: 'productListing')]
+    #[ORM\OneToMany(targetEntity: PriceHistory::class, mappedBy: 'productListing', cascade: ['remove'], orphanRemoval: true)]
     private Collection $priceHistories;
 
     public function __construct()
