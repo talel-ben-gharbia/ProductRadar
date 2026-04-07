@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 
+import { B2CNavbar } from "@/components/B2C/b2c-navbar"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -85,61 +86,72 @@ export default function B2CProfilePage() {
   }
 
   if (loading) {
-    return <div className="p-10 text-sm text-muted-foreground">Loading profile...</div>
+    return (
+      <div className="min-h-svh bg-muted/30">
+        <B2CNavbar title="My profile" backHref="/B2C/products" backLabel="Back to products" />
+        <div className="p-10 text-sm text-muted-foreground">Loading profile...</div>
+      </div>
+    )
   }
 
   if (!profile) {
     return (
-      <div className="p-10">
-        <h1 className="text-2xl font-semibold">Profile</h1>
-        <p className="mt-2 text-muted-foreground">You need to login first.</p>
-        <Button className="mt-6" onClick={() => router.push("/")}>Back to home</Button>
+      <div className="min-h-svh bg-muted/30">
+        <B2CNavbar title="My profile" backHref="/B2C/products" backLabel="Back to products" />
+        <div className="p-10">
+          <h1 className="text-2xl font-semibold">Profile</h1>
+          <p className="mt-2 text-muted-foreground">You need to login first.</p>
+          <Button className="mt-6" onClick={() => router.push("/")}>Back to home</Button>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="mx-auto max-w-xl p-6 sm:p-10">
-      <h1 className="text-2xl font-semibold">My Profile</h1>
-      <p className="mt-1 text-sm text-muted-foreground">
-        You can update your customer information here. Email is read-only.
-      </p>
+    <div className="min-h-svh bg-muted/30">
+      <B2CNavbar title="My profile" backHref="/B2C/products" backLabel="Back to products" />
+      <div className="mx-auto max-w-xl p-6 sm:p-10">
+        <h1 className="text-2xl font-semibold">My Profile</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          You can update your customer information here. Email is read-only.
+        </p>
 
-      <form onSubmit={handleSubmit} className="mt-6 space-y-5">
-        <div className="space-y-2">
-          <Label htmlFor="email">Email</Label>
-          <Input id="email" value={profile.email} readOnly disabled />
-        </div>
+        <form onSubmit={handleSubmit} className="mt-6 space-y-5">
+          <div className="space-y-2">
+            <Label htmlFor="email">Email</Label>
+            <Input id="email" value={profile.email} readOnly disabled />
+          </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="fullName">Full name</Label>
-          <Input
-            id="fullName"
-            value={fullName}
-            onChange={(event) => setFullName(event.target.value)}
-            placeholder="Your full name"
-          />
-        </div>
+          <div className="space-y-2">
+            <Label htmlFor="fullName">Full name</Label>
+            <Input
+              id="fullName"
+              value={fullName}
+              onChange={(event) => setFullName(event.target.value)}
+              placeholder="Your full name"
+            />
+          </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="adress">Address</Label>
-          <Input
-            id="adress"
-            value={adress}
-            onChange={(event) => setAdress(event.target.value)}
-            placeholder="Your address"
-          />
-        </div>
+          <div className="space-y-2">
+            <Label htmlFor="adress">Address</Label>
+            <Input
+              id="adress"
+              value={adress}
+              onChange={(event) => setAdress(event.target.value)}
+              placeholder="Your address"
+            />
+          </div>
 
-        <div className="flex gap-3">
-          <Button type="submit" disabled={saving}>
-            {saving ? "Saving..." : "Save changes"}
-          </Button>
-          <Button type="button" variant="outline" onClick={() => router.push("/")}>
-            Back
-          </Button>
-        </div>
-      </form>
+          <div className="flex gap-3">
+            <Button type="submit" disabled={saving}>
+              {saving ? "Saving..." : "Save changes"}
+            </Button>
+            <Button type="button" variant="outline" onClick={() => router.push("/")}>
+              Back
+            </Button>
+          </div>
+        </form>
+      </div>
     </div>
   )
 }

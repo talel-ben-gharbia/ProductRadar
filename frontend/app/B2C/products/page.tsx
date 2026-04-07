@@ -1,6 +1,6 @@
 import Link from "next/link"
 
-import { B2CNavAuth } from "@/components/B2C/b2c-nav-auth"
+import { B2CNavbar } from "@/components/B2C/b2c-navbar"
 import { ProductCard } from "@/components/B2C/product-card"
 import { PriceRangeFilter } from "@/components/B2C/price-range-filter"
 import { Badge } from "@/components/ui/badge"
@@ -493,17 +493,7 @@ export default async function B2CProductsPage({ searchParams }: ProductsPageProp
 
   return (
     <div className="min-h-svh bg-muted/30">
-      <nav className="border-b bg-background">
-        <div className="mx-auto flex max-w-8xl items-center justify-between px-6 py-4 sm:px-10">
-          <h1 className="text-2xl font-bold tracking-tight">Products radar</h1>
-          <div className="flex gap-3">
-            <B2CNavAuth />
-            <Button asChild>
-              <Link href="/B2B">Become a Partner</Link>
-            </Button>
-          </div>
-        </div>
-      </nav>
+      <B2CNavbar title="Products radar" />
 
       <section className="border-b bg-background">
         <div className="w-full px-4 py-2 sm:px-10">
@@ -565,7 +555,7 @@ export default async function B2CProductsPage({ searchParams }: ProductsPageProp
       </section>
 
       <main className="mx-auto w-full max-w-8xl px-4 py-6 sm:px-10">
-        <Card className="mb-5 border-border/70">
+        <Card className="mb-5 rounded-xl border-border/70">
           <CardContent className="flex flex-wrap items-center gap-2 py-3 text-sm">
             <Link href="/" className="font-medium text-muted-foreground hover:text-foreground">
               Accueil
@@ -595,7 +585,7 @@ export default async function B2CProductsPage({ searchParams }: ProductsPageProp
 
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[300px_1fr]">
           <aside className="space-y-4 xl:sticky xl:top-4 xl:self-start">
-            <Card>
+            <Card className="rounded-xl">
               <CardHeader className="pb-3">
                 <CardTitle className="text-xl">Filtrer</CardTitle>
               </CardHeader>
@@ -656,7 +646,7 @@ export default async function B2CProductsPage({ searchParams }: ProductsPageProp
           </aside>
 
           <section className="space-y-4">
-            <Card className="border-border/70">
+            <Card className="rounded-xl border-border/70">
               <CardContent className="flex flex-wrap items-center justify-between gap-3 py-4">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Badge variant="secondary">{totalProducts}</Badge>
@@ -681,7 +671,7 @@ export default async function B2CProductsPage({ searchParams }: ProductsPageProp
               </CardContent>
             </Card>
 
-            <Card className="border-border/70">
+            <Card className="rounded-xl border-border/70">
               <CardContent className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm">
                 <p className="font-medium text-foreground">
                   Affichage {totalProducts === 0 ? 0 : startIndex + 1}-{endIndex} de {totalProducts} article(s)
@@ -716,11 +706,11 @@ export default async function B2CProductsPage({ searchParams }: ProductsPageProp
             </Card>
 
             {errorMessage ? (
-              <Card>
+              <Card className="rounded-xl">
                 <CardContent className="pt-6 text-sm text-red-600">{errorMessage}</CardContent>
               </Card>
             ) : totalProducts === 0 ? (
-              <Card>
+              <Card className="rounded-xl">
                 <CardContent className="pt-6 text-sm text-muted-foreground">
                   No products found for this category.
                 </CardContent>

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { BellRing, User, LogOut } from "lucide-react"
 
 import { B2CAuthDialogTrigger } from "@/components/B2C/b2c-auth-dialog"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -103,16 +104,26 @@ export function B2CNavAuth() {
           <Link
             href="/B2C/profile"
             onClick={() => setOpen(false)}
-            className="block rounded-md px-3 py-2 text-sm hover:bg-muted"
+            className="flex items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-muted"
           >
-            Profile
+            <User className="h-4 w-4" />
+            <span>Profile</span>
+          </Link>
+          <Link
+            href="/B2C/alerts"
+            onClick={() => setOpen(false)}
+            className="flex items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-muted"
+          >
+            <BellRing className="h-4 w-4" />
+            <span>My alerts</span>
           </Link>
           <button
             type="button"
             onClick={logout}
-            className="block w-full rounded-md px-3 py-2 text-left text-sm hover:bg-muted"
+            className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm hover:bg-muted"
           >
-            Logout
+            <LogOut className="h-4 w-4" />
+            <span>Logout</span>
           </button>
         </div>
       ) : null}

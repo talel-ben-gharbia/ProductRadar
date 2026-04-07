@@ -3,7 +3,7 @@
 import { FormEvent, useMemo, useRef, useState } from "react"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
-import { Loader2 } from "lucide-react"
+import { Loader2, LogIn, UserPlus } from "lucide-react"
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
@@ -110,6 +110,7 @@ export function B2CAuthDialogTrigger() {
     setOpen(false)
     router.push("/")
     router.refresh()
+    window.location.reload()
   }
 
   async function handleGoogleAuth() {
@@ -180,7 +181,10 @@ export function B2CAuthDialogTrigger() {
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
-        <Button variant="outline">Login</Button>
+        <Button variant="outline">
+          <LogIn className="h-4 w-4" />
+          Login
+        </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
@@ -195,6 +199,7 @@ export function B2CAuthDialogTrigger() {
             onClick={() => setMode("signin")}
             disabled={isLoading}
           >
+            <LogIn className="h-4 w-4" />
             Sign in
           </Button>
           <Button
@@ -203,6 +208,7 @@ export function B2CAuthDialogTrigger() {
             onClick={() => setMode("signup")}
             disabled={isLoading}
           >
+            <UserPlus className="h-4 w-4" />
             Sign up
           </Button>
         </div>

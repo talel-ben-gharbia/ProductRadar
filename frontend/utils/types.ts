@@ -38,6 +38,16 @@ export type PriceHistoryEntry = {
   sellerName: string | null
 }
 
+export type B2CAlert = {
+  id: number
+  is_price_notif: boolean
+  is_stock_notif: boolean
+  productId: number | null
+  productName: string | null
+  productImageUrl: string | null
+  alerterId: number | null
+}
+
 export type CategoryWithParent = {
   id: number
   name: string
