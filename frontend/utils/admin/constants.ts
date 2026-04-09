@@ -10,7 +10,9 @@ import {
 } from "lucide-react"
 
 const BACKEND_URL =
-  process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://127.0.0.1:8000"
+  process.env.BACKEND_INTERNAL_URL ??
+  process.env.NEXT_PUBLIC_BACKEND_URL ??
+  "http://127.0.0.1:8000"
 
 type SidebarSubItem = {
   title: string

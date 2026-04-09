@@ -1,0 +1,51 @@
+services:
+  db:
+    image: postgres:18-alpine
+    container_name: productrdar-db
+    environment:
+      POSTGRES_DB: productRadar
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: "0000"
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d productRadar"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: dockerfile
+    container_name: productrdar-backend
+    environment:
+      APP_ENV: dev
+      APP_SECRET: 1bfea173865bc97ebf26ffdf0bae218b
+      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:0000@host.docker.internal:5432/productRadar?serverVersion=18&charset=utf8}
+    ports:
+      - "8001:8000"
+    command: >
+      php -S 0.0.0.0:8000 -t public
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: dockerfile
+    container_name: productrdar-frontend
+    environment:
+      NEXT_PUBLIC_BACKEND_URL: http://localhost:8001
+      BACKEND_INTERNAL_URL: http://backend:8000
+      ADMIN_SESSION_SECRET: dev-session-secret-change-in-production
+      B2C_SESSION_SECRET: dev-b2c-session-secret-change-in-production
+    ports:
+      - "3001:3000"
+    depends_on:
+      backend:
+        condition: service_started
+
+volumes:
+  pgdata:
