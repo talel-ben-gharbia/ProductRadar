@@ -23,13 +23,15 @@ function shouldUseSecureCookies(request: NextRequest): boolean {
 export async function POST(request: NextRequest) {
   // CSRF: verify request origin matches the host
   const originHeader = request.headers.get("origin")
-  const hostHeader =
+  const hostHeaderRaw =
     request.headers.get("x-forwarded-host") ?? request.headers.get("host")
+  const hostHeader = hostHeaderRaw?.split(",")[0]?.trim()
 
   if (originHeader && hostHeader) {
     try {
-      const originHost = new URL(originHeader).host
-      if (originHost !== hostHeader) {
+      const expectedHostname = hostHeader.split(":")[0]
+      const originHostname = new URL(originHeader).hostname
+      if (originHostname !== expectedHostname) {
         return NextResponse.json(
           { error: "Invalid request origin." },
           { status: 403 },

@@ -7,6 +7,19 @@ import {
   createB2CSessionToken,
 } from "@/lib/b2c-session"
 
+function shouldUseSecureCookies(request: NextRequest): boolean {
+  const configured = process.env.COOKIE_SECURE
+  if (configured === "true") return true
+  if (configured === "false") return false
+
+  const forwardedProto = request.headers.get("x-forwarded-proto")
+  if (forwardedProto) {
+    return forwardedProto.split(",")[0]?.trim() === "https"
+  }
+
+  return request.nextUrl.protocol === "https:"
+}
+
 type FirebaseLookupResponse = {
   users?: Array<{
     localId?: string
@@ -57,10 +70,21 @@ async function verifyFirebaseIdToken(idToken: string) {
 }
 
 export async function POST(request: NextRequest) {
-  const origin = request.headers.get("origin")
-  const host = request.headers.get("host")
-  if (origin && host && !origin.includes(host)) {
-    return NextResponse.json({ error: "Invalid request origin." }, { status: 403 })
+  const originHeader = request.headers.get("origin")
+  const hostHeaderRaw =
+    request.headers.get("x-forwarded-host") ?? request.headers.get("host")
+  const hostHeader = hostHeaderRaw?.split(",")[0]?.trim()
+
+  if (originHeader && hostHeader) {
+    try {
+      const expectedHostname = hostHeader.split(":")[0]
+      const originHostname = new URL(originHeader).hostname
+      if (originHostname !== expectedHostname) {
+        return NextResponse.json({ error: "Invalid request origin." }, { status: 403 })
+      }
+    } catch {
+      return NextResponse.json({ error: "Invalid request origin." }, { status: 403 })
+    }
   }
 
   let body: { idToken?: string; fullName?: string | null }
@@ -121,8 +145,8 @@ export async function POST(request: NextRequest) {
       name: COOKIE_NAME,
       value: token,
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
+      secure: shouldUseSecureCookies(request),
+      sameSite: "lax",
       path: "/",
       maxAge: SESSION_DURATION,
     })
