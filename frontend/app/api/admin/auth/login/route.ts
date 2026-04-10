@@ -20,29 +20,35 @@ function shouldUseSecureCookies(request: NextRequest): boolean {
   return request.nextUrl.protocol === "https:"
 }
 
-export async function POST(request: NextRequest) {
-  // CSRF: verify request origin matches the host
+function isOriginAllowed(request: NextRequest): boolean {
+  if (process.env.STRICT_ORIGIN_CHECK !== "true") {
+    return true
+  }
+
   const originHeader = request.headers.get("origin")
   const hostHeaderRaw =
     request.headers.get("x-forwarded-host") ?? request.headers.get("host")
   const hostHeader = hostHeaderRaw?.split(",")[0]?.trim()
 
-  if (originHeader && hostHeader) {
-    try {
-      const expectedHostname = hostHeader.split(":")[0]
-      const originHostname = new URL(originHeader).hostname
-      if (originHostname !== expectedHostname) {
-        return NextResponse.json(
-          { error: "Invalid request origin." },
-          { status: 403 },
-        )
-      }
-    } catch {
-      return NextResponse.json(
-        { error: "Invalid request origin." },
-        { status: 403 },
-      )
-    }
+  if (!originHeader || !hostHeader) {
+    return true
+  }
+
+  try {
+    const expectedHostname = hostHeader.split(":")[0]
+    const originHostname = new URL(originHeader).hostname
+    return originHostname === expectedHostname
+  } catch {
+    return false
+  }
+}
+
+export async function POST(request: NextRequest) {
+  if (!isOriginAllowed(request)) {
+    return NextResponse.json(
+      { error: "Invalid request origin." },
+      { status: 403 },
+    )
   }
 
   let body: { email?: string; password?: string }
