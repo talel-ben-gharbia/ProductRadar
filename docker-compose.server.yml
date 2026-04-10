@@ -27,7 +27,7 @@ services:
       APP_SECRET: ${APP_SECRET}
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-productRadar}?serverVersion=18&charset=utf8
     ports:
-      - "8000:8000"
+      - "8001:8000"
     depends_on:
       db:
         condition: service_healthy
@@ -41,12 +41,13 @@ services:
     container_name: productrdar-frontend
     restart: unless-stopped
     environment:
-      NEXT_PUBLIC_BACKEND_URL: ${NEXT_PUBLIC_BACKEND_URL:-http://79.137.26.86:8000}
+      NEXT_PUBLIC_BACKEND_URL: ${NEXT_PUBLIC_BACKEND_URL:-http://79.137.26.86:8001}
       BACKEND_INTERNAL_URL: http://backend:8000
       ADMIN_SESSION_SECRET: ${ADMIN_SESSION_SECRET}
       B2C_SESSION_SECRET: ${B2C_SESSION_SECRET}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
     ports:
-      - "3000:3000"
+      - "3001:3000"
     depends_on:
       backend:
         condition: service_started

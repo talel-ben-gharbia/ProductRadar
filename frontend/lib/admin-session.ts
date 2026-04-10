@@ -45,6 +45,12 @@ function fromBase64Url(str: string): Uint8Array {
   return bytes
 }
 
+function decodeBase64Url(str: string): string {
+  const base64 = str.replace(/-/g, "+").replace(/_/g, "/")
+  const padding = "=".repeat((4 - (base64.length % 4)) % 4)
+  return atob(base64 + padding)
+}
+
 export async function createSessionToken(admin: {
   id: number
   email: string
@@ -93,9 +99,7 @@ export async function verifySessionToken(
 
     if (!valid) return null
 
-    const payloadStr = atob(
-      encoded.replace(/-/g, "+").replace(/_/g, "/"),
-    )
+    const payloadStr = decodeBase64Url(encoded)
     const payload = JSON.parse(payloadStr) as AdminSession
 
     if (payload.exp < Math.floor(Date.now() / 1000)) return null

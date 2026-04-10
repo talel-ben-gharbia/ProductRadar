@@ -1,9 +1,22 @@
 import { cookies } from "next/headers"
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 
 import { verifySessionToken, COOKIE_NAME } from "@/lib/admin-session"
 
-export async function GET() {
+function shouldUseSecureCookies(request: NextRequest): boolean {
+  const configured = process.env.COOKIE_SECURE
+  if (configured === "true") return true
+  if (configured === "false") return false
+
+  const forwardedProto = request.headers.get("x-forwarded-proto")
+  if (forwardedProto) {
+    return forwardedProto.split(",")[0]?.trim() === "https"
+  }
+
+  return request.nextUrl.protocol === "https:"
+}
+
+export async function GET(request: NextRequest) {
   const cookieStore = await cookies()
   const token = cookieStore.get(COOKIE_NAME)?.value
 
@@ -25,8 +38,8 @@ export async function GET() {
       name: COOKIE_NAME,
       value: "",
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
+      secure: shouldUseSecureCookies(request),
+      sameSite: "lax",
       path: "/",
       maxAge: 0,
     })

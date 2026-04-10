@@ -8,6 +8,19 @@ import {
   SESSION_DURATION,
 } from "@/lib/admin-session"
 
+function shouldUseSecureCookies(request: NextRequest): boolean {
+  const configured = process.env.COOKIE_SECURE
+  if (configured === "true") return true
+  if (configured === "false") return false
+
+  const forwardedProto = request.headers.get("x-forwarded-proto")
+  if (forwardedProto) {
+    return forwardedProto.split(",")[0]?.trim() === "https"
+  }
+
+  return request.nextUrl.protocol === "https:"
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
@@ -44,8 +57,8 @@ export async function middleware(request: NextRequest) {
         name: COOKIE_NAME,
         value: refreshed,
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "strict",
+        secure: shouldUseSecureCookies(request),
+        sameSite: "lax",
         path: "/",
         maxAge: SESSION_DURATION,
       })
