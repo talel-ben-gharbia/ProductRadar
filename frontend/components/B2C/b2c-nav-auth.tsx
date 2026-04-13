@@ -110,7 +110,7 @@ export function B2CNavAuth() {
             <span>Profile</span>
           </Link>
           <Link
-            href="/B2C/alerts"
+            href="/B2C/profile/alerts"
             onClick={() => setOpen(false)}
             className="flex items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-muted"
           >

@@ -5,6 +5,7 @@ import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "@/components/ui/sonner"
 import { TooltipProvider } from "@/components/ui/tooltip"
+import { AuthDialogProvider } from "@/lib/auth-dialog-context"
 import { cn } from "@/lib/utils";
 
 const fontSans = Plus_Jakarta_Sans({
@@ -56,10 +57,12 @@ export default function RootLayout({
           `}
         </Script>
         <ThemeProvider forcedTheme="light" enableSystem={false}>
-          <TooltipProvider>
-            {children}
-            <Toaster position="top-center" closeButton />
-          </TooltipProvider>
+          <AuthDialogProvider>
+            <TooltipProvider>
+              {children}
+              <Toaster position="top-center" closeButton />
+            </TooltipProvider>
+          </AuthDialogProvider>
         </ThemeProvider>
       </body>
     </html>

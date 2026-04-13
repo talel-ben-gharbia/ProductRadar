@@ -6,6 +6,7 @@ import { cookies } from "next/headers"
 import { notFound } from "next/navigation"
 
 import { B2CNavbar } from "@/components/B2C/b2c-navbar"
+import { ListingFavoriteToggle } from "@/components/B2C/listing-favorite-toggle"
 import ProductPriceHistoryLinearChart from "@/components/B2C/product-price-history-linear-chart"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -501,7 +502,7 @@ export default async function B2CProductDetailsPage({ params }: ProductDetailsPa
                           <TableHead>Old price</TableHead>
                           <TableHead>Availability</TableHead>
                           <TableHead>Updated</TableHead>
-                          <TableHead className="text-right">Offer link</TableHead>
+                          <TableHead className="text-right">Actions</TableHead>
                         </TableRow>
                       </TableHeader>
 
@@ -569,11 +570,16 @@ export default async function B2CProductDetailsPage({ params }: ProductDetailsPa
                                 </TableCell>
                                 <TableCell>{toDate(listing.updatet_at)}</TableCell>
                                 <TableCell className="text-right">
-                                  <Button asChild size="sm" variant="outline">
-                                    <a href={listing.product_url} target="_blank" rel="noreferrer">
-                                      Visit offer
-                                    </a>
-                                  </Button>
+                                  <div className="flex items-center justify-end gap-2">
+                                    {isAuthenticated ? (
+                                      <ListingFavoriteToggle productListingId={listing.id} />
+                                    ) : null}
+                                    <Button asChild size="sm" variant="outline">
+                                      <a href={listing.product_url} target="_blank" rel="noreferrer">
+                                        Visit offer
+                                      </a>
+                                    </Button>
+                                  </div>
                                 </TableCell>
                               </TableRow>
                             )

@@ -1,23 +1,12 @@
-import { redirect } from "next/navigation"
-
-export default function AlertsPage() {
-  redirect("/B2C/profile/alerts")
-}"use client"
+"use client"
 
 import Image from "next/image"
 import Link from "next/link"
 import { useEffect, useState } from "react"
 
-import { B2CNavbar } from "@/components/B2C/b2c-navbar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   Dialog,
   DialogContent,
@@ -60,9 +49,7 @@ function AlertsEditor({
         }),
       })
 
-      const data = (await response.json().catch(() => ({}))) as {
-        alert?: B2CAlert
-      }
+      const data = (await response.json().catch(() => ({}))) as { alert?: B2CAlert }
 
       if (!response.ok || !data.alert) {
         return
@@ -78,14 +65,14 @@ function AlertsEditor({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="sm" variant="outline">Update</Button>
+        <Button size="sm" variant="outline">
+          Update
+        </Button>
       </DialogTrigger>
       <DialogContent className="max-w-sm">
         <DialogHeader>
           <DialogTitle>Update alert</DialogTitle>
-          <DialogDescription>
-            Choose which notifications should stay active.
-          </DialogDescription>
+          <DialogDescription>Choose which notifications should stay active.</DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-2">
@@ -117,7 +104,7 @@ function AlertsEditor({
   )
 }
 
-export default function B2CAlertsPage() {
+export function ProfileAlertsPage() {
   const [loading, setLoading] = useState(true)
   const [alerts, setAlerts] = useState<B2CAlert[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -143,7 +130,7 @@ export default function B2CAlertsPage() {
           return
         }
 
-        setAlerts(data.alerts || [])
+        setAlerts((data.alerts || []).filter((alert) => !alert.cancelled))
         setError(null)
         setLoading(false)
       })
@@ -175,77 +162,73 @@ export default function B2CAlertsPage() {
   }
 
   return (
-    <div className="min-h-svh bg-muted/30">
-      <B2CNavbar
-        title="My alerts"
-        backHref="/B2C/products"
-        backLabel="Back to products"
-        showAlertsButton={false}
-      />
+    <div className="space-y-4">
+      <Card className="rounded-xl border bg-background shadow-sm">
+        <CardHeader>
+          <CardTitle>Alerts</CardTitle>
+          <CardDescription>Manage the alerts attached to your tracked products.</CardDescription>
+        </CardHeader>
+      </Card>
 
-      <main className="mx-auto w-full max-w-8xl space-y-4 px-4 py-6 sm:px-10">
-        {loading ? (
-          <Card className="rounded-xl border">
-            <CardContent className="py-6 text-sm text-muted-foreground">Loading alerts...</CardContent>
-          </Card>
-        ) : error ? (
-          <Card className="rounded-xl border-destructive/40 bg-destructive/5">
-            <CardContent className="py-6 text-sm text-destructive">{error}</CardContent>
-          </Card>
-        ) : alerts.length === 0 ? (
-          <Card className="rounded-xl border">
-            <CardHeader>
-              <CardTitle>No alerts yet</CardTitle>
-              <CardDescription>
-                You have no active alerts. Open a product and add price or stock alerts.
-              </CardDescription>
-            </CardHeader>
-          </Card>
-        ) : (
-          <div className="grid gap-4">
-            {alerts.map((alert) => (
-              <Card key={alert.id} className="rounded-xl border">
-                <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-md border bg-muted/20">
-                      {alert.productImageUrl ? (
-                        <Image
-                          src={alert.productImageUrl}
-                          alt={alert.productName || "Product"}
-                          width={120}
-                          height={120}
-                          className="h-14 w-14 object-contain"
-                          unoptimized
-                        />
-                      ) : (
-                        <span className="text-xs text-muted-foreground">No image</span>
-                      )}
-                    </div>
-
-                    <div>
-                      <p className="font-medium">{alert.productName || "Unknown product"}</p>
-                      <div className="mt-1 flex gap-2">
-                        {alert.is_price_notif ? <Badge variant="default">Price alert</Badge> : null}
-                        {alert.is_stock_notif ? <Badge variant="secondary">Stock alert</Badge> : null}
-                      </div>
-                    </div>
+      {loading ? (
+        <Card className="rounded-xl border bg-background shadow-sm">
+          <CardContent className="py-6 text-sm text-muted-foreground">Loading alerts...</CardContent>
+        </Card>
+      ) : error ? (
+        <Card className="rounded-xl border-destructive/40 bg-destructive/5 shadow-sm">
+          <CardContent className="py-6 text-sm text-destructive">{error}</CardContent>
+        </Card>
+      ) : alerts.length === 0 ? (
+        <Card className="rounded-xl border bg-background shadow-sm">
+          <CardHeader>
+            <CardTitle>No alerts yet</CardTitle>
+            <CardDescription>You have no active alerts. Open a product and add one.</CardDescription>
+          </CardHeader>
+        </Card>
+      ) : (
+        <div className="grid gap-4">
+          {alerts.map((alert) => (
+            <Card key={alert.id} className="rounded-xl border bg-background shadow-sm">
+              <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-md border bg-muted/20">
+                    {alert.productImageUrl ? (
+                      <Image
+                        src={alert.productImageUrl}
+                        alt={alert.productName || "Product"}
+                        width={120}
+                        height={120}
+                        className="h-14 w-14 object-contain"
+                        unoptimized
+                      />
+                    ) : (
+                      <span className="text-xs text-muted-foreground">No image</span>
+                    )}
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    <Button asChild variant="ghost" size="sm">
-                      <Link href={`/B2C/products/${alert.productId}`}>Open product</Link>
-                    </Button>
-                    <AlertsEditor alert={alert} onSaved={updateAlertInState} />
-                    <Button variant="destructive" size="sm" onClick={() => removeAlert(alert.id)}>
-                      Delete
-                    </Button>
+                  <div>
+                    <p className="font-medium">{alert.productName || "Unknown product"}</p>
+                    <div className="mt-1 flex gap-2">
+                      {alert.is_price_notif ? <Badge variant="default">Price alert</Badge> : null}
+                      {alert.is_stock_notif ? <Badge variant="secondary">Stock alert</Badge> : null}
+                    </div>
                   </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
-      </main>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Button asChild variant="ghost" size="sm">
+                    <Link href={`/B2C/products/${alert.productId}`}>Open product</Link>
+                  </Button>
+                  <AlertsEditor alert={alert} onSaved={updateAlertInState} />
+                  <Button variant="destructive" size="sm" onClick={() => removeAlert(alert.id)}>
+                    Delete
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

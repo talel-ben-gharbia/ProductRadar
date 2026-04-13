@@ -1,10 +1,10 @@
 "use client"
 
 import Image from "next/image"
-import { Heart, ShoppingBag } from "lucide-react"
+import { ShoppingBag } from "lucide-react"
 import { useRouter } from "next/navigation"
-import { useState } from "react"
 
+import { ListingFavoriteToggle } from "@/components/B2C/listing-favorite-toggle"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import type { Product } from "@/utils/types"
@@ -13,11 +13,11 @@ type ProductCardProps = {
   product: Product
   bestPriceLabel: string
   offersCount: number
+  favoriteListingId?: number
 }
 
-export function ProductCard({ product, bestPriceLabel, offersCount }: ProductCardProps) {
+export function ProductCard({ product, bestPriceLabel, offersCount, favoriteListingId }: ProductCardProps) {
   const router = useRouter()
-  const [isSaved, setIsSaved] = useState(false)
 
   function openDetails() {
     router.push(`/B2C/products/${product.id}`)
@@ -37,22 +37,13 @@ export function ProductCard({ product, bestPriceLabel, offersCount }: ProductCar
       }}
     >
       <div className="relative mx-3 mt-3 overflow-hidden rounded-xl bg-[#f6f7fb]">
-        <div className="absolute right-3 top-3 z-20 flex items-center gap-2">
-          <Button
-            type="button"
-            variant={isSaved ? "default" : "secondary"}
-            size="icon"
-            className="h-8 w-8 rounded-full"
-            aria-pressed={isSaved}
-            aria-label={isSaved ? "Remove from favorites" : "Add to favorites"}
-            onClick={(event) => {
-              event.stopPropagation()
-              setIsSaved((value) => !value)
-            }}
-          >
-            <Heart className={`h-4 w-4 ${isSaved ? "fill-current" : ""}`} />
-          </Button>
-        </div>
+        {favoriteListingId ? (
+          <div className="absolute right-3 top-3 z-20">
+            <div onClick={(event) => event.stopPropagation()}>
+              <ListingFavoriteToggle productListingId={favoriteListingId} />
+            </div>
+          </div>
+        ) : null}
 
         <div className="flex  items-center justify-center">
         {product.image_url ? (

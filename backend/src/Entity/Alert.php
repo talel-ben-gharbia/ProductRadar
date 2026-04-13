@@ -19,6 +19,9 @@ class Alert
     #[ORM\Column(nullable: true)]
     private ?bool $is_stock_notif = null;
 
+    #[ORM\Column(options: ['default' => false])]
+    private bool $cancelled = false;
+
     #[ORM\ManyToOne(inversedBy: 'alerts')]
     #[ORM\JoinColumn(nullable: false)]
     private ?Product $product = null;
@@ -76,6 +79,18 @@ class Alert
     public function setAlerter(?User $alerter): static
     {
         $this->alerter = $alerter;
+
+        return $this;
+    }
+
+    public function isCancelled(): bool
+    {
+        return $this->cancelled;
+    }
+
+    public function setCancelled(bool $cancelled): static
+    {
+        $this->cancelled = $cancelled;
 
         return $this;
     }

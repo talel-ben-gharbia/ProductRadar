@@ -46,6 +46,7 @@ type ProductsPageProps = {
 type ProductWithBestPrice = {
   product: Product
   bestPrice?: number
+  bestListingId?: number
   offersCount: number
 }
 
@@ -104,8 +105,9 @@ function parseCategoryIds(params?: { categoryId?: string | string[]; categoryIds
   return [...ids]
 }
 
-function computeBestPriceByProduct(listings: ProductListing[]) {
+function computeBestListingByProduct(listings: ProductListing[]) {
   const bestPriceMap = new Map<number, number>()
+  const bestListingIdMap = new Map<number, number>()
 
   for (const listing of listings) {
     if (listing.productId === null || listing.price === null) {
@@ -119,10 +121,11 @@ function computeBestPriceByProduct(listings: ProductListing[]) {
     const currentBest = bestPriceMap.get(listing.productId)
     if (currentBest === undefined || listing.price < currentBest) {
       bestPriceMap.set(listing.productId, listing.price)
+      bestListingIdMap.set(listing.productId, listing.id)
     }
   }
 
-  return bestPriceMap
+  return { bestPriceMap, bestListingIdMap }
 }
 
 function formatPrice(value?: number) {
@@ -279,10 +282,13 @@ export default async function B2CProductsPage({ searchParams }: ProductsPageProp
     }
 
     let bestPriceByProduct = new Map<number, number>()
+    let bestListingIdByProduct = new Map<number, number>()
     let offersCountByProduct = new Map<number, number>()
     try {
       const listings = await getProductListings()
-      bestPriceByProduct = computeBestPriceByProduct(listings)
+      const bestListingResult = computeBestListingByProduct(listings)
+      bestPriceByProduct = bestListingResult.bestPriceMap
+      bestListingIdByProduct = bestListingResult.bestListingIdMap
       offersCountByProduct = listings.reduce((acc, listing) => {
         if (listing.productId === null) {
           return acc
@@ -298,6 +304,7 @@ export default async function B2CProductsPage({ searchParams }: ProductsPageProp
     products = [...deduped.values()].map((product) => ({
       product,
       bestPrice: bestPriceByProduct.get(product.id),
+      bestListingId: bestListingIdByProduct.get(product.id),
       offersCount: offersCountByProduct.get(product.id) ?? 0,
     }))
 
@@ -717,12 +724,13 @@ export default async function B2CProductsPage({ searchParams }: ProductsPageProp
               </Card>
             ) : (
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                {paginatedProducts.map(({ product, bestPrice, offersCount }) => (
+                {paginatedProducts.map(({ product, bestPrice, bestListingId, offersCount }) => (
                   <ProductCard
                     key={product.id}
                     product={product}
                     bestPriceLabel={bestPrice !== undefined ? formatPrice(bestPrice) : "No available price"}
                     offersCount={offersCount}
+                    favoriteListingId={bestListingId}
                   />
                 ))}
               </div>

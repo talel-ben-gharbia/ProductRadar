@@ -14,6 +14,8 @@ use Symfony\Component\Routing\Attribute\Route;
 
 final class AlertController extends AbstractController
 {
+    private const DEFAULT_FREEMIUM_ALERTS_LIMIT = 3;
+
     #[Route('/alerts', name: 'get_alerts', methods: ['GET'])]
     public function getAlerts(Request $request, AlertRepository $alertRepository): JsonResponse
     {
@@ -28,11 +30,13 @@ final class AlertController extends AbstractController
                 'a.id AS id',
                 'a.is_price_notif AS is_price_notif',
                 'a.is_stock_notif AS is_stock_notif',
+                'a.cancelled AS cancelled',
                 'p.id AS productId',
                 'p.name AS productName',
                 'p.image_url AS productImageUrl',
                 'u.id AS alerterId'
             )
+            ->where('a.cancelled = false')
             ->orderBy('a.id', 'DESC');
 
         if ($alerterId > 0) {
@@ -54,6 +58,7 @@ final class AlertController extends AbstractController
                 'id' => isset($row['id']) ? (int) $row['id'] : null,
                 'is_price_notif' => isset($row['is_price_notif']) ? (bool) $row['is_price_notif'] : false,
                 'is_stock_notif' => isset($row['is_stock_notif']) ? (bool) $row['is_stock_notif'] : false,
+                'cancelled' => isset($row['cancelled']) ? (bool) $row['cancelled'] : false,
                 'productId' => isset($row['productId']) ? (int) $row['productId'] : null,
                 'productName' => $row['productName'] ?? null,
                 'productImageUrl' => $row['productImageUrl'] ?? null,
@@ -100,16 +105,39 @@ final class AlertController extends AbstractController
             return $this->json(['error' => 'Alerter not found.'], 404);
         }
 
+        // Authenticated users without subscription are treated as Freemium.
+        $alertsLimit = (int) ($alerter->getSubscription()?->getAlertsLimit() ?? self::DEFAULT_FREEMIUM_ALERTS_LIMIT);
+        if ($alertsLimit <= 0) {
+            $alertsLimit = self::DEFAULT_FREEMIUM_ALERTS_LIMIT;
+        }
+
+        // Lifetime cap: cancelled alerts still count against the plan quota.
+        $totalAlertsCount = $alertRepository->count([
+            'alerter' => $alerter,
+        ]);
+
+        // Check if user already has this alert
         $existing = $alertRepository->findOneBy([
             'product' => $product,
             'alerter' => $alerter,
         ]);
+
+        // Only enforce limit if creating a new alert
+        if (!$existing && $totalAlertsCount >= $alertsLimit) {
+            return $this->json([
+                'error' => 'Alert limit reached.',
+                'message' => 'You have reached the maximum number of alerts (' . $alertsLimit . ') for your plan.',
+                'limit' => $alertsLimit,
+                'current' => $totalAlertsCount,
+            ], 429);
+        }
 
         $alert = $existing instanceof Alert ? $existing : new Alert();
         $alert->setProduct($product);
         $alert->setAlerter($alerter);
         $alert->setIsPriceNotif($isPriceNotif);
         $alert->setIsStockNotif($isStockNotif);
+        $alert->setCancelled(false); // Ensure it's not cancelled
 
         if (!$existing instanceof Alert) {
             $entityManager->persist($alert);
@@ -121,6 +149,7 @@ final class AlertController extends AbstractController
             'id' => $alert->getId(),
             'is_price_notif' => $alert->isPriceNotif(),
             'is_stock_notif' => $alert->isStockNotif(),
+            'cancelled' => $alert->isCancelled(),
             'productId' => $product->getId(),
             'productName' => $product->getName(),
             'productImageUrl' => $product->getImageUrl(),
@@ -190,9 +219,10 @@ final class AlertController extends AbstractController
             return $this->json(['error' => 'Forbidden.'], 403);
         }
 
-        $entityManager->remove($alert);
+        // Keep history and do not free quota: mark alert as cancelled.
+        $alert->setCancelled(true);
         $entityManager->flush();
 
-        return $this->json(['success' => true]);
+        return $this->json(['success' => true, 'message' => 'Alert cancelled successfully']);
     }
 }

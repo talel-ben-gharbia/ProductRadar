@@ -13,6 +13,7 @@ import {
 import { toast } from "sonner"
 
 import { auth, googleProvider } from "@/lib/firebase"
+import { useAuthDialog } from "@/lib/auth-dialog-context"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -22,7 +23,6 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog"
 
 type B2CAuthResponse = {
@@ -66,7 +66,7 @@ function getFriendlyAuthErrorMessage(error: unknown, fallback: string) {
 
 export function B2CAuthDialogTrigger() {
   const router = useRouter()
-  const [open, setOpen] = useState(false)
+  const { isOpen, setIsOpen, openAuthDialog } = useAuthDialog()
   const [pendingAction, setPendingAction] = useState<PendingAction>("none")
   const [mode, setMode] = useState<AuthMode>("signin")
   const [fullName, setFullName] = useState("")
@@ -107,7 +107,7 @@ export function B2CAuthDialogTrigger() {
   async function completeLogin(idToken: string, fullNameOverride?: string) {
     await createSessionFromIdToken(idToken, fullNameOverride)
     toast.success("Welcome !")
-    setOpen(false)
+    setIsOpen(false)
     router.push("/")
     router.refresh()
     window.location.reload()
@@ -175,18 +175,23 @@ export function B2CAuthDialogTrigger() {
       suppressErrorToastRef.current = true
       setPendingAction("none")
     }
-    setOpen(nextOpen)
+    setIsOpen(nextOpen)
   }
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogTrigger asChild>
-        <Button variant="outline">
-          <LogIn className="h-4 w-4" />
-          Login
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="sm:max-w-md">
+    <>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="h-9 rounded-full px-4"
+        onClick={openAuthDialog}
+      >
+        Log in
+      </Button>
+
+      <Dialog open={isOpen} onOpenChange={handleOpenChange}>
+        <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{dialogTitle}</DialogTitle>
           <DialogDescription>{dialogDescription}</DialogDescription>
@@ -282,7 +287,8 @@ export function B2CAuthDialogTrigger() {
           )}
           {isGoogleLoading ? "Connecting..." : "Continue with Google"}
         </Button>
-      </DialogContent>
-    </Dialog>
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }
