@@ -31,6 +31,7 @@ import type { Product, ProductListing } from "@/utils/types"
 
 type ProductsPageProps = {
   searchParams?: Promise<{
+    search?: string | string[]
     categoryId?: string | string[]
     categoryIds?: string | string[]
     categoryName?: string | string[]
@@ -238,6 +239,8 @@ function buildRootCategoriesForMenu(rows: CategoryRaw[]): RootCategoryMenu[] {
 
 export default async function B2CProductsPage({ searchParams }: ProductsPageProps) {
   const resolvedSearchParams = await searchParams
+  const searchTerm = getSingleParam(resolvedSearchParams?.search).trim()
+  const normalizedSearchTerm = searchTerm.toLowerCase()
   const categoryName = getSingleParam(resolvedSearchParams?.categoryName) || "Products"
   const categoryIds = parseCategoryIds(resolvedSearchParams)
   const selectedSort = getSingleParam(resolvedSearchParams?.sort) || "price-asc"
@@ -284,6 +287,7 @@ export default async function B2CProductsPage({ searchParams }: ProductsPageProp
     let bestPriceByProduct = new Map<number, number>()
     let bestListingIdByProduct = new Map<number, number>()
     let offersCountByProduct = new Map<number, number>()
+    let refsByProduct = new Map<number, string[]>()
     try {
       const listings = await getProductListings()
       const bestListingResult = computeBestListingByProduct(listings)
@@ -296,9 +300,21 @@ export default async function B2CProductsPage({ searchParams }: ProductsPageProp
         acc.set(listing.productId, (acc.get(listing.productId) ?? 0) + 1)
         return acc
       }, new Map<number, number>())
+
+      refsByProduct = listings.reduce((acc, listing) => {
+        if (listing.productId === null || !listing.ref) {
+          return acc
+        }
+
+        const refs = acc.get(listing.productId) ?? []
+        refs.push(listing.ref.toLowerCase())
+        acc.set(listing.productId, refs)
+        return acc
+      }, new Map<number, string[]>())
     } catch {
       bestPriceByProduct = new Map<number, number>()
       offersCountByProduct = new Map<number, number>()
+      refsByProduct = new Map<number, string[]>()
     }
 
     products = [...deduped.values()].map((product) => ({
@@ -312,6 +328,17 @@ export default async function B2CProductsPage({ searchParams }: ProductsPageProp
       products = products.filter(
         ({ product }) => (product.brand || "Unknown").toLowerCase() === selectedBrand.toLowerCase(),
       )
+    }
+
+    if (normalizedSearchTerm) {
+      products = products.filter(({ product }) => {
+        if (product.name.toLowerCase().includes(normalizedSearchTerm)) {
+          return true
+        }
+
+        const refs = refsByProduct.get(product.id) ?? []
+        return refs.some((ref) => ref.includes(normalizedSearchTerm))
+      })
     }
 
     if (pricedOnly) {
@@ -379,6 +406,7 @@ export default async function B2CProductsPage({ searchParams }: ProductsPageProp
   const baseCategoryId = getSingleParam(resolvedSearchParams?.categoryId)
   const baseCategoryIds = getSingleParam(resolvedSearchParams?.categoryIds)
   const baseCategoryName = getSingleParam(resolvedSearchParams?.categoryName)
+  const baseSearch = getSingleParam(resolvedSearchParams?.search).trim()
 
   if (baseCategoryId) {
     priceFilterBaseParams.categoryId = baseCategoryId
@@ -388,6 +416,9 @@ export default async function B2CProductsPage({ searchParams }: ProductsPageProp
   }
   if (baseCategoryName) {
     priceFilterBaseParams.categoryName = baseCategoryName
+  }
+  if (baseSearch) {
+    priceFilterBaseParams.search = baseSearch
   }
   if (selectedSort) {
     priceFilterBaseParams.sort = selectedSort
@@ -422,6 +453,7 @@ export default async function B2CProductsPage({ searchParams }: ProductsPageProp
     const categoryIdParam = getSingleParam(resolvedSearchParams?.categoryId)
     const categoryIdsParam = getSingleParam(resolvedSearchParams?.categoryIds)
     const categoryNameParam = getSingleParam(resolvedSearchParams?.categoryName)
+    const searchParam = getSingleParam(resolvedSearchParams?.search).trim()
 
     if (categoryIdParam) {
       params.set("categoryId", categoryIdParam)
@@ -431,6 +463,9 @@ export default async function B2CProductsPage({ searchParams }: ProductsPageProp
     }
     if (categoryNameParam) {
       params.set("categoryName", categoryNameParam)
+    }
+    if (searchParam) {
+      params.set("search", searchParam)
     }
 
     if (selectedSort) {
@@ -658,6 +693,11 @@ export default async function B2CProductsPage({ searchParams }: ProductsPageProp
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Badge variant="secondary">{totalProducts}</Badge>
                   <span>produits trouves</span>
+                  {searchTerm ? (
+                    <Badge variant="outline" className="max-w-64 truncate">
+                      Search: {searchTerm}
+                    </Badge>
+                  ) : null}
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
