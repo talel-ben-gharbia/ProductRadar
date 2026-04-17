@@ -42,6 +42,7 @@ export type B2CAlert = {
   id: number
   is_price_notif: boolean
   is_stock_notif: boolean
+  cancelled?: boolean
   productId: number | null
   productName: string | null
   productImageUrl: string | null
