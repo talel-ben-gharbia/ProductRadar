@@ -26,7 +26,7 @@ export async function middleware(request: NextRequest) {
 
   // Protect all /admin routes except the login page
   if (pathname.startsWith("/admin") && pathname !== "/admin/login") {
-    const token = request.cookies.get(COOKIE_NAME)?.value
+    const token = request.cookies.get("admin_session")?.value
 
     if (!token) {
       return NextResponse.redirect(new URL("/admin/login", request.url))
@@ -34,11 +34,7 @@ export async function middleware(request: NextRequest) {
 
     const session = await verifySessionToken(token)
     if (!session) {
-      const response = NextResponse.redirect(
-        new URL("/admin/login", request.url),
-      )
-      response.cookies.delete(COOKIE_NAME)
-      return response
+      return NextResponse.redirect(new URL("/admin/login", request.url))
     }
 
     // Protect super-admin-only routes
@@ -68,7 +64,7 @@ export async function middleware(request: NextRequest) {
 
   // Redirect authenticated admins away from login page
   if (pathname === "/admin/login") {
-    const token = request.cookies.get(COOKIE_NAME)?.value
+    const token = request.cookies.get("admin_session")?.value
     if (token) {
       const session = await verifySessionToken(token)
       if (session) {

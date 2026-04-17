@@ -30,20 +30,10 @@ export async function GET(request: NextRequest) {
   const session = await verifySessionToken(token)
 
   if (!session) {
-    const response = NextResponse.json(
+    return NextResponse.json(
       { error: "Session expired." },
       { status: 401 },
     )
-    response.cookies.set({
-      name: COOKIE_NAME,
-      value: "",
-      httpOnly: true,
-      secure: shouldUseSecureCookies(request),
-      sameSite: "lax",
-      path: "/",
-      maxAge: 0,
-    })
-    return response
   }
 
   return NextResponse.json({
