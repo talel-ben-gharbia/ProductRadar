@@ -3,9 +3,10 @@
 import { FormEvent, useMemo, useRef, useState } from "react"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
-import { Loader2, LogIn, UserPlus } from "lucide-react"
+import { Loader2, LogIn, Lock, Mail, User, UserPlus } from "lucide-react"
 import {
   createUserWithEmailAndPassword,
+  sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signInWithPopup,
   updateProfile,
@@ -38,7 +39,7 @@ type B2CAuthResponse = {
 }
 
 type AuthMode = "signin" | "signup"
-type PendingAction = "none" | "email" | "google"
+type PendingAction = "none" | "email" | "google" | "reset"
 
 function getErrorCode(error: unknown) {
   if (typeof error === "object" && error !== null && "code" in error) {
@@ -77,6 +78,7 @@ export function B2CAuthDialogTrigger() {
   const isLoading = pendingAction !== "none"
   const isEmailLoading = pendingAction === "email"
   const isGoogleLoading = pendingAction === "google"
+  const isResetLoading = pendingAction === "reset"
 
   const dialogTitle = useMemo(
     () => (mode === "signin" ? "Sign in as customer" : "Create customer account"),
@@ -170,6 +172,29 @@ export function B2CAuthDialogTrigger() {
     }
   }
 
+  async function handlePasswordReset() {
+    if (!email.trim()) {
+      toast.error("Please enter your email first.")
+      return
+    }
+
+    setPendingAction("reset")
+    suppressErrorToastRef.current = false
+
+    try {
+      await sendPasswordResetEmail(auth, email.trim())
+      toast.success("Password reset email sent. Check your inbox.")
+    } catch (error) {
+      if (suppressErrorToastRef.current) {
+        return
+      }
+      const message = getFriendlyAuthErrorMessage(error, "Unable to send reset email.")
+      toast.error(message)
+    } finally {
+      setPendingAction("none")
+    }
+  }
+
   function handleOpenChange(nextOpen: boolean) {
     if (!nextOpen) {
       suppressErrorToastRef.current = true
@@ -191,102 +216,148 @@ export function B2CAuthDialogTrigger() {
       </Button>
 
       <Dialog open={isOpen} onOpenChange={handleOpenChange}>
-        <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>{dialogTitle}</DialogTitle>
-          <DialogDescription>{dialogDescription}</DialogDescription>
-        </DialogHeader>
+        <DialogContent className="overflow-hidden rounded-2xl border bg-background p-0 shadow-xl sm:max-w-md">
+          <DialogHeader className="border-b px-6 pb-4 pt-6">
+            <DialogTitle className="text-lg font-semibold tracking-tight">{dialogTitle}</DialogTitle>
+            <DialogDescription className="text-muted-foreground">
+              {dialogDescription}
+            </DialogDescription>
+          </DialogHeader>
 
-        <div className="grid grid-cols-2 gap-2">
-          <Button
-            type="button"
-            variant={mode === "signin" ? "default" : "outline"}
-            onClick={() => setMode("signin")}
-            disabled={isLoading}
-          >
-            <LogIn className="h-4 w-4" />
-            Sign in
-          </Button>
-          <Button
-            type="button"
-            variant={mode === "signup" ? "default" : "outline"}
-            onClick={() => setMode("signup")}
-            disabled={isLoading}
-          >
-            <UserPlus className="h-4 w-4" />
-            Sign up
-          </Button>
-        </div>
-
-        <form onSubmit={handleEmailPasswordAuth} className="space-y-3">
-          {mode === "signup" ? (
-            <div className="space-y-1.5">
-              <Label htmlFor="b2c-full-name">Full name</Label>
-              <Input
-                id="b2c-full-name"
-                value={fullName}
-                onChange={(event) => setFullName(event.target.value)}
-                placeholder="Your full name"
-              />
+          <div className="space-y-5 px-6 pb-6 pt-5">
+            <div className="grid grid-cols-2 gap-2 rounded-xl border bg-muted/40 p-1">
+              <Button
+                type="button"
+                variant={mode === "signin" ? "default" : "ghost"}
+                className="rounded-lg"
+                onClick={() => setMode("signin")}
+                disabled={isLoading}
+              >
+                <LogIn className="h-4 w-4" />
+                Sign in
+              </Button>
+              <Button
+                type="button"
+                variant={mode === "signup" ? "default" : "ghost"}
+                className="rounded-lg"
+                onClick={() => setMode("signup")}
+                disabled={isLoading}
+              >
+                <UserPlus className="h-4 w-4" />
+                Sign up
+              </Button>
             </div>
-          ) : null}
 
-          <div className="space-y-1.5">
-            <Label htmlFor="b2c-email">Email</Label>
-            <Input
-              id="b2c-email"
-              type="email"
-              autoComplete="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              placeholder="name@example.com"
-              required
-            />
+            <form onSubmit={handleEmailPasswordAuth} className="space-y-4">
+              {mode === "signup" ? (
+                <div className="space-y-1.5">
+                  <Label htmlFor="b2c-full-name">Full name</Label>
+                  <div className="relative">
+                    <User className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      id="b2c-full-name"
+                      value={fullName}
+                      onChange={(event) => setFullName(event.target.value)}
+                      placeholder="Your full name"
+                      className="pl-10"
+                    />
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="space-y-1.5">
+                <Label htmlFor="b2c-email">Email</Label>
+                <div className="relative">
+                  <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    id="b2c-email"
+                    type="email"
+                    autoComplete="email"
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                    placeholder="name@example.com"
+                    className="pl-10"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="b2c-password">Password</Label>
+                <div className="relative">
+                  <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    id="b2c-password"
+                    type="password"
+                    autoComplete={mode === "signup" ? "new-password" : "current-password"}
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    placeholder="Your password"
+                    className="pl-10"
+                    required
+                  />
+                </div>
+              </div>
+
+              {mode === "signin" ? (
+                <div className="space-y-1">
+                  <div className="flex justify-end">
+                    <Button
+                      type="button"
+                      variant="link"
+                      className="h-auto p-0 text-sm"
+                      disabled={isLoading}
+                      onClick={handlePasswordReset}
+                    >
+                      {isResetLoading ? "Sending reset email..." : "Reset password"}
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Forgot your password? Enter your email and send a reset link.
+                  </p>
+                </div>
+              ) : null}
+
+              <Button type="submit" disabled={isLoading} className="h-10 w-full rounded-full">
+                {isEmailLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                {isEmailLoading
+                  ? "Connecting..."
+                  : mode === "signup"
+                    ? "Create account"
+                    : "Sign in"}
+              </Button>
+            </form>
+
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-background px-2 text-muted-foreground">Or continue with</span>
+              </div>
+            </div>
+
+            <Button
+              type="button"
+              onClick={handleGoogleAuth}
+              disabled={isLoading}
+              className="h-10 w-full rounded-full"
+              variant="outline"
+            >
+              {isGoogleLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Image
+                  src="/assets/google-logo.svg"
+                  alt="Google"
+                  width={16}
+                  height={16}
+                  className="h-4 w-4"
+                />
+              )}
+              {isGoogleLoading ? "Connecting..." : "Continue with Google"}
+            </Button>
           </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="b2c-password">Password</Label>
-            <Input
-              id="b2c-password"
-              type="password"
-              autoComplete={mode === "signup" ? "new-password" : "current-password"}
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              placeholder="Your password"
-              required
-            />
-          </div>
-
-          <Button type="submit" disabled={isLoading} className="w-full">
-            {isEmailLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-            {isEmailLoading
-              ? "Connecting..."
-              : mode === "signup"
-                ? "Sign up with email"
-                : "Sign in with email"}
-          </Button>
-        </form>
-
-        <Button
-          type="button"
-          onClick={handleGoogleAuth}
-          disabled={isLoading}
-          className="w-full"
-          variant="outline"
-        >
-          {isGoogleLoading ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Image
-              src="/assets/google-logo.svg"
-              alt="Google"
-              width={16}
-              height={16}
-              className="h-4 w-4"
-            />
-          )}
-          {isGoogleLoading ? "Connecting..." : "Continue with Google"}
-        </Button>
         </DialogContent>
       </Dialog>
     </>

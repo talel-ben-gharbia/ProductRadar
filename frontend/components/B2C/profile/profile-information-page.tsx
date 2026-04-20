@@ -2,12 +2,18 @@
 
 import { FormEvent, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
+import {
+  EmailAuthProvider,
+  reauthenticateWithCredential,
+  updatePassword,
+} from "firebase/auth"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { auth } from "@/lib/firebase"
 
 type B2CProfile = {
   id: number
@@ -25,6 +31,10 @@ export function ProfileInformationPage() {
   const [profile, setProfile] = useState<B2CProfile | null>(null)
   const [fullName, setFullName] = useState("")
   const [adress, setAdress] = useState("")
+  const [changingPassword, setChangingPassword] = useState(false)
+  const [currentPassword, setCurrentPassword] = useState("")
+  const [newPassword, setNewPassword] = useState("")
+  const [confirmNewPassword, setConfirmNewPassword] = useState("")
 
   useEffect(() => {
     let cancelled = false
@@ -81,6 +91,63 @@ export function ProfileInformationPage() {
       toast.error(message)
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function handleChangePassword(event: FormEvent) {
+    event.preventDefault()
+
+    if (!currentPassword || !newPassword || !confirmNewPassword) {
+      toast.error("Please fill in all password fields.")
+      return
+    }
+
+    if (newPassword.length < 6) {
+      toast.error("New password must contain at least 6 characters.")
+      return
+    }
+
+    if (newPassword !== confirmNewPassword) {
+      toast.error("New password and confirmation do not match.")
+      return
+    }
+
+    if (currentPassword === newPassword) {
+      toast.error("New password must be different from current password.")
+      return
+    }
+
+    const currentUser = auth.currentUser
+    if (!currentUser || !currentUser.email) {
+      toast.error("Please log in again before changing your password.")
+      return
+    }
+
+    const hasPasswordProvider = currentUser.providerData.some(
+      (provider) => provider.providerId === "password",
+    )
+
+    if (!hasPasswordProvider) {
+      toast.error("This account uses social login. Password change is not available here.")
+      return
+    }
+
+    setChangingPassword(true)
+
+    try {
+      const credential = EmailAuthProvider.credential(currentUser.email, currentPassword)
+      await reauthenticateWithCredential(currentUser, credential)
+      await updatePassword(currentUser, newPassword)
+
+      setCurrentPassword("")
+      setNewPassword("")
+      setConfirmNewPassword("")
+      toast.success("Password changed successfully.")
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to change password."
+      toast.error(message)
+    } finally {
+      setChangingPassword(false)
     }
   }
 
@@ -148,6 +215,55 @@ export function ProfileInformationPage() {
             </Button>
           </div>
         </form>
+
+        <div className="mt-8 border-t pt-6">
+          <h3 className="text-base font-semibold">Change password</h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Update your account password securely.
+          </p>
+
+          <form onSubmit={handleChangePassword} className="mt-5 space-y-5">
+            <div className="space-y-2">
+              <Label htmlFor="currentPassword">Current password</Label>
+              <Input
+                id="currentPassword"
+                type="password"
+                autoComplete="current-password"
+                value={currentPassword}
+                onChange={(event) => setCurrentPassword(event.target.value)}
+                placeholder="Your current password"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="newPassword">New password</Label>
+              <Input
+                id="newPassword"
+                type="password"
+                autoComplete="new-password"
+                value={newPassword}
+                onChange={(event) => setNewPassword(event.target.value)}
+                placeholder="At least 6 characters"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="confirmNewPassword">Confirm new password</Label>
+              <Input
+                id="confirmNewPassword"
+                type="password"
+                autoComplete="new-password"
+                value={confirmNewPassword}
+                onChange={(event) => setConfirmNewPassword(event.target.value)}
+                placeholder="Repeat new password"
+              />
+            </div>
+
+            <Button type="submit" disabled={changingPassword}>
+              {changingPassword ? "Updating..." : "Change password"}
+            </Button>
+          </form>
+        </div>
       </CardContent>
     </Card>
   )

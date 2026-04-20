@@ -202,6 +202,7 @@ final class B2CAuthController extends AbstractController
             $customer instanceof B2BMarket => self::ACCOUNT_TYPE_B2B_MARKET,
             default => self::ACCOUNT_TYPE_B2C,
         };
+        $subscription = $customer->getSubscription();
 
         return [
             'id' => $customer->getId(),
@@ -222,7 +223,7 @@ final class B2CAuthController extends AbstractController
             'company_country' => $customer instanceof B2BCompany || $customer instanceof B2BMarket ? $customer->getCompanyCountry() : null,
             'company_website' => $customer instanceof B2BCompany || $customer instanceof B2BMarket ? $customer->getCompanyWebsite() : null,
             'b2b_status' => $customer instanceof B2BCompany || $customer instanceof B2BMarket ? $customer->getB2bStatus() : null,
-            'subscription' => $this->serializeSubscription($customer->getSubscription()),
+            'subscription' => $this->serializeSubscription($subscription),
         ];
     }
 
