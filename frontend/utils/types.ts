@@ -38,6 +38,36 @@ export type PriceHistoryEntry = {
   sellerName: string | null
 }
 
+export type B2CAlert = {
+  id: number
+  is_price_notif: boolean
+  is_stock_notif: boolean
+  cancelled?: boolean
+  productId: number | null
+  productName: string | null
+  productImageUrl: string | null
+  alerterId: number | null
+}
+
+export type B2CFavorite = {
+  id: number
+  created_at: string | null
+  clientId: number | null
+  productListingId: number | null
+  ref: string | null
+  price: number | null
+  old_price: number | null
+  product_url: string
+  availability: boolean | null
+  trust_score: number | null
+  is_active: boolean | null
+  productId: number | null
+  productName: string | null
+  productImageUrl: string | null
+  sellerId: number | null
+  sellerName: string | null
+}
+
 export type CategoryWithParent = {
   id: number
   name: string

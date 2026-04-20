@@ -27,6 +27,7 @@ type HistoryDatum = {
   id: number
   pointLabel: string
   recordedPrice: number
+  isOutOfStock: boolean
   sellerLabel: string
   listingLabel: string
   direction: "up" | "down" | "same" | "start"
@@ -102,6 +103,7 @@ function buildHistoryData(
       id: item.id,
       pointLabel,
       recordedPrice: item.recorded_price,
+      isOutOfStock: item.out_of_stock === true,
       sellerLabel:
         item.sellerName?.trim() ||
         (item.sellerId !== null ? sellerNamesById[item.sellerId]?.trim() : "") ||
@@ -118,6 +120,32 @@ function buildHistoryData(
   }
 
   return points
+}
+
+function PricePointDot({
+  cx,
+  cy,
+  payload,
+}: {
+  cx?: number
+  cy?: number
+  payload?: HistoryDatum
+}) {
+  if (typeof cx !== "number" || typeof cy !== "number" || !payload) {
+    return null
+  }
+
+  if (payload.isOutOfStock) {
+    return (
+      <g>
+        <circle cx={cx} cy={cy} r={5} fill="#ef4444" stroke="#ffffff" strokeWidth={1.5} />
+        <line x1={cx - 2.2} y1={cy - 2.2} x2={cx + 2.2} y2={cy + 2.2} stroke="#ffffff" strokeWidth={1.3} />
+        <line x1={cx + 2.2} y1={cy - 2.2} x2={cx - 2.2} y2={cy + 2.2} stroke="#ffffff" strokeWidth={1.3} />
+      </g>
+    )
+  }
+
+  return <circle cx={cx} cy={cy} r={3} fill="var(--color-price)" stroke="#ffffff" strokeWidth={1} />
 }
 
 function PriceHistoryTooltip({
@@ -148,6 +176,7 @@ function PriceHistoryTooltip({
       <p className="font-medium">{point.pointLabel}</p>
       <p className="mt-1 font-semibold">{toMoney(point.recordedPrice)}</p>
       <p className={`mt-1 ${movementColor}`}>{point.movementLabel}</p>
+      {point.isOutOfStock ? <p className="mt-1 font-medium text-red-600">Out of stock at this point</p> : null}
       <p className="mt-1 text-muted-foreground">{point.sellerLabel}</p>
       <p className="text-muted-foreground">{point.listingLabel}</p>
     </div>
@@ -158,6 +187,7 @@ export default function ProductPriceHistoryChart({ history, sellerNamesById = {}
   const chartData = buildHistoryData(history, sellerNamesById)
   const rises = chartData.filter((item) => item.direction === "up").length
   const drops = chartData.filter((item) => item.direction === "down").length
+  const outOfStockEvents = chartData.filter((item) => item.isOutOfStock).length
 
   if (chartData.length === 0) {
     return (
@@ -209,6 +239,8 @@ export default function ProductPriceHistoryChart({ history, sellerNamesById = {}
               fillOpacity={0.28}
               stroke="var(--color-price)"
               strokeWidth={2}
+              dot={<PricePointDot />}
+              activeDot={{ r: 6 }}
             />
           </AreaChart>
         </ChartContainer>
@@ -224,6 +256,7 @@ export default function ProductPriceHistoryChart({ history, sellerNamesById = {}
               <TrendingUp className="h-4 w-4" />
               Rises: {rises}
             </span>
+            <span className="inline-flex items-center gap-1 text-red-600">Out of stock points: {outOfStockEvents}</span>
           </div>
           <span className="text-muted-foreground">
             Latest: {toMoney(latest.recordedPrice)} by {latest.sellerLabel}

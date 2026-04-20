@@ -321,6 +321,7 @@ export default function ProductsDataTable({
       }
 
       return (
+        String(row.id).includes(normalizedSearch) ||
         row.name.toLowerCase().includes(normalizedSearch) ||
         (row.brand ?? "").toLowerCase().includes(normalizedSearch)
       )
@@ -495,7 +496,7 @@ export default function ProductsDataTable({
             setSearch(event.target.value)
             setPageIndex(0)
           }}
-          placeholder="Search by name or brand"
+          placeholder="Search by name, brand, or ID"
           className="max-w-md"
         />
 

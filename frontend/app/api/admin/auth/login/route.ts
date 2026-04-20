@@ -7,11 +7,44 @@ import {
 } from "@/lib/admin-session"
 import { BACKEND_URL } from "@/utils/admin/constants"
 
+function shouldUseSecureCookies(request: NextRequest): boolean {
+  const configured = process.env.COOKIE_SECURE
+  if (configured === "true") return true
+  if (configured === "false") return false
+
+  const forwardedProto = request.headers.get("x-forwarded-proto")
+  if (forwardedProto) {
+    return forwardedProto.split(",")[0]?.trim() === "https"
+  }
+
+  return request.nextUrl.protocol === "https:"
+}
+
+function isOriginAllowed(request: NextRequest): boolean {
+  if (process.env.STRICT_ORIGIN_CHECK !== "true") {
+    return true
+  }
+
+  const originHeader = request.headers.get("origin")
+  const hostHeaderRaw =
+    request.headers.get("x-forwarded-host") ?? request.headers.get("host")
+  const hostHeader = hostHeaderRaw?.split(",")[0]?.trim()
+
+  if (!originHeader || !hostHeader) {
+    return true
+  }
+
+  try {
+    const expectedHostname = hostHeader.split(":")[0]
+    const originHostname = new URL(originHeader).hostname
+    return originHostname === expectedHostname
+  } catch {
+    return false
+  }
+}
+
 export async function POST(request: NextRequest) {
-  // CSRF: verify request origin matches the host
-  const origin = request.headers.get("origin")
-  const host = request.headers.get("host")
-  if (origin && host && !origin.includes(host)) {
+  if (!isOriginAllowed(request)) {
     return NextResponse.json(
       { error: "Invalid request origin." },
       { status: 403 },
@@ -65,8 +98,8 @@ export async function POST(request: NextRequest) {
       name: COOKIE_NAME,
       value: token,
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
+      secure: shouldUseSecureCookies(request),
+      sameSite: "lax",
       path: "/",
       maxAge: SESSION_DURATION,
     })

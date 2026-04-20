@@ -1,17 +1,19 @@
-import { Geist, Geist_Mono } from "next/font/google"
+import { JetBrains_Mono, Plus_Jakarta_Sans } from "next/font/google"
+import Script from "next/script"
 
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "@/components/ui/sonner"
 import { TooltipProvider } from "@/components/ui/tooltip"
+import { AuthDialogProvider } from "@/lib/auth-dialog-context"
 import { cn } from "@/lib/utils";
 
-const fontSans = Geist({
+const fontSans = Plus_Jakarta_Sans({
   subsets: ["latin"],
   variable: "--font-sans",
 })
 
-const fontMono = Geist_Mono({
+const fontMono = JetBrains_Mono({
   subsets: ["latin"],
   variable: "--font-mono",
 })
@@ -27,12 +29,40 @@ export default function RootLayout({
       suppressHydrationWarning
       className={cn("antialiased", fontMono.variable, "font-sans", fontSans.variable)}
     >
-      <body>
+      <body suppressHydrationWarning>
+        <Script id="remove-injected-dom-attrs" strategy="beforeInteractive">
+          {`
+            (function () {
+              var attrs = ["bis_skin_checked", "data-new-gr-c-s-check-loaded", "data-gr-ext-installed"];
+              function clean(node) {
+                for (var i = 0; i < attrs.length; i += 1) {
+                  node.removeAttribute(attrs[i]);
+                }
+              }
+              function cleanAll() {
+                clean(document.documentElement);
+                clean(document.body);
+                var elements = document.querySelectorAll("*[bis_skin_checked], *[data-new-gr-c-s-check-loaded], *[data-gr-ext-installed]");
+                for (var i = 0; i < elements.length; i += 1) {
+                  clean(elements[i]);
+                }
+              }
+              cleanAll();
+              var observer = new MutationObserver(cleanAll);
+              observer.observe(document.documentElement, { attributes: true, childList: true, subtree: true });
+              setTimeout(function () {
+                observer.disconnect();
+              }, 3000);
+            })();
+          `}
+        </Script>
         <ThemeProvider forcedTheme="light" enableSystem={false}>
-          <TooltipProvider>
-            {children}
-            <Toaster position="top-center" closeButton />
-          </TooltipProvider>
+          <AuthDialogProvider>
+            <TooltipProvider>
+              {children}
+              <Toaster position="top-center" closeButton />
+            </TooltipProvider>
+          </AuthDialogProvider>
         </ThemeProvider>
       </body>
     </html>

@@ -53,12 +53,26 @@ class ProductListing
     /**
      * @var Collection<int, PriceHistory>
      */
-    #[ORM\OneToMany(targetEntity: PriceHistory::class, mappedBy: 'productListing')]
+    #[ORM\OneToMany(targetEntity: PriceHistory::class, mappedBy: 'productListing', cascade: ['remove'], orphanRemoval: true)]
     private Collection $priceHistories;
+
+    /**
+     * @var Collection<int, Favorite>
+     */
+    #[ORM\OneToMany(targetEntity: Favorite::class, mappedBy: 'product_listing', orphanRemoval: true)]
+    private Collection $favorites;
+
+    /**
+     * @var Collection<int, Notification>
+     */
+    #[ORM\OneToMany(targetEntity: Notification::class, mappedBy: 'product_listing')]
+    private Collection $notifications;
 
     public function __construct()
     {
         $this->priceHistories = new ArrayCollection();
+        $this->favorites = new ArrayCollection();
+        $this->notifications = new ArrayCollection();
     }
 
     public function getId(): ?int
@@ -222,6 +236,66 @@ class ProductListing
             // set the owning side to null (unless already changed)
             if ($priceHistory->getProductListing() === $this) {
                 $priceHistory->setProductListing(null);
+            }
+        }
+
+        return $this;
+    }
+
+    /**
+     * @return Collection<int, Favorite>
+     */
+    public function getFavorites(): Collection
+    {
+        return $this->favorites;
+    }
+
+    public function addFavorite(Favorite $favorite): static
+    {
+        if (!$this->favorites->contains($favorite)) {
+            $this->favorites->add($favorite);
+            $favorite->setProductListing($this);
+        }
+
+        return $this;
+    }
+
+    public function removeFavorite(Favorite $favorite): static
+    {
+        if ($this->favorites->removeElement($favorite)) {
+            // set the owning side to null (unless already changed)
+            if ($favorite->getProductListing() === $this) {
+                $favorite->setProductListing(null);
+            }
+        }
+
+        return $this;
+    }
+
+    /**
+     * @return Collection<int, Notification>
+     */
+    public function getNotifications(): Collection
+    {
+        return $this->notifications;
+    }
+
+    public function addNotification(Notification $notification): static
+    {
+        if (!$this->notifications->contains($notification)) {
+            $this->notifications->add($notification);
+            $notification->setProductListing($this);
+        }
+
+        return $this;
+    }
+
+    public function removeNotification(Notification $notification): static
+    {
+        if ($this->notifications->removeElement($notification)) {
+            // set the owning side to null (unless already changed)
+            if ($notification->getProductListing() === $this) {
+                $notification->setProductListing(null);
             }
         }
 

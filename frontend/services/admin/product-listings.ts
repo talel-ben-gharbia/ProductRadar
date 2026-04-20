@@ -15,9 +15,14 @@ async function fetchProductListingsFromApi(
     }
 
     const query = params.toString()
-    const endpoint = query
-      ? `${BACKEND_URL}/product-listings?${query}`
-      : `${BACKEND_URL}/product-listings`
+    const endpoint =
+      typeof window === "undefined"
+        ? query
+          ? `${BACKEND_URL}/product-listings?${query}`
+          : `${BACKEND_URL}/product-listings`
+        : query
+          ? `/api/product-listings?${query}`
+          : "/api/product-listings"
     const response = await fetch(endpoint, {
       cache: "no-store",
     })

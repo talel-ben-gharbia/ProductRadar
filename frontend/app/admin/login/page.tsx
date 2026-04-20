@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, type FormEvent } from "react"
+import { useEffect, useState, type FormEvent } from "react"
 import { useRouter } from "next/navigation"
 import {
   ArrowRight,
@@ -25,10 +25,15 @@ import { Label } from "@/components/ui/label"
 
 export default function AdminLoginPage() {
   const router = useRouter()
+  const [mounted, setMounted] = useState(false)
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   function getAuthErrorMessage(message: string): string {
     if (message.includes("Too many login attempts")) {
@@ -72,6 +77,10 @@ export default function AdminLoginPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  if (!mounted) {
+    return null
   }
 
   return (

@@ -38,12 +38,19 @@ class Product
     /**
      * @var Collection<int, ProductListing>
      */
-    #[ORM\OneToMany(targetEntity: ProductListing::class, mappedBy: 'product')]
+    #[ORM\OneToMany(targetEntity: ProductListing::class, mappedBy: 'product', cascade: ['remove'], orphanRemoval: true)]
     private Collection $productListings;
+
+    /**
+     * @var Collection<int, Alert>
+     */
+    #[ORM\OneToMany(targetEntity: Alert::class, mappedBy: 'product', orphanRemoval: true)]
+    private Collection $alerts;
 
     public function __construct()
     {
         $this->productListings = new ArrayCollection();
+        $this->alerts = new ArrayCollection();
     }
 
     public function getId(): ?int
@@ -144,9 +151,39 @@ class Product
     public function removeProductListing(ProductListing $productListing): static
     {
         if ($this->productListings->removeElement($productListing)) {
-            // set the owning side to null (unless already changed)
+            // Keep inverse side in sync for in-memory state.
             if ($productListing->getProduct() === $this) {
                 $productListing->setProduct(null);
+            }
+        }
+
+        return $this;
+    }
+
+    /**
+     * @return Collection<int, Alert>
+     */
+    public function getAlerts(): Collection
+    {
+        return $this->alerts;
+    }
+
+    public function addAlert(Alert $alert): static
+    {
+        if (!$this->alerts->contains($alert)) {
+            $this->alerts->add($alert);
+            $alert->setProduct($this);
+        }
+
+        return $this;
+    }
+
+    public function removeAlert(Alert $alert): static
+    {
+        if ($this->alerts->removeElement($alert)) {
+            // set the owning side to null (unless already changed)
+            if ($alert->getProduct() === $this) {
+                $alert->setProduct(null);
             }
         }
 
