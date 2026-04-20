@@ -3,6 +3,7 @@
 namespace App\Controller;
 
 use App\Entity\Customer;
+use App\Entity\Subscription;
 use App\Entity\User;
 use App\Repository\UserRepository;
 use Doctrine\ORM\EntityManagerInterface;
@@ -122,6 +123,8 @@ final class B2CAuthController extends AbstractController
 
     private function serializeCustomer(Customer $customer): array
     {
+        $subscription = $customer->getSubscription();
+
         return [
             'id' => $customer->getId(),
             'email' => $customer->getEmail(),
@@ -131,6 +134,25 @@ final class B2CAuthController extends AbstractController
             'adress' => $customer->getAdress(),
             'is_verified' => $customer->isVerified(),
             'is_active' => $customer->isActive(),
+            'subscription' => $this->serializeSubscription($subscription),
+        ];
+    }
+
+    private function serializeSubscription(?Subscription $subscription): ?array
+    {
+        if (!$subscription instanceof Subscription) {
+            return null;
+        }
+
+        return [
+            'id' => $subscription->getId(),
+            'plan_type' => $subscription->getPlanType(),
+            'start_date' => $subscription->getStartDate()?->format(DATE_ATOM),
+            'end_date' => $subscription->getEndDate()?->format(DATE_ATOM),
+            'active' => $subscription->isActive(),
+            'alerts_limit' => $subscription->getAlertsLimit(),
+            'favorites_limit' => $subscription->getFavoritesLimit(),
+            'price_history_access' => $subscription->getPriceHistoryAccess(),
         ];
     }
 }

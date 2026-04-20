@@ -1,7 +1,9 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { CheckCircle2 } from "lucide-react"
+import { toast } from "sonner"
+import { useSearchParams } from "next/navigation"
 
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -18,9 +20,8 @@ const PLANS = [
       { label: "Alerts limit", value: 3 },
       { label: "Price history access", value: 1 },
     ],
-    current: true,
     highlighted: false,
-    cta: "Your Current Plan",
+    cta: "Freemium plan",
     ctaVariant: "outline" as const,
   },
   {
@@ -37,7 +38,6 @@ const PLANS = [
       { label: "Alerts limit", value: 20 },
       { label: "Price history access", value: 6 },
     ],
-    current: false,
     highlighted: true,
     cta: "Upgrade to Premium",
     ctaVariant: "default" as const,
@@ -58,15 +58,150 @@ const PLANS = [
       { label: "Alerts limit", value: 20 },
       { label: "Price history access", value: 6 },
     ],
-    current: false,
     highlighted: false,
     cta: "Upgrade to Premium Yearly",
     ctaVariant: "default" as const,
   },
 ]
 
+type CustomerSubscription = {
+  id: number
+  plan_type: string | null
+  start_date: string | null
+  end_date: string | null
+  active: boolean | null
+}
+
+type ProfileResponse = {
+  customer?: {
+    subscription?: CustomerSubscription | null
+  } | null
+  error?: string
+}
+
 export function ProfilePricingPage() {
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null)
+  const [currentPlanId, setCurrentPlanId] = useState<string>("freemium")
+  const [currentPlanEndDate, setCurrentPlanEndDate] = useState<string | null>(null)
+  const searchParams = useSearchParams()
+
+  const loadCurrentPlan = async () => {
+    const response = await fetch("/api/b2c/profile", { cache: "no-store" })
+    const data = (await response.json().catch(() => ({}))) as ProfileResponse
+
+    if (!response.ok) {
+      throw new Error(data.error || "Unable to load current subscription.")
+    }
+
+    const subscription = data.customer?.subscription ?? null
+    const isActivePremium =
+      Boolean(subscription?.active) &&
+      (subscription?.plan_type === "premium_monthly" || subscription?.plan_type === "premium_yearly")
+
+    setCurrentPlanId(isActivePremium ? (subscription?.plan_type as string) : "freemium")
+    setCurrentPlanEndDate(isActivePremium ? subscription?.end_date ?? null : null)
+  }
+
+  useEffect(() => {
+    let cancelled = false
+
+    const bootstrap = async () => {
+      try {
+        const payment = searchParams.get("payment")
+        const sessionId = searchParams.get("session_id")
+
+        if (payment === "success" && sessionId) {
+          const confirmResponse = await fetch("/api/b2c/payments/confirm", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ sessionId }),
+          })
+
+          const confirmData = (await confirmResponse.json().catch(() => ({}))) as {
+            error?: string
+          }
+
+          if (!confirmResponse.ok) {
+            throw new Error(confirmData.error || "Payment was successful but subscription update is pending.")
+          }
+        }
+
+        await loadCurrentPlan()
+        if (cancelled) return
+
+        if (payment === "success") {
+          toast.success("Payment succeeded. Your subscription is now active.")
+        }
+
+        if (payment === "cancel") {
+          toast.error("Payment was cancelled.")
+        }
+      } catch (error) {
+        if (cancelled) return
+
+        const message = error instanceof Error ? error.message : "Unable to refresh subscription status."
+        toast.error(message)
+      }
+    }
+
+    void bootstrap()
+
+    return () => {
+      cancelled = true
+    }
+  }, [searchParams])
+
+  const plansWithState = PLANS.map((plan) => {
+    const isCurrent = plan.id === currentPlanId
+
+    return {
+      ...plan,
+      current: isCurrent,
+      cta: isCurrent ? "Your Current Plan" : plan.cta,
+    }
+  })
+
+  const currentPlanLabel =
+    currentPlanId === "premium_yearly"
+      ? "Premium yearly"
+      : currentPlanId === "premium_monthly"
+        ? "Premium"
+        : "Freemium"
+
+  const handleCheckout = async (planId: string) => {
+    if (planId === "freemium") return
+
+    try {
+      setSelectedPlan(planId)
+
+      const response = await fetch("/api/b2c/payments/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ planId }),
+      })
+
+      const data = (await response.json().catch(() => ({}))) as {
+        error?: string
+        sessionId?: string
+        url?: string
+      }
+
+      if (!response.ok) {
+        throw new Error(data.error || "Unable to start checkout.")
+      }
+
+      if (data.url) {
+        window.location.assign(data.url)
+        return
+      }
+
+      throw new Error("Stripe checkout session data is incomplete.")
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to start checkout."
+      toast.error(message)
+      setSelectedPlan(null)
+    }
+  }
 
   return (
     <div className="space-y-8">
@@ -76,11 +211,15 @@ export function ProfilePricingPage() {
         <p className="text-base text-muted-foreground">
           Choose the perfect plan for your needs. Upgrade anytime to unlock more features.
         </p>
+        <p className="text-sm font-medium text-foreground">
+          Current plan: {currentPlanLabel}
+          {currentPlanEndDate ? ` (active until ${new Date(currentPlanEndDate).toLocaleDateString()})` : ""}
+        </p>
       </div>
 
       {/* Plans Grid */}
       <div className="grid gap-6 lg:grid-cols-3">
-        {PLANS.map((plan) => (
+        {plansWithState.map((plan) => (
           <div key={plan.id} className="relative">
             {plan.highlighted && (
               <div className="absolute -top-4 left-1/2 -translate-x-1/2 z-10">
@@ -143,10 +282,10 @@ export function ProfilePricingPage() {
                 <Button
                   className={`w-full font-semibold py-6 text-base ${plan.ctaVariant === "default" ? "bg-black hover:bg-black/90 shadow-lg" : ""}`}
                   variant={plan.ctaVariant}
-                  disabled={plan.current}
-                  onClick={() => setSelectedPlan(plan.id)}
+                  disabled={plan.current || plan.id === "freemium" || selectedPlan !== null}
+                  onClick={() => void handleCheckout(plan.id)}
                 >
-                  {plan.cta}
+                  {selectedPlan === plan.id ? "Redirecting..." : plan.cta}
                 </Button>
 
                 {/* Features List */}

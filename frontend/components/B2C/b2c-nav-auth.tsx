@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { BellRing, User, LogOut } from "lucide-react"
+import { BellRing, ChevronDown, LogOut, User } from "lucide-react"
 
 import { B2CAuthDialogTrigger } from "@/components/B2C/b2c-auth-dialog"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -28,11 +28,20 @@ export function B2CNavAuth() {
   useEffect(() => {
     let cancelled = false
 
-    fetch("/api/b2c/profile", { cache: "no-store" })
+    fetch("/api/b2c/auth/me", { cache: "no-store" })
       .then((response) => response.json())
       .then((data: { customer?: B2CProfile | null }) => {
         if (!cancelled) {
-          setCustomer(data.customer ?? null)
+          const sessionCustomer = data.customer ?? null
+          if (sessionCustomer) {
+            setCustomer({
+              ...sessionCustomer,
+              full_name: sessionCustomer.full_name ?? null,
+              adress: sessionCustomer.adress ?? null,
+            })
+          } else {
+            setCustomer(null)
+          }
           setLoading(false)
         }
       })
@@ -65,6 +74,11 @@ export function B2CNavAuth() {
     return name ? name.charAt(0).toUpperCase() : ""
   }, [customer?.full_name])
 
+  const displayName = useMemo(() => {
+    const name = customer?.full_name?.trim()
+    return name || "Account"
+  }, [customer?.full_name])
+
   async function logout() {
     await fetch("/api/b2c/auth/logout", { method: "POST" })
     setOpen(false)
@@ -86,25 +100,29 @@ export function B2CNavAuth() {
       <button
         type="button"
         aria-label="Open customer menu"
-        className="rounded-full"
+        className="flex h-9 items-center gap-2 rounded-full border border-input bg-background px-1.5 pr-2.5 text-sm shadow-sm transition-colors hover:bg-muted/50"
         onClick={() => setOpen((value) => !value)}
       >
-        <Avatar>
-          <AvatarFallback>{avatarInitial}</AvatarFallback>
+        <Avatar size="sm">
+          <AvatarFallback className="bg-muted font-medium text-foreground">
+            {avatarInitial || "U"}
+          </AvatarFallback>
         </Avatar>
+        <span className="hidden max-w-24 truncate text-sm font-medium lg:block">{displayName}</span>
+        <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
 
       {open ? (
-        <div className="absolute right-0 z-50 mt-3 w-52 rounded-lg border bg-background p-1 shadow-md">
-          <div className="border-b px-3 py-2">
-            <p className="truncate text-sm font-medium">{customer.full_name || ""}</p>
+        <div className="absolute right-0 z-50 mt-2 w-64 overflow-hidden rounded-xl border bg-white shadow-lg">
+          <div className="border-b px-3 py-3">
+            <p className="truncate text-sm font-semibold">{displayName}</p>
             <p className="truncate text-xs text-muted-foreground">{customer.email}</p>
           </div>
 
           <Link
             href="/B2C/profile"
             onClick={() => setOpen(false)}
-            className="flex items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-muted"
+            className="mx-1 mt-1 flex items-center gap-2 rounded-md px-2.5 py-2 text-sm transition-colors hover:bg-muted/60"
           >
             <User className="h-4 w-4" />
             <span>Profile</span>
@@ -112,7 +130,7 @@ export function B2CNavAuth() {
           <Link
             href="/B2C/profile/alerts"
             onClick={() => setOpen(false)}
-            className="flex items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-muted"
+            className="mx-1 flex items-center gap-2 rounded-md px-2.5 py-2 text-sm transition-colors hover:bg-muted/60"
           >
             <BellRing className="h-4 w-4" />
             <span>My alerts</span>
@@ -120,7 +138,7 @@ export function B2CNavAuth() {
           <button
             type="button"
             onClick={logout}
-            className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm hover:bg-muted"
+            className="mx-1 mb-1 flex w-[calc(100%-0.5rem)] items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm text-destructive transition-colors hover:bg-destructive/10"
           >
             <LogOut className="h-4 w-4" />
             <span>Logout</span>

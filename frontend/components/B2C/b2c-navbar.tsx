@@ -55,6 +55,8 @@ export function B2CNavbar({
   const [notifications, setNotifications] = useState<B2CNotification[]>([])
   const [notificationsLoading, setNotificationsLoading] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [authChecked, setAuthChecked] = useState(false)
   const containerRef = useRef<HTMLDivElement | null>(null)
   const notificationsRef = useRef<HTMLDivElement | null>(null)
   const abortRef = useRef<AbortController | null>(null)
@@ -120,7 +122,13 @@ export function B2CNavbar({
     }
   }, [trimmedQuery])
 
-  async function loadNotifications() {
+  async function loadNotifications(forceAuthenticated = false) {
+    if (!isAuthenticated && !forceAuthenticated) {
+      setNotifications([])
+      setNotificationsLoading(false)
+      return
+    }
+
     setNotificationsLoading(true)
 
     try {
@@ -140,14 +148,43 @@ export function B2CNavbar({
   }
 
   useEffect(() => {
-    loadNotifications()
+    let cancelled = false
+
+    fetch("/api/b2c/auth/me", { cache: "no-store" })
+      .then((response) => response.json())
+      .then((data: { customer?: { id?: number } | null }) => {
+        if (cancelled) {
+          return
+        }
+
+        const authenticated = Boolean(data.customer?.id)
+        setIsAuthenticated(authenticated)
+        setAuthChecked(true)
+
+        if (authenticated) {
+          loadNotifications(true)
+        } else {
+          setNotifications([])
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setIsAuthenticated(false)
+          setAuthChecked(true)
+          setNotifications([])
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   useEffect(() => {
-    if (notificationsOpen) {
+    if (notificationsOpen && isAuthenticated) {
       loadNotifications()
     }
-  }, [notificationsOpen])
+  }, [notificationsOpen, isAuthenticated])
 
   const unreadCount = notifications.filter((item) => !item.is_read).length
 
@@ -286,6 +323,8 @@ export function B2CNavbar({
 
                 {notificationsLoading ? (
                   <p className="px-4 py-3 text-sm text-muted-foreground">Loading notifications...</p>
+                ) : !isAuthenticated ? (
+                  <p className="px-4 py-3 text-sm text-muted-foreground">Login to view notifications.</p>
                 ) : notifications.length === 0 ? (
                   <p className="px-4 py-3 text-sm text-muted-foreground">No notifications yet.</p>
                 ) : (
