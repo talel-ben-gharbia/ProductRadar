@@ -28,6 +28,13 @@ type DuplicateItem = {
   description: string
 }
 
+type CompareItem = {
+  productId: number
+  name: string
+  brand: string | null
+  description: string
+}
+
 type DuplicateGroup = {
   key: string
   label: string
@@ -51,18 +58,23 @@ type ActiveGroupContext = {
   signal: string
 }
 
-function toCompareItems(primaryId: number | null, duplicateIds: number[], allGroups: DuplicateGroup[]) {
+function toCompareItems(primaryId: number | null, duplicateIds: number[], allGroups: DuplicateGroup[]): CompareItem[] {
   const ids = [primaryId, ...duplicateIds].filter((value): value is number => value !== null)
 
   if (ids.length === 0) {
     return []
   }
 
-  const lookup = new Map<number, DuplicateItem>()
+  const lookup = new Map<number, CompareItem>()
   for (const group of allGroups) {
     for (const item of group.items) {
       if (item.productId !== null && ids.includes(item.productId) && !lookup.has(item.productId)) {
-        lookup.set(item.productId, item)
+        lookup.set(item.productId, {
+          productId: item.productId,
+          name: item.name,
+          brand: item.brand,
+          description: item.description,
+        })
       }
     }
   }
@@ -73,6 +85,100 @@ function toCompareItems(primaryId: number | null, duplicateIds: number[], allGro
     brand: null,
     description: "",
   })
+}
+
+function GroupSection({
+  title,
+  subtitle,
+  groups,
+  badgeClass,
+  onMergeGroup,
+}: {
+  title: string
+  subtitle: string
+  groups: DuplicateGroup[]
+  badgeClass: string
+  onMergeGroup: (group: DuplicateGroup, context: ActiveGroupContext) => void
+}) {
+  return (
+    <details className="rounded-lg border bg-card p-4">
+      <summary className="cursor-pointer list-none">
+        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{title}</p>
+        <p className="mt-1 text-xl font-semibold">{subtitle}</p>
+        <p className={`mt-3 inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${badgeClass}`}>
+          {groups.length} groups
+        </p>
+      </summary>
+
+      <div className="mt-4 space-y-3">
+        {groups.length === 0 ? (
+          <div className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">No groups detected.</div>
+        ) : (
+          groups.slice(0, 10).map((group) => (
+            <details key={group.key} className="rounded-lg border bg-card p-4">
+              <summary className="cursor-pointer list-none">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold">{group.label}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">Match signal: {group.signal}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="rounded-full bg-destructive/10 px-2.5 py-1 text-xs font-semibold text-destructive">
+                      {group.count} duplicates
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">{group.confidenceLabel}</p>
+                  </div>
+                </div>
+              </summary>
+
+              <div className="mt-4 flex flex-wrap justify-end gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() =>
+                    onMergeGroup(group, {
+                      levelTitle: title,
+                      subtitle,
+                      groupLabel: group.label,
+                      signal: group.signal,
+                    })
+                  }
+                >
+                  Merge in Popup
+                </Button>
+              </div>
+
+              <div className="mt-3 overflow-hidden rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Product</TableHead>
+                      <TableHead>Brand</TableHead>
+                      <TableHead>Description</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {group.items.map((item) => (
+                      <TableRow key={`${group.key}-${item.productId ?? item.name}`}>
+                        <TableCell className="font-medium">
+                          {item.productId !== null ? `#${item.productId} - ` : ""}
+                          {item.name}
+                        </TableCell>
+                        <TableCell>{item.brand ?? "-"}</TableCell>
+                        <TableCell className="max-w-md truncate text-muted-foreground" title={item.description}>
+                          {item.description || "-"}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </details>
+          ))
+        )}
+      </div>
+    </details>
+  )
 }
 
 export default function DuplicatesManagementPanel({
@@ -109,93 +215,6 @@ export default function DuplicatesManagementPanel({
     setModalOpen(true)
   }
 
-  function GroupSection({ title, subtitle, groups, badgeClass }: {
-    title: string
-    subtitle: string
-    groups: DuplicateGroup[]
-    badgeClass: string
-  }) {
-    return (
-      <details className="rounded-lg border bg-card p-4">
-        <summary className="cursor-pointer list-none">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{title}</p>
-          <p className="mt-1 text-xl font-semibold">{subtitle}</p>
-          <p className={`mt-3 inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${badgeClass}`}>
-            {groups.length} groups
-          </p>
-        </summary>
-
-        <div className="mt-4 space-y-3">
-          {groups.length === 0 ? (
-            <div className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">No groups detected.</div>
-          ) : (
-            groups.slice(0, 10).map((group) => (
-              <details key={group.key} className="rounded-lg border bg-card p-4">
-                <summary className="cursor-pointer list-none">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold">{group.label}</p>
-                      <p className="mt-1 text-xs text-muted-foreground">Match signal: {group.signal}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="rounded-full bg-destructive/10 px-2.5 py-1 text-xs font-semibold text-destructive">
-                        {group.count} duplicates
-                      </p>
-                      <p className="mt-1 text-xs text-muted-foreground">{group.confidenceLabel}</p>
-                    </div>
-                  </div>
-                </summary>
-
-                <div className="mt-4 flex flex-wrap justify-end gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    onClick={() =>
-                      openMergePopupFromGroup(group, {
-                        levelTitle: title,
-                        subtitle,
-                        groupLabel: group.label,
-                        signal: group.signal,
-                      })
-                    }
-                  >
-                    Merge in Popup
-                  </Button>
-                </div>
-
-                <div className="mt-3 overflow-hidden rounded-md border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Product</TableHead>
-                        <TableHead>Brand</TableHead>
-                        <TableHead>Description</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {group.items.map((item) => (
-                        <TableRow key={`${group.key}-${item.productId ?? item.name}`}>
-                          <TableCell className="font-medium">
-                            {item.productId !== null ? `#${item.productId} - ` : ""}
-                            {item.name}
-                          </TableCell>
-                          <TableCell>{item.brand ?? "-"}</TableCell>
-                          <TableCell className="max-w-md truncate text-muted-foreground" title={item.description}>
-                            {item.description || "-"}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              </details>
-            ))
-          )}
-        </div>
-      </details>
-    )
-  }
-
   return (
     <div className="space-y-4">
       <div className="grid gap-4 lg:grid-cols-2">
@@ -204,12 +223,14 @@ export default function DuplicatesManagementPanel({
           subtitle="Same Reference"
           groups={level1Groups}
           badgeClass="bg-primary/10 text-primary"
+          onMergeGroup={openMergePopupFromGroup}
         />
         <GroupSection
           title="Level 2"
           subtitle="Same Name + Description + Brand"
           groups={level2Groups}
           badgeClass="bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400"
+          onMergeGroup={openMergePopupFromGroup}
         />
       </div>
 

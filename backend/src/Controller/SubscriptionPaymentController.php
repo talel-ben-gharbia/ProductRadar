@@ -129,7 +129,13 @@ final class SubscriptionPaymentController extends AbstractController
                 'error' => 'Stripe API error: ' . $exception->getMessage(),
             ], 502);
         } catch (\Throwable $exception) {
-            return $this->json(['error' => 'Failed to create checkout session.'], 502);
+            $isDev = ($this->getEnv('APP_ENV') ?? '') === 'dev';
+
+            return $this->json([
+                'error' => $isDev
+                    ? sprintf('Failed to create checkout session (%s): %s', $exception::class, $exception->getMessage())
+                    : 'Failed to create checkout session.',
+            ], 502);
         }
     }
 
@@ -139,6 +145,9 @@ final class SubscriptionPaymentController extends AbstractController
         $stripeWebhookSecret = $this->getEnv('STRIPE_WEBHOOK_SECRET');
         if ($stripeWebhookSecret === null || $stripeWebhookSecret === '') {
             return $this->json(['error' => 'Stripe webhook secret is not configured.'], 500);
+        }
+        if (!str_starts_with($stripeWebhookSecret, 'whsec_')) {
+            return $this->json(['error' => 'Invalid STRIPE_WEBHOOK_SECRET. It must start with "whsec_".'], 500);
         }
 
         $payload = $request->getContent();
@@ -215,10 +224,14 @@ final class SubscriptionPaymentController extends AbstractController
 
         $this->activatePlanFromStripe($firebaseUid, $planId);
 
+        // Refresh the user from the database to ensure subscription data is loaded
         $user = $this->userRepository->findOneBy(['firebase_uid' => $firebaseUid]);
         if (!$user instanceof Customer) {
             return $this->json(['error' => 'Customer not found.'], 404);
         }
+
+        // Clear Doctrine cache to ensure fresh data
+        $this->entityManager->refresh($user);
 
         return $this->json([
             'success' => true,
@@ -244,9 +257,12 @@ final class SubscriptionPaymentController extends AbstractController
 
         $subscription = $user->getSubscription();
         if (!$subscription instanceof Subscription) {
+            // Create new subscription and establish bidirectional relationship
             $subscription = new Subscription();
             $subscription->setClient($user);
             $this->entityManager->persist($subscription);
+            // Important: flush immediately to ensure subscription is created
+            $this->entityManager->flush();
         }
 
         $startDate = new \DateTimeImmutable();

@@ -633,3 +633,5 @@ After Each Sprint:
 **Plan created:** 2026-04-01  
 **Last Updated:** 2026-04-01  
 **Status:** 🟢 Ready for Phase 1 Sprint 1.1
+
+> **Note:** Stripe API keys have been removed from this file for security. Use `.env.local` for local development and GitHub Secrets for production.

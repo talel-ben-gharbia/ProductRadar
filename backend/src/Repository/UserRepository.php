@@ -162,4 +162,18 @@ class UserRepository extends ServiceEntityRepository
     //            ->getOneOrNullResult()
     //        ;
     //    }
+
+    /**
+     * Find a user by Firebase UID with subscription eager-loaded
+     */
+    public function findOneWithSubscriptionByFirebaseUid(string $firebaseUid): ?User
+    {
+        return $this->createQueryBuilder('u')
+            ->leftJoin('u.subscription', 's')
+            ->addSelect('s')
+            ->andWhere('u.firebase_uid = :firebaseUid')
+            ->setParameter('firebaseUid', $firebaseUid)
+            ->getQuery()
+            ->getOneOrNullResult();
+    }
 }

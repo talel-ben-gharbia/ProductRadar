@@ -269,7 +269,7 @@ export function ProfilePricingPage() {
       </div>
 
       {/* Plans Grid */}
-      <div className="grid gap-6 lg:grid-cols-3">
+      <div className="grid gap-6 lg:grid-cols-3 auto-rows-fr">
         {plansWithState.map((plan) => (
           <div key={plan.id} className="relative">
             {plan.highlighted && (
@@ -281,17 +281,17 @@ export function ProfilePricingPage() {
             )}
 
             <Card
-              className={`relative overflow-hidden transition-all duration-300 ${
+              className={`relative overflow-hidden transition-all duration-300 flex flex-col h-full ${
                 plan.highlighted
-                  ? "border-primary/50 shadow-xl scale-105 lg:scale-110 bg-linear-to-br from-slate-50 to-white"
-                  : isCurrentPlan
+                  ? "border-primary/50 shadow-xl lg:scale-105 bg-linear-to-br from-slate-50 to-white"
+                  : plan.current
                     ? "border-green-200 bg-linear-to-br from-green-50/50 to-white shadow-md"
                     : "shadow-md hover:shadow-lg hover:border-primary/30 transition-all"
               }`}
             >
-              <div className="p-8 space-y-6">
+              <div className="p-8 space-y-6 flex flex-col h-full">
                 {/* Discount Badge */}
-                {plan.discount && !isCurrentPlan && (
+                {plan.discount && !plan.current && (
                   <div className="absolute top-4 right-4">
                     <div className="bg-red-100 text-red-700 px-3 py-1 rounded-lg text-xs font-bold">
                       {plan.discount}
@@ -358,7 +358,7 @@ export function ProfilePricingPage() {
                 </Button>
 
                 {/* Features List */}
-                <div className="pt-6 border-t space-y-4">
+                <div className="pt-6 border-t space-y-4 flex-grow">
                   {plan.features.map((feature) => (
                     <div key={feature.label} className="flex items-start gap-3">
                       <CheckCircle2 className="h-6 w-6 text-green-600 shrink-0 mt-0.5" />
@@ -371,7 +371,7 @@ export function ProfilePricingPage() {
                 </div>
 
                 {/* Current Plan Badge */}
-                {isCurrentPlan && (
+                {plan.current && (
                   <div className="pt-4 bg-green-100 px-4 py-3 rounded-lg text-center">
                     <p className="text-sm font-bold text-green-700">✓ YOUR CURRENT PLAN</p>
                   </div>
@@ -380,7 +380,7 @@ export function ProfilePricingPage() {
             </Card>
             </div>
           )
-        })}
+        )}
       </div>
 
       {/* Info Section */}

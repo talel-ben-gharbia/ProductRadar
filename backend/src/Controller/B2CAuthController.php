@@ -146,7 +146,7 @@ final class B2CAuthController extends AbstractController
     #[Route('/api/b2c/profile/{firebaseUid}', name: 'b2c_profile_get', methods: ['GET'])]
     public function getProfile(string $firebaseUid, UserRepository $userRepository): JsonResponse
     {
-        $user = $userRepository->findOneBy(['firebase_uid' => $firebaseUid]);
+        $user = $userRepository->findOneWithSubscriptionByFirebaseUid($firebaseUid);
 
         if (!$user instanceof Customer && !$user instanceof B2BCompany && !$user instanceof B2BMarket) {
             return $this->json(['error' => 'User not found.'], 404);
