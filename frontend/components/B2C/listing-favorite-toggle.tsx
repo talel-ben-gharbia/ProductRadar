@@ -17,7 +17,6 @@ export function ListingFavoriteToggle({ productListingId }: ListingFavoriteToggl
   const [favoriteId, setFavoriteId] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -50,13 +49,11 @@ export function ListingFavoriteToggle({ productListingId }: ListingFavoriteToggl
         }
 
         setFavoriteId(data.favorites?.[0]?.id ?? null)
-        setError(null)
         setLoading(false)
       } catch (err) {
         if (!cancelled) {
           console.error("Error loading favorites:", err)
           setFavoriteId(null)
-          setError("Failed to load favorites")
           setLoading(false)
         }
       }
@@ -78,7 +75,6 @@ export function ListingFavoriteToggle({ productListingId }: ListingFavoriteToggl
     }
 
     setSaving(true)
-    setError(null)
 
     try {
       if (favoriteId) {
@@ -89,13 +85,12 @@ export function ListingFavoriteToggle({ productListingId }: ListingFavoriteToggl
         if (!response.ok) {
           const data = (await response.json().catch(() => ({}))) as { error?: string }
           console.error(`Delete failed with status ${response.status}:`, data)
-          setError(data.error || "Failed to remove favorite")
+          toast.error(data.error || "Failed to remove favorite")
           setSaving(false)
           return
         }
 
         setFavoriteId(null)
-        setError(null)
         setSaving(false)
         return
       }
@@ -128,14 +123,13 @@ export function ListingFavoriteToggle({ productListingId }: ListingFavoriteToggl
 
       if (data.favorite?.id) {
         setFavoriteId(data.favorite.id)
-        setError(null)
       } else {
-        setError("Unexpected response from server")
+        toast.error("Unexpected response from server")
       }
       setSaving(false)
     } catch (err) {
       console.error("Error toggling favorite:", err)
-      setError("Network error")
+      toast.error("Network error")
       setSaving(false)
     }
   }

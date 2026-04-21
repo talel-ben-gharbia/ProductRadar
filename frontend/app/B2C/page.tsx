@@ -9,7 +9,7 @@ type CustomerSession = {
   id: number
   email: string
   firebase_uid: string
-  type: "customer"
+  type: "customer" | "b2b_company" | "b2b_market"
 }
 
 export default function B2CDashboardPage() {

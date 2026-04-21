@@ -9,15 +9,10 @@ import {
   CollapsibleTrigger,
 } from "@radix-ui/react-collapsible"
 import {
-  BadgeCheck,
-  Bell,
   ChevronsUpDown,
-  CreditCard,
   LogOut,
   Radar,
   Shield,
-  ShieldCheck,
-  Sparkles,
   User,
   ChevronRight,
 } from "lucide-react"
@@ -46,6 +41,18 @@ function AdminSidebar() {
   const { admin, loading, logout, displayRole } = useAdmin()
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement | null>(null)
+  const overviewItems = SIDEBAR_CONSTANTS.filter((item) => item.id === "/admin/")
+  const catalogItems = SIDEBAR_CONSTANTS.filter((item) => [
+    "/admin/categories",
+    "/admin/products",
+    "/admin/product-listings",
+    "/admin/sellers",
+  ].includes(item.id))
+  const moderationDataItems = SIDEBAR_CONSTANTS.filter((item) => [
+    "/admin/reviews",
+    "/admin/data-management",
+  ].includes(item.id))
+  const userAccountItems = SIDEBAR_CONSTANTS.filter((item) => item.id === "/admin/users")
 
   useEffect(() => {
     const handleOutsideClick = (event: MouseEvent) => {
@@ -128,9 +135,9 @@ function AdminSidebar() {
 
       <SidebarContent className="p-2">
         <SidebarGroup className="px-2 py-1">
-          <SidebarGroupLabel className="px-2">Platform</SidebarGroupLabel>
+          <SidebarGroupLabel className="px-2">Overview</SidebarGroupLabel>
           <SidebarMenu className="gap-1">
-            {SIDEBAR_CONSTANTS.map((item) => {
+            {overviewItems.map((item) => {
               const active = isItemActive(item.id)
 
               return (
@@ -141,7 +148,51 @@ function AdminSidebar() {
                   className="group/collapsible"
                 >
                   <SidebarMenuItem>
-                    {item.items && item.items.length > 0 ? (
+                    {item.sections && item.sections.length > 0 ? (
+                      <>
+                        <CollapsibleTrigger asChild>
+                          <SidebarMenuButton
+                            tooltip={item.name}
+                            isActive={active}
+                            data-active={active || undefined}
+                          >
+                            <item.icon className="size-4" />
+                            <span>{item.name}</span>
+                            <ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90 group-data-[collapsible=icon]:hidden" />
+                          </SidebarMenuButton>
+                        </CollapsibleTrigger>
+
+                        <CollapsibleContent className="grid transition-[grid-template-rows] duration-300 ease-in-out data-[state=open]:grid-rows-[1fr] data-[state=closed]:grid-rows-[0fr]">
+                          <div className="overflow-hidden">
+                            <div className="space-y-2 py-1">
+                              {item.sections.map((section) => (
+                                <div key={section.title} className="space-y-1">
+                                  <p className="px-5 pt-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                                    {section.title}
+                                  </p>
+                                  <SidebarMenuSub>
+                                    {section.items.map((subItem) => (
+                                      <SidebarMenuSubItem key={subItem.title}>
+                                        <SidebarMenuSubButton
+                                          asChild
+                                          isActive={isSubItemActive(subItem.url.split("?")[0] ?? subItem.url)}
+                                          data-active={isSubItemActive(subItem.url.split("?")[0] ?? subItem.url) || undefined}
+                                          className="font-normal"
+                                        >
+                                          <Link href={subItem.url}>
+                                            <span>{subItem.title}</span>
+                                          </Link>
+                                        </SidebarMenuSubButton>
+                                      </SidebarMenuSubItem>
+                                    ))}
+                                  </SidebarMenuSub>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </CollapsibleContent>
+                      </>
+                    ) : item.items && item.items.length > 0 ? (
                       <>
                         <CollapsibleTrigger asChild>
                           <SidebarMenuButton
@@ -162,8 +213,8 @@ function AdminSidebar() {
                               <SidebarMenuSubItem key={subItem.title}>
                                 <SidebarMenuSubButton
                                   asChild
-                                  isActive={isSubItemActive(subItem.url)}
-                                  data-active={isSubItemActive(subItem.url) || undefined}
+                                  isActive={isSubItemActive(subItem.url.split("?")[0] ?? subItem.url)}
+                                  data-active={isSubItemActive(subItem.url.split("?")[0] ?? subItem.url) || undefined}
                                   className="font-normal"
                                 >
                                   <Link href={subItem.url}>
@@ -195,6 +246,355 @@ function AdminSidebar() {
             })}
           </SidebarMenu>
         </SidebarGroup>
+
+        <SidebarSeparator className="mx-2 my-2" />
+
+        <SidebarGroup className="px-2 py-1">
+          <SidebarGroupLabel className="px-2">Catalog</SidebarGroupLabel>
+          <SidebarMenu className="gap-1">
+            {catalogItems.map((item) => {
+              const active = isItemActive(item.id)
+
+              return (
+                <Collapsible
+                  key={item.id}
+                  asChild
+                  defaultOpen={item.isActive || active}
+                  className="group/collapsible"
+                >
+                  <SidebarMenuItem>
+                    {item.sections && item.sections.length > 0 ? (
+                      <>
+                        <CollapsibleTrigger asChild>
+                          <SidebarMenuButton
+                            tooltip={item.name}
+                            isActive={active}
+                            data-active={active || undefined}
+                          >
+                            <item.icon className="size-4" />
+                            <span>{item.name}</span>
+                            <ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90 group-data-[collapsible=icon]:hidden" />
+                          </SidebarMenuButton>
+                        </CollapsibleTrigger>
+
+                        <CollapsibleContent className="grid transition-[grid-template-rows] duration-300 ease-in-out data-[state=open]:grid-rows-[1fr] data-[state=closed]:grid-rows-[0fr]">
+                          <div className="overflow-hidden">
+                            <div className="space-y-2 py-1">
+                              {item.sections.map((section) => (
+                                <div key={section.title} className="space-y-1">
+                                  <p className="px-5 pt-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                                    {section.title}
+                                  </p>
+                                  <SidebarMenuSub>
+                                    {section.items.map((subItem) => (
+                                      <SidebarMenuSubItem key={subItem.title}>
+                                        <SidebarMenuSubButton
+                                          asChild
+                                          isActive={isSubItemActive(subItem.url.split("?")[0] ?? subItem.url)}
+                                          data-active={isSubItemActive(subItem.url.split("?")[0] ?? subItem.url) || undefined}
+                                          className="font-normal"
+                                        >
+                                          <Link href={subItem.url}>
+                                            <span>{subItem.title}</span>
+                                          </Link>
+                                        </SidebarMenuSubButton>
+                                      </SidebarMenuSubItem>
+                                    ))}
+                                  </SidebarMenuSub>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </CollapsibleContent>
+                      </>
+                    ) : item.items && item.items.length > 0 ? (
+                      <>
+                        <CollapsibleTrigger asChild>
+                          <SidebarMenuButton
+                            tooltip={item.name}
+                            isActive={active}
+                            data-active={active || undefined}
+                          >
+                            <item.icon className="size-4" />
+                            <span>{item.name}</span>
+                            <ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90 group-data-[collapsible=icon]:hidden" />
+                          </SidebarMenuButton>
+                        </CollapsibleTrigger>
+
+                        <CollapsibleContent className="grid transition-[grid-template-rows] duration-300 ease-in-out data-[state=open]:grid-rows-[1fr] data-[state=closed]:grid-rows-[0fr]">
+                          <div className="overflow-hidden">
+                          <SidebarMenuSub>
+                            {item.items.map((subItem) => (
+                              <SidebarMenuSubItem key={subItem.title}>
+                                <SidebarMenuSubButton
+                                  asChild
+                                  isActive={isSubItemActive(subItem.url.split("?")[0] ?? subItem.url)}
+                                  data-active={isSubItemActive(subItem.url.split("?")[0] ?? subItem.url) || undefined}
+                                  className="font-normal"
+                                >
+                                  <Link href={subItem.url}>
+                                    <span>{subItem.title}</span>
+                                  </Link>
+                                </SidebarMenuSubButton>
+                              </SidebarMenuSubItem>
+                            ))}
+                          </SidebarMenuSub>
+                          </div>
+                        </CollapsibleContent>
+                      </>
+                    ) : (
+                      <SidebarMenuButton
+                        asChild
+                        tooltip={item.name}
+                        isActive={active}
+                        data-active={active || undefined}
+                      >
+                        <Link href={item.id}>
+                          <item.icon className="size-4" />
+                          <span>{item.name}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    )}
+                  </SidebarMenuItem>
+                </Collapsible>
+              )
+            })}
+          </SidebarMenu>
+        </SidebarGroup>
+
+        <SidebarSeparator className="mx-2 my-2" />
+
+        <SidebarGroup className="px-2 py-1">
+          <SidebarGroupLabel className="px-2">Moderation & Data</SidebarGroupLabel>
+          <SidebarMenu className="gap-1">
+            {moderationDataItems.map((item) => {
+              const active = isItemActive(item.id)
+
+              return (
+                <Collapsible
+                  key={item.id}
+                  asChild
+                  defaultOpen={item.isActive || active}
+                  className="group/collapsible"
+                >
+                  <SidebarMenuItem>
+                    {item.sections && item.sections.length > 0 ? (
+                      <>
+                        <CollapsibleTrigger asChild>
+                          <SidebarMenuButton
+                            tooltip={item.name}
+                            isActive={active}
+                            data-active={active || undefined}
+                          >
+                            <item.icon className="size-4" />
+                            <span>{item.name}</span>
+                            <ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90 group-data-[collapsible=icon]:hidden" />
+                          </SidebarMenuButton>
+                        </CollapsibleTrigger>
+
+                        <CollapsibleContent className="grid transition-[grid-template-rows] duration-300 ease-in-out data-[state=open]:grid-rows-[1fr] data-[state=closed]:grid-rows-[0fr]">
+                          <div className="overflow-hidden">
+                            <div className="space-y-2 py-1">
+                              {item.sections.map((section) => (
+                                <div key={section.title} className="space-y-1">
+                                  <p className="px-5 pt-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                                    {section.title}
+                                  </p>
+                                  <SidebarMenuSub>
+                                    {section.items.map((subItem) => (
+                                      <SidebarMenuSubItem key={subItem.title}>
+                                        <SidebarMenuSubButton
+                                          asChild
+                                          isActive={isSubItemActive(subItem.url.split("?")[0] ?? subItem.url)}
+                                          data-active={isSubItemActive(subItem.url.split("?")[0] ?? subItem.url) || undefined}
+                                          className="font-normal"
+                                        >
+                                          <Link href={subItem.url}>
+                                            <span>{subItem.title}</span>
+                                          </Link>
+                                        </SidebarMenuSubButton>
+                                      </SidebarMenuSubItem>
+                                    ))}
+                                  </SidebarMenuSub>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </CollapsibleContent>
+                      </>
+                    ) : item.items && item.items.length > 0 ? (
+                      <>
+                        <CollapsibleTrigger asChild>
+                          <SidebarMenuButton
+                            tooltip={item.name}
+                            isActive={active}
+                            data-active={active || undefined}
+                          >
+                            <item.icon className="size-4" />
+                            <span>{item.name}</span>
+                            <ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90 group-data-[collapsible=icon]:hidden" />
+                          </SidebarMenuButton>
+                        </CollapsibleTrigger>
+
+                        <CollapsibleContent className="grid transition-[grid-template-rows] duration-300 ease-in-out data-[state=open]:grid-rows-[1fr] data-[state=closed]:grid-rows-[0fr]">
+                          <div className="overflow-hidden">
+                          <SidebarMenuSub>
+                            {item.items.map((subItem) => (
+                              <SidebarMenuSubItem key={subItem.title}>
+                                <SidebarMenuSubButton
+                                  asChild
+                                  isActive={isSubItemActive(subItem.url.split("?")[0] ?? subItem.url)}
+                                  data-active={isSubItemActive(subItem.url.split("?")[0] ?? subItem.url) || undefined}
+                                  className="font-normal"
+                                >
+                                  <Link href={subItem.url}>
+                                    <span>{subItem.title}</span>
+                                  </Link>
+                                </SidebarMenuSubButton>
+                              </SidebarMenuSubItem>
+                            ))}
+                          </SidebarMenuSub>
+                          </div>
+                        </CollapsibleContent>
+                      </>
+                    ) : (
+                      <SidebarMenuButton
+                        asChild
+                        tooltip={item.name}
+                        isActive={active}
+                        data-active={active || undefined}
+                      >
+                        <Link href={item.id}>
+                          <item.icon className="size-4" />
+                          <span>{item.name}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    )}
+                  </SidebarMenuItem>
+                </Collapsible>
+              )
+            })}
+          </SidebarMenu>
+        </SidebarGroup>
+
+        {userAccountItems.length > 0 && (
+          <>
+            <SidebarSeparator className="mx-2 my-2" />
+            <SidebarGroup className="px-2 py-1">
+              <SidebarGroupLabel className="px-2">Users & Accounts</SidebarGroupLabel>
+              <SidebarMenu className="gap-1">
+                {userAccountItems.map((item) => {
+                  const active = isItemActive(item.id)
+
+                  return (
+                    <Collapsible
+                      key={item.id}
+                      asChild
+                      defaultOpen={item.isActive || active}
+                      className="group/collapsible"
+                    >
+                      <SidebarMenuItem>
+                        {item.sections && item.sections.length > 0 ? (
+                          <>
+                            <CollapsibleTrigger asChild>
+                              <SidebarMenuButton
+                                tooltip={item.name}
+                                isActive={active}
+                                data-active={active || undefined}
+                              >
+                                <item.icon className="size-4" />
+                                <span>{item.name}</span>
+                                <ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90 group-data-[collapsible=icon]:hidden" />
+                              </SidebarMenuButton>
+                            </CollapsibleTrigger>
+
+                            <CollapsibleContent className="grid transition-[grid-template-rows] duration-300 ease-in-out data-[state=open]:grid-rows-[1fr] data-[state=closed]:grid-rows-[0fr]">
+                              <div className="overflow-hidden">
+                                <div className="space-y-2 py-1">
+                                  {item.sections.map((section) => (
+                                    <div key={section.title} className="space-y-1">
+                                      <p className="px-5 pt-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                                        {section.title}
+                                      </p>
+                                      <SidebarMenuSub>
+                                        {section.items.map((subItem) => (
+                                          <SidebarMenuSubItem key={subItem.title}>
+                                            <SidebarMenuSubButton
+                                              asChild
+                                              isActive={isSubItemActive(subItem.url.split("?")[0] ?? subItem.url)}
+                                              data-active={isSubItemActive(subItem.url.split("?")[0] ?? subItem.url) || undefined}
+                                              className="font-normal"
+                                            >
+                                              <Link href={subItem.url}>
+                                                <span>{subItem.title}</span>
+                                              </Link>
+                                            </SidebarMenuSubButton>
+                                          </SidebarMenuSubItem>
+                                        ))}
+                                      </SidebarMenuSub>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            </CollapsibleContent>
+                          </>
+                        ) : item.items && item.items.length > 0 ? (
+                          <>
+                            <CollapsibleTrigger asChild>
+                              <SidebarMenuButton
+                                tooltip={item.name}
+                                isActive={active}
+                                data-active={active || undefined}
+                              >
+                                <item.icon className="size-4" />
+                                <span>{item.name}</span>
+                                <ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90 group-data-[collapsible=icon]:hidden" />
+                              </SidebarMenuButton>
+                            </CollapsibleTrigger>
+
+                            <CollapsibleContent className="grid transition-[grid-template-rows] duration-300 ease-in-out data-[state=open]:grid-rows-[1fr] data-[state=closed]:grid-rows-[0fr]">
+                              <div className="overflow-hidden">
+                                <SidebarMenuSub>
+                                  {item.items.map((subItem) => (
+                                    <SidebarMenuSubItem key={subItem.title}>
+                                      <SidebarMenuSubButton
+                                        asChild
+                                        isActive={isSubItemActive(subItem.url.split("?")[0] ?? subItem.url)}
+                                        data-active={isSubItemActive(subItem.url.split("?")[0] ?? subItem.url) || undefined}
+                                        className="font-normal"
+                                      >
+                                        <Link href={subItem.url}>
+                                          <span>{subItem.title}</span>
+                                        </Link>
+                                      </SidebarMenuSubButton>
+                                    </SidebarMenuSubItem>
+                                  ))}
+                                </SidebarMenuSub>
+                              </div>
+                            </CollapsibleContent>
+                          </>
+                        ) : (
+                          <SidebarMenuButton
+                            asChild
+                            tooltip={item.name}
+                            isActive={active}
+                            data-active={active || undefined}
+                          >
+                            <Link href={item.id}>
+                              <item.icon className="size-4" />
+                              <span>{item.name}</span>
+                            </Link>
+                          </SidebarMenuButton>
+                        )}
+                      </SidebarMenuItem>
+                    </Collapsible>
+                  )
+                })}
+              </SidebarMenu>
+            </SidebarGroup>
+          </>
+        )}
+
         {admin?.role === "ROLE_SUPER_ADMIN" && (
           <>
             <SidebarSeparator className="mx-2" />
@@ -337,32 +737,6 @@ function AdminSidebar() {
                 </p>
               </div>
             </div>
-
-            <div className="my-1 h-px bg-border" />
-
-            <button
-              type="button"
-              className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm transition-colors hover:bg-accent hover:text-accent-foreground"
-            >
-              <ShieldCheck className="size-4" />
-              Account
-            </button>
-
-            <button
-              type="button"
-              className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm transition-colors hover:bg-accent hover:text-accent-foreground"
-            >
-              <CreditCard className="size-4" />
-              Billing
-            </button>
-
-            <button
-              type="button"
-              className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm transition-colors hover:bg-accent hover:text-accent-foreground"
-            >
-              <Bell className="size-4" />
-              Notifications
-            </button>
 
             <div className="my-1 h-px bg-border" />
 

@@ -2,6 +2,7 @@ import ProductListingsDataTable from "@/components/admin/product-listings-data-t
 import {
   getProductListings,
 } from "@/services/admin/product-listings"
+import { getRawCategories, type CategoryRaw } from "@/services/admin/categories"
 import { getProducts } from "@/services/admin/products"
 import { getSellers } from "@/services/admin/sellers"
 import type { Product, ProductListing } from "@/utils/types"
@@ -22,6 +23,7 @@ type ProductListingsPageData = {
 type ProductListingsMetaData = {
   products: Product[]
   sellers: Seller[]
+  categories: CategoryRaw[]
   fetchError: string | null
 }
 
@@ -47,12 +49,18 @@ async function loadProductListingsPageData(
 async function loadProductListingsMetaData(): Promise<ProductListingsMetaData> {
   let products: Product[] = []
   let sellers: Seller[] = []
+  let categories: CategoryRaw[] = []
   let fetchError: string | null = null
 
   try {
-    const [allProducts, allSellers] = await Promise.all([getProducts(), getSellers()])
+    const [allProducts, allSellers, allCategories] = await Promise.all([
+      getProducts(),
+      getSellers(),
+      getRawCategories(),
+    ])
     products = allProducts
     sellers = allSellers
+    categories = allCategories
   } catch (error) {
     fetchError =
       error instanceof Error
@@ -60,7 +68,7 @@ async function loadProductListingsMetaData(): Promise<ProductListingsMetaData> {
         : "Unable to load products and sellers from backend"
   }
 
-  return { products, sellers, fetchError }
+  return { products, sellers, categories, fetchError }
 }
 
 export default async function ProductListingsPage({
@@ -85,6 +93,7 @@ export default async function ProductListingsPage({
   const {
     products,
     sellers,
+    categories,
     fetchError: metaFetchError,
   } = await loadProductListingsMetaData()
   const combinedError = fetchError ?? metaFetchError
@@ -97,6 +106,7 @@ export default async function ProductListingsPage({
         productListings={productListings}
         products={products}
         sellers={sellers}
+        categories={categories}
         fetchError={combinedError}
         currentProductId={productId}
         currentSellerId={sellerId}

@@ -7,7 +7,7 @@ export type B2CSession = {
   id: number
   email: string
   firebase_uid: string
-  type: "customer"
+  type: "customer" | "b2b_company" | "b2b_market"
   exp: number
 }
 
@@ -49,7 +49,7 @@ export async function createB2CSessionToken(payload: {
   id: number
   email: string
   firebase_uid: string
-  type: "customer"
+  type: "customer" | "b2b_company" | "b2b_market"
 }): Promise<string> {
   const sessionPayload: B2CSession = {
     ...payload,

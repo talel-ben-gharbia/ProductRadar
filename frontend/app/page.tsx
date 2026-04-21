@@ -1,4 +1,5 @@
 import Link from "next/link"
+import Image from "next/image"
 import { BadgePercent, Flame, Gamepad2, TicketPercent } from "lucide-react"
 
 import { B2CNavbar } from "@/components/B2C/b2c-navbar"
@@ -117,10 +118,13 @@ function ProductTile({ product }: { product: ShowcaseProduct }) {
 
       <div className="mt-2 flex h-28 items-center justify-center overflow-hidden rounded-lg border bg-[#f7f9ff]">
         {product.imageUrl ? (
-          <img
+          <Image
             src={product.imageUrl}
             alt={product.name}
+            width={224}
+            height={112}
             className="h-full w-full object-contain transition-transform duration-300 group-hover:scale-105"
+            unoptimized
           />
         ) : (
           <span className="text-xs text-muted-foreground">No image</span>
@@ -338,7 +342,7 @@ export default async function Page() {
             Recevez des offres, promotions et actualites ProductRadar par e-mail
           </p>
           <Button asChild variant="outline" className="mt-3 h-9 rounded-full px-5">
-            <Link href="/B2C/profile/alerts">S'inscrire aux alertes</Link>
+            <Link href="/B2C/profile/alerts">S&apos;inscrire aux alertes</Link>
           </Button>
         </section>
 

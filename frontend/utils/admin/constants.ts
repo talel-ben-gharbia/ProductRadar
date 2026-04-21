@@ -1,12 +1,15 @@
 import type { LucideIcon } from "lucide-react"
 import {
   Activity,
+  Database,
   Home,
   Layers,
   ListTree,
+  MessageSquare,
   Package,
   Store,
   Tag,
+  Users,
 } from "lucide-react"
 
 const BACKEND_URL =
@@ -19,12 +22,18 @@ type SidebarSubItem = {
   url: string
 }
 
+type SidebarSection = {
+  title: string
+  items: SidebarSubItem[]
+}
+
 type SidebarItem = {
   id: string
   name: string
   icon: LucideIcon
   isActive?: boolean
   items?: SidebarSubItem[]
+  sections?: SidebarSection[]
 }
 
 const SIDEBAR_CONSTANTS: SidebarItem[] = [
@@ -84,14 +93,99 @@ const SIDEBAR_CONSTANTS: SidebarItem[] = [
     name: "Sellers",
     icon: Store,
   },
+  {
+    id: "/admin/reviews",
+    name: "Reviews",
+    icon: MessageSquare,
+    items: [
+      {
+        title: "Moderation Queue",
+        url: "/admin/reviews",
+      },
+    ],
+  },
+  {
+    id: "/admin/data-management",
+    name: "Data Management",
+    icon: Database,
+    items: [
+      {
+        title: "Overview",
+        url: "/admin/data-management",
+      },
+      {
+        title: "Data Sources",
+        url: "/admin/data-management/sources",
+      },
+      {
+        title: "Scraping Logs",
+        url: "/admin/data-management/scraping-logs",
+      },
+      {
+        title: "Manual Scraping",
+        url: "/admin/data-management/webhook",
+      },
+    ],
+  },
+  {
+    id: "/admin/users",
+    name: "Users & Accounts",
+    icon: Users,
+    sections: [
+      {
+        title: "",
+        items: [
+          {
+            title: "All Users",
+            url: "/admin/users",
+          },
+        ],
+      },
+      {
+        title: "B2C",
+        items: [
+          {
+            title: "Customer Management",
+            url: "/admin/customers",
+          },
+        ],
+      },
+      {
+        title: "B2B",
+        items: [
+          {
+            title: "B2B Management",
+            url: "/admin/b2b-management",
+          },
+          {
+            title: "B2B Verification",
+            url: "/admin/b2b-verification",
+          },
+        ],
+      },
+      {
+        title: "Billing",
+        items: [
+          {
+            title: "Subscriptions",
+            url: "/admin/subscriptions",
+          },
+        ],
+      },
+    ],
+  },
 ]
 
 const SUPER_ADMIN_SIDEBAR_CONSTANTS: SidebarItem[] = [
   {
     id: "/admin/tools",
-    name: "Tools",
+    name: "Data & Quality",
     icon: Layers,
     items: [
+      {
+        title: "Bulk Operations",
+        url: "/admin/bulk-operations",
+      },
       {
         title: "Duplicates",
         url: "/admin/duplicates",
@@ -132,4 +226,4 @@ const SUPER_ADMIN_SIDEBAR_CONSTANTS: SidebarItem[] = [
 ]
 
 export { BACKEND_URL, SIDEBAR_CONSTANTS, SUPER_ADMIN_SIDEBAR_CONSTANTS }
-export type { SidebarItem, SidebarSubItem }
+export type { SidebarItem, SidebarSection, SidebarSubItem }

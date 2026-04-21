@@ -125,6 +125,7 @@ final class ProductListingController extends AbstractController
         }
 
         $listing->setIsActive((bool) $body['is_active']);
+    $listing->setUpdatetAt(new \DateTimeImmutable());
         $entityManager->flush();
 
         return $this->json(['id' => $listing->getId(), 'is_active' => $listing->isActive()]);
@@ -146,13 +147,14 @@ final class ProductListingController extends AbstractController
         }
 
         $listing->setAvailability((bool) $body['availability']);
+    $listing->setUpdatetAt(new \DateTimeImmutable());
         $entityManager->flush();
 
         return $this->json(['id' => $listing->getId(), 'availability' => $listing->isAvailability()]);
     }
 
     #[Route('/product-listings/{id}', name: 'update_product_listing', methods: ['PUT'])]
-    public function updateProductListing(int $id, Request $request, ProductListingRepository $productListingRepository, EntityManagerInterface $entityManager): JsonResponse
+    public function updateProductListing(int $id, Request $request, ProductListingRepository $productListingRepository, ProductRepository $productRepository, SellerRepository $sellerRepository, EntityManagerInterface $entityManager): JsonResponse
     {
         $listing = $productListingRepository->find($id);
         if (!$listing) {
@@ -176,6 +178,30 @@ final class ProductListingController extends AbstractController
         if (!empty($body['product_url'])) {
             $listing->setProductUrl($body['product_url']);
         }
+        if (array_key_exists('is_active', $body)) {
+            $listing->setIsActive((bool) $body['is_active']);
+        }
+        if (array_key_exists('availability', $body)) {
+            $listing->setAvailability($body['availability'] !== null ? (bool) $body['availability'] : null);
+        }
+        if (array_key_exists('sellerId', $body) && (int) $body['sellerId'] > 0) {
+            $seller = $sellerRepository->find((int) $body['sellerId']);
+            if (!$seller) {
+                return $this->json(['error' => 'Seller not found.'], 404);
+            }
+
+            $listing->setSeller($seller);
+        }
+        if (array_key_exists('productId', $body) && (int) $body['productId'] > 0) {
+            $product = $productRepository->find((int) $body['productId']);
+            if (!$product) {
+                return $this->json(['error' => 'Product not found.'], 404);
+            }
+
+            $listing->setProduct($product);
+        }
+
+        $listing->setUpdatetAt(new \DateTimeImmutable());
 
         $entityManager->flush();
 

@@ -16,6 +16,33 @@ class FavoriteRepository extends ServiceEntityRepository
         parent::__construct($registry, Favorite::class);
     }
 
+    /**
+     * @param int[] $userIds
+     *
+     * @return array<int, int>
+     */
+    public function getCountMapByUserIds(array $userIds): array
+    {
+        if (count($userIds) === 0) {
+            return [];
+        }
+
+        $rows = $this->createQueryBuilder('f')
+            ->select('IDENTITY(f.client) AS userId, COUNT(f.id) AS totalCount')
+            ->andWhere('f.client IN (:userIds)')
+            ->setParameter('userIds', $userIds)
+            ->groupBy('f.client')
+            ->getQuery()
+            ->getArrayResult();
+
+        $map = [];
+        foreach ($rows as $row) {
+            $map[(int) $row['userId']] = (int) $row['totalCount'];
+        }
+
+        return $map;
+    }
+
     //    /**
     //     * @return Favorite[] Returns an array of Favorite objects
     //     */

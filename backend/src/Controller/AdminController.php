@@ -4,6 +4,8 @@ namespace App\Controller;
 
 use App\Entity\Admin;
 use App\Repository\AdminRepository;
+use App\Security\AdminApiGuard;
+use App\Service\AuditService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -17,8 +19,17 @@ final class AdminController extends AbstractController
     private const ALLOWED_ROLES = ['ROLE_SUPER_ADMIN', 'ROLE_SUB_ADMIN'];
 
     #[Route('', name: 'admin_list', methods: ['GET'])]
-    public function list(AdminRepository $adminRepository): JsonResponse
+    public function list(
+        Request $request,
+        AdminRepository $adminRepository,
+        AdminApiGuard $adminApiGuard,
+    ): JsonResponse
     {
+        $authError = $adminApiGuard->assertAuthorized($request, true);
+        if ($authError !== null) {
+            return $authError;
+        }
+
         $admins = $adminRepository->findBy([], ['created_at' => 'DESC']);
 
         $data = array_map(static fn(Admin $admin) => [
@@ -38,7 +49,14 @@ final class AdminController extends AbstractController
         AdminRepository $adminRepository,
         EntityManagerInterface $em,
         UserPasswordHasherInterface $passwordHasher,
+        AdminApiGuard $adminApiGuard,
+        AuditService $auditService,
     ): JsonResponse {
+        $authError = $adminApiGuard->assertAuthorized($request, true);
+        if ($authError !== null) {
+            return $authError;
+        }
+
         $data = json_decode($request->getContent(), true);
 
         if (!is_array($data)) {
@@ -77,6 +95,20 @@ final class AdminController extends AbstractController
         $em->persist($admin);
         $em->flush();
 
+        $currentAdmin = $this->resolveCurrentAdmin($request, $adminApiGuard, $adminRepository);
+        $auditService->logModeration(
+            $currentAdmin,
+            'ADMIN_CREATE',
+            'ADMIN',
+            (int) $admin->getId(),
+            null,
+            [
+                'email' => $admin->getEmail(),
+                'role' => $admin->getRole(),
+            ],
+            $request->getClientIp(),
+        );
+
         return $this->json([
             'id'         => $admin->getId(),
             'email'      => $admin->getEmail(),
@@ -91,7 +123,14 @@ final class AdminController extends AbstractController
         Request $request,
         AdminRepository $adminRepository,
         EntityManagerInterface $em,
+        AdminApiGuard $adminApiGuard,
+        AuditService $auditService,
     ): JsonResponse {
+        $authError = $adminApiGuard->assertAuthorized($request, true);
+        if ($authError !== null) {
+            return $authError;
+        }
+
         $data = json_decode($request->getContent(), true);
 
         if (!is_array($data)) {
@@ -110,8 +149,41 @@ final class AdminController extends AbstractController
             return $this->json(['error' => 'Admin not found.'], 404);
         }
 
+        $requestAdminId = $adminApiGuard->getAdminId($request);
+        if ($requestAdminId !== null && $requestAdminId === $admin->getId()) {
+            return $this->json(['error' => 'You cannot change your own role.'], 422);
+        }
+
+        if ($admin->getRole() === 'ROLE_SUPER_ADMIN' && $role !== 'ROLE_SUPER_ADMIN') {
+            $superAdminCount = count($adminRepository->findBy(['role' => 'ROLE_SUPER_ADMIN']));
+            if ($superAdminCount <= 1) {
+                return $this->json(['error' => 'Cannot demote the last super admin.'], 422);
+            }
+        }
+
+        if ($admin->getRole() === $role) {
+            return $this->json([
+                'id'    => $admin->getId(),
+                'email' => $admin->getEmail(),
+                'role'  => $admin->getRole(),
+            ]);
+        }
+
+        $beforeRole = $admin->getRole();
+
         $admin->setRole($role);
         $em->flush();
+
+        $currentAdmin = $this->resolveCurrentAdmin($request, $adminApiGuard, $adminRepository);
+        $auditService->logModeration(
+            $currentAdmin,
+            'ADMIN_ROLE_UPDATE',
+            'ADMIN',
+            (int) $admin->getId(),
+            ['role' => $beforeRole],
+            ['role' => $role],
+            $request->getClientIp(),
+        );
 
         return $this->json([
             'id'    => $admin->getId(),
@@ -123,13 +195,26 @@ final class AdminController extends AbstractController
     #[Route('/{id}', name: 'admin_delete', methods: ['DELETE'])]
     public function delete(
         int $id,
+        Request $request,
         AdminRepository $adminRepository,
         EntityManagerInterface $em,
+        AdminApiGuard $adminApiGuard,
+        AuditService $auditService,
     ): JsonResponse {
+        $authError = $adminApiGuard->assertAuthorized($request, true);
+        if ($authError !== null) {
+            return $authError;
+        }
+
         $admin = $adminRepository->find($id);
 
         if ($admin === null) {
             return $this->json(['error' => 'Admin not found.'], 404);
+        }
+
+        $requestAdminId = $adminApiGuard->getAdminId($request);
+        if ($requestAdminId !== null && $requestAdminId === $admin->getId()) {
+            return $this->json(['error' => 'You cannot delete your own account.'], 422);
         }
 
         // Prevent deleting the last super admin
@@ -140,9 +225,39 @@ final class AdminController extends AbstractController
             }
         }
 
+        $before = [
+            'email' => $admin->getEmail(),
+            'role' => $admin->getRole(),
+        ];
+
+        $currentAdmin = $this->resolveCurrentAdmin($request, $adminApiGuard, $adminRepository);
+
         $em->remove($admin);
         $em->flush();
 
+        $auditService->logModeration(
+            $currentAdmin,
+            'ADMIN_DELETE',
+            'ADMIN',
+            $id,
+            $before,
+            null,
+            $request->getClientIp(),
+        );
+
         return $this->json(['success' => true]);
+    }
+
+    private function resolveCurrentAdmin(
+        Request $request,
+        AdminApiGuard $adminApiGuard,
+        AdminRepository $adminRepository,
+    ): ?Admin {
+        $adminId = $adminApiGuard->getAdminId($request);
+        if ($adminId === null) {
+            return null;
+        }
+
+        return $adminRepository->find($adminId);
     }
 }

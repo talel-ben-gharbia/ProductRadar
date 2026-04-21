@@ -2,7 +2,7 @@
 
 import { useMemo } from "react"
 import { usePathname } from "next/navigation"
-import { PanelLeft, Radar } from "lucide-react"
+import { Radar } from "lucide-react"
 
 import { Avatar, AvatarFallback } from "../ui/avatar"
 import { SidebarTrigger } from "../ui/sidebar"

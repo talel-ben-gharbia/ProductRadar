@@ -1,0 +1,15 @@
+{
+  "files.exclude": {
+    "**/backend/var/cache/**": true
+  },
+  "files.watcherExclude": {
+    "**/backend/var/cache/**": true
+  },
+  "search.exclude": {
+    "**/backend/var/cache/**": true
+  },
+  "intelephense.files.exclude": [
+    "**/backend/var/cache/**"
+  ],
+  "php.validate.executablePath": "C:/xampp/php/php.exe"
+}

@@ -52,10 +52,9 @@ function countDescendants(node: TreeNode): number {
 type TreeNodeRowProps = {
   node: TreeNode
   depth: number
-  defaultExpanded: boolean
 }
 
-function TreeNodeRow({ node, depth, defaultExpanded: _ }: TreeNodeRowProps) {
+function TreeNodeRow({ node, depth }: TreeNodeRowProps) {
   const [expanded, setExpanded] = useState(false)
   const hasChildren = node.children.length > 0
   const total = useMemo(() => countDescendants(node), [node])
@@ -105,7 +104,6 @@ function TreeNodeRow({ node, depth, defaultExpanded: _ }: TreeNodeRowProps) {
               key={child.id}
               node={child}
               depth={depth + 1}
-              defaultExpanded={false}
             />
           ))}
         </div>
@@ -165,7 +163,6 @@ export default function CategoryTree() {
               key={node.id}
               node={node}
               depth={0}
-              defaultExpanded={false}
             />
           ))
         )}

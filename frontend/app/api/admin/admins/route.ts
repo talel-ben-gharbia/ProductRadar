@@ -4,6 +4,8 @@ import { NextRequest, NextResponse } from "next/server"
 import { verifySessionToken, COOKIE_NAME } from "@/lib/admin-session"
 import { BACKEND_URL } from "@/utils/admin/constants"
 
+const ADMIN_API_KEY = process.env.ADMIN_API_KEY ?? "dev-admin-api-key-change-me"
+
 async function getSuperAdminSession() {
   const cookieStore = await cookies()
   const token = cookieStore.get(COOKIE_NAME)?.value
@@ -32,6 +34,11 @@ export async function GET() {
 
   try {
     const response = await fetch(`${BACKEND_URL}/admin/api/admins`, {
+      headers: {
+        "X-Admin-Api-Key": ADMIN_API_KEY,
+        "X-Admin-Role": session.role,
+        "X-Admin-Id": String(session.id),
+      },
       cache: "no-store",
     })
     const data = await parseBackendResponse(response)
@@ -63,7 +70,12 @@ export async function POST(request: NextRequest) {
   try {
     const response = await fetch(`${BACKEND_URL}/admin/api/admins`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "X-Admin-Api-Key": ADMIN_API_KEY,
+        "X-Admin-Role": session.role,
+        "X-Admin-Id": String(session.id),
+      },
       body: JSON.stringify(body),
     })
     const data = await parseBackendResponse(response)

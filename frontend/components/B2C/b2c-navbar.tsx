@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
+import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { Bell, BellRing, Heart, Search } from "lucide-react"
 
@@ -240,7 +241,14 @@ export function B2CNavbar({
                       >
                         <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-[#f7f9ff]">
                           {product.imageUrl ? (
-                            <img src={product.imageUrl} alt={product.name} className="h-full w-full object-contain" />
+                            <Image
+                              src={product.imageUrl}
+                              alt={product.name}
+                              width={48}
+                              height={48}
+                              className="h-full w-full object-contain"
+                              unoptimized
+                            />
                           ) : (
                             <span className="text-[10px] text-muted-foreground">No image</span>
                           )}
@@ -299,10 +307,13 @@ export function B2CNavbar({
                         >
                           <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-[#f7f9ff]">
                             {notification.productImageUrl ? (
-                              <img
+                              <Image
                                 src={notification.productImageUrl}
                                 alt={notification.productName || "Notification product"}
+                                width={40}
+                                height={40}
                                 className="h-full w-full object-contain"
+                                unoptimized
                               />
                             ) : (
                               <BellRing className="h-4 w-4 text-muted-foreground" />

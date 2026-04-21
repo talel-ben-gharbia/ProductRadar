@@ -136,7 +136,7 @@ export async function POST(request: NextRequest) {
       id: number
       email: string
       firebase_uid: string
-      type: "customer"
+      type: "customer" | "b2b_company" | "b2b_market"
       full_name: string | null
       is_verified: boolean
       is_active: boolean
@@ -146,7 +146,7 @@ export async function POST(request: NextRequest) {
       id: customer.id,
       email: customer.email,
       firebase_uid: customer.firebase_uid,
-      type: "customer",
+      type: customer.type,
     })
 
     const response = NextResponse.json({ success: true, customer })

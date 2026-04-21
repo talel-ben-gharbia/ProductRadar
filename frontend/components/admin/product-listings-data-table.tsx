@@ -32,6 +32,8 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { useAdmin } from "@/components/admin/admin-context"
+import { splitListingToNewProduct } from "@/services/admin/quality"
+import type { CategoryRaw } from "@/services/admin/categories"
 import type { Product, ProductListing } from "@/utils/types"
 import type { Seller } from "@/services/admin/sellers"
 
@@ -39,6 +41,7 @@ type ProductListingsDataTableProps = {
   productListings: ProductListing[]
   products: Product[]
   sellers: Seller[]
+  categories: CategoryRaw[]
   fetchError: string | null
   currentProductId?: number
   currentSellerId?: number
@@ -147,6 +150,7 @@ export default function ProductListingsDataTable({
   productListings,
   products,
   sellers,
+  categories,
   fetchError,
   currentProductId,
   currentSellerId,
@@ -201,6 +205,13 @@ export default function ProductListingsDataTable({
   const [editPrice, setEditPrice] = useState("")
   const [editOldPrice, setEditOldPrice] = useState("")
   const [editProductUrl, setEditProductUrl] = useState("")
+  const [splitTarget, setSplitTarget] = useState<ProductListing | null>(null)
+  const [splitName, setSplitName] = useState("")
+  const [splitBrand, setSplitBrand] = useState("")
+  const [splitDescription, setSplitDescription] = useState("")
+  const [splitImageUrl, setSplitImageUrl] = useState("")
+  const [splitCategoryId, setSplitCategoryId] = useState("")
+  const [splitSubmitting, setSplitSubmitting] = useState(false)
 
   const sellerFilterOptions = useMemo<DropdownOption[]>(() => {
     const sellerMap = new Map<number, string>()
@@ -407,6 +418,50 @@ export default function ProductListingsDataTable({
       toast.error("Failed to delete listing.")
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  function openSplitDialog(listing: ProductListing) {
+    if (!canManageListings) {
+      return
+    }
+
+    const suggestedName = (listing.productName ?? "")
+      ? `${listing.productName} (Split)`
+      : `Product from listing #${listing.id}`
+
+    setSplitTarget(listing)
+    setSplitName(suggestedName)
+    setSplitBrand("")
+    setSplitDescription("")
+    setSplitImageUrl("")
+    setSplitCategoryId("")
+  }
+
+  async function handleSplitListingSubmit() {
+    if (!splitTarget) return
+    if (!splitName.trim()) {
+      toast.error("New product name is required.")
+      return
+    }
+
+    setSplitSubmitting(true)
+
+    try {
+      const result = await splitListingToNewProduct(splitTarget.id, {
+        name: splitName.trim(),
+        brand: splitBrand.trim() || null,
+        description: splitDescription.trim() || null,
+        image_url: splitImageUrl.trim() || null,
+        categoryId: splitCategoryId ? Number(splitCategoryId) : null,
+      })
+      toast.success(`Listing split successfully to product #${result.new_product.id}.`)
+      setSplitTarget(null)
+      router.refresh()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to split listing.")
+    } finally {
+      setSplitSubmitting(false)
     }
   }
 
@@ -705,6 +760,14 @@ export default function ProductListingsDataTable({
                       <div className="flex items-center justify-end gap-1">
                         <Button
                           variant="ghost"
+                          size="sm"
+                          className="h-8 px-2 text-xs"
+                          onClick={() => openSplitDialog(listing)}
+                        >
+                          Split
+                        </Button>
+                        <Button
+                          variant="ghost"
                           size="icon"
                           className="h-8 w-8"
                           onClick={() => {
@@ -766,6 +829,91 @@ export default function ProductListingsDataTable({
           </Button>
         </div>
       </div>
+
+      {/* Edit Listing Dialog */}
+      <Dialog
+        open={splitTarget !== null}
+        onOpenChange={(open) => {
+          if (!open && !splitSubmitting) setSplitTarget(null)
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Split Listing Into New Product</DialogTitle>
+            <DialogDescription>
+              Move this listing to a newly created product. Linked history and reviews stay with the listing.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="split-name">New Product Name</Label>
+              <Input
+                id="split-name"
+                value={splitName}
+                onChange={(e) => setSplitName(e.target.value)}
+                placeholder="Product name"
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="split-brand">Brand (optional)</Label>
+              <Input
+                id="split-brand"
+                value={splitBrand}
+                onChange={(e) => setSplitBrand(e.target.value)}
+                placeholder="Brand"
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="split-description">Description (optional)</Label>
+              <Input
+                id="split-description"
+                value={splitDescription}
+                onChange={(e) => setSplitDescription(e.target.value)}
+                placeholder="Description"
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="split-image-url">Image URL (optional)</Label>
+              <Input
+                id="split-image-url"
+                value={splitImageUrl}
+                onChange={(e) => setSplitImageUrl(e.target.value)}
+                placeholder="https://..."
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="split-category">Category (optional)</Label>
+              <select
+                id="split-category"
+                value={splitCategoryId}
+                onChange={(e) => setSplitCategoryId(e.target.value)}
+                className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <option value="">Use current product category</option>
+                {categories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    #{category.id} - {category.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline" disabled={splitSubmitting}>Cancel</Button>
+            </DialogClose>
+            <Button onClick={handleSplitListingSubmit} disabled={splitSubmitting || !splitName.trim()}>
+              {splitSubmitting ? "Splitting..." : "Split Listing"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Edit Listing Dialog */}
       <Dialog

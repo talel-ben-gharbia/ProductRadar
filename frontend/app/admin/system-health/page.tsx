@@ -1,3 +1,6 @@
+import { cookies } from "next/headers"
+
+import { verifySessionToken, COOKIE_NAME } from "@/lib/admin-session"
 import { BACKEND_URL } from "@/utils/admin/constants"
 
 import {
@@ -15,6 +18,24 @@ type CheckResult = {
   status: "Healthy" | "Unhealthy"
   code: number | null
   latencyMs: number | null
+}
+
+type SystemHealthPayload = {
+  status?: string
+  checked_at?: string
+  scraping_health?: {
+    total_runs?: number
+    success_rate?: number
+    failed_runs?: number
+    avg_duration_ms?: number
+    sources?: Array<{
+      source_name?: string
+      total?: number
+      success?: number
+      failed?: number
+      success_rate?: number
+    }>
+  }
 }
 
 async function checkEndpoint(name: string, endpoint: string): Promise<CheckResult> {
@@ -49,7 +70,40 @@ export default async function SystemHealthPage() {
     checkEndpoint("Listings API", `${BACKEND_URL}/product-listings`),
   ])
 
+  const cookieStore = await cookies()
+  const token = cookieStore.get(COOKIE_NAME)?.value
+  const session = token ? await verifySessionToken(token) : null
+
+  let health: SystemHealthPayload | null = null
+  let fetchError: string | null = null
+
+  if (!session || !["ROLE_SUPER_ADMIN", "ROLE_SUB_ADMIN"].includes(session.role)) {
+    fetchError = "You are not authorized to view system health."
+  } else {
+    try {
+      const response = await fetch(`${BACKEND_URL}/admin/api/system-health`, {
+        cache: "no-store",
+        headers: {
+          "X-Admin-Api-Key": process.env.ADMIN_API_KEY ?? "dev-admin-api-key-change-me",
+          "X-Admin-Role": session.role,
+          "X-Admin-Id": String(session.id),
+        },
+      })
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}))
+        fetchError = (data as { error?: string }).error ?? "Failed to load system health."
+      } else {
+        health = (await response.json()) as SystemHealthPayload
+      }
+    } catch {
+      fetchError = "Unable to connect to the backend."
+    }
+  }
+
   const healthyCount = checks.filter((c) => c.status === "Healthy").length
+  const scrapingHealth = health?.scraping_health
+  const sourceRows = scrapingHealth?.sources ?? []
 
   return (
     <section className="w-full max-w-none space-y-4">
@@ -60,12 +114,69 @@ export default async function SystemHealthPage() {
         </p>
       </div>
 
-      <div className="rounded-lg border bg-card p-4">
-        <p className="text-sm font-medium">Overall status</p>
-        <p className="mt-2 text-3xl font-bold">
-          {healthyCount}/{checks.length} Healthy
-        </p>
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="rounded-lg border bg-card p-4">
+          <p className="text-sm font-medium">Overall status</p>
+          <p className="mt-2 text-3xl font-bold">
+            {healthyCount}/{checks.length} Healthy
+          </p>
+        </div>
+        <div className="rounded-lg border bg-card p-4">
+          <p className="text-sm font-medium">Scraping Success Rate</p>
+          <p className="mt-2 text-3xl font-bold">
+            {scrapingHealth ? `${scrapingHealth.success_rate ?? 0}%` : "-"}
+          </p>
+        </div>
+        <div className="rounded-lg border bg-card p-4">
+          <p className="text-sm font-medium">Recent Runs</p>
+          <p className="mt-2 text-3xl font-bold">{scrapingHealth?.total_runs ?? "-"}</p>
+        </div>
+        <div className="rounded-lg border bg-card p-4">
+          <p className="text-sm font-medium">Avg Duration</p>
+          <p className="mt-2 text-3xl font-bold">
+            {scrapingHealth?.avg_duration_ms !== undefined && scrapingHealth.avg_duration_ms !== null
+              ? `${scrapingHealth.avg_duration_ms} ms`
+              : "-"}
+          </p>
+        </div>
       </div>
+
+      {health?.checked_at ? (
+        <p className="text-xs text-muted-foreground">Last backend check: {health.checked_at}</p>
+      ) : null}
+
+      {fetchError ? (
+        <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive">
+          {fetchError}
+        </div>
+      ) : null}
+
+      {sourceRows.length > 0 ? (
+        <div className="w-full rounded-lg border bg-card">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Source</TableHead>
+                <TableHead>Total</TableHead>
+                <TableHead>Success</TableHead>
+                <TableHead>Failed</TableHead>
+                <TableHead>Success Rate</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {sourceRows.map((source) => (
+                <TableRow key={source.source_name ?? "unknown"}>
+                  <TableCell className="font-medium">{source.source_name ?? "Unknown"}</TableCell>
+                  <TableCell>{source.total ?? 0}</TableCell>
+                  <TableCell>{source.success ?? 0}</TableCell>
+                  <TableCell>{source.failed ?? 0}</TableCell>
+                  <TableCell>{source.success_rate ?? 0}%</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      ) : null}
 
       <div className="w-full rounded-lg border bg-card">
         <Table>

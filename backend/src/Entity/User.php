@@ -9,10 +9,17 @@ use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 
 #[ORM\Entity(repositoryClass: UserRepository::class)]
-#[ORM\Table(name: '`user`')]
+#[ORM\Table(name: '`user`', indexes: [
+    new ORM\Index(name: 'idx_user_account_status', columns: ['account_status']),
+])]
 #[ORM\InheritanceType('JOINED')]
 #[ORM\DiscriminatorColumn(name: 'type', type: 'string')]
-#[ORM\DiscriminatorMap(['user' => User::class, 'customer' => Customer::class])]
+#[ORM\DiscriminatorMap([
+    'user' => User::class,
+    'customer' => Customer::class,
+    'b2b_company' => B2BCompany::class,
+    'b2b_market' => B2BMarket::class,
+])]
 class User
 {
     #[ORM\Id]
@@ -37,6 +44,12 @@ class User
 
     #[ORM\Column(length: 255)]
     private ?string $firebase_uid = null;
+
+    #[ORM\Column(nullable: true)]
+    private ?\DateTimeImmutable $last_login = null;
+
+    #[ORM\Column(length: 50, options: ['default' => 'ACTIVE'])]
+    private ?string $account_status = 'ACTIVE';
 
     /**
      * @var Collection<int, Favorite>
@@ -139,6 +152,30 @@ class User
     public function setFirebaseUid(string $firebase_uid): static
     {
         $this->firebase_uid = $firebase_uid;
+
+        return $this;
+    }
+
+    public function getLastLogin(): ?\DateTimeImmutable
+    {
+        return $this->last_login;
+    }
+
+    public function setLastLogin(?\DateTimeImmutable $last_login): static
+    {
+        $this->last_login = $last_login;
+
+        return $this;
+    }
+
+    public function getAccountStatus(): ?string
+    {
+        return $this->account_status;
+    }
+
+    public function setAccountStatus(string $account_status): static
+    {
+        $this->account_status = strtoupper($account_status);
 
         return $this;
     }

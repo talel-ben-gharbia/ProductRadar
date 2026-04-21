@@ -59,6 +59,29 @@ export async function PUT(request: NextRequest, { params }: Params) {
   }
 }
 
+export async function GET(_request: NextRequest, { params }: Params) {
+  const { id } = await params
+
+  try {
+    const response = await fetch(`${BACKEND_URL}/products/${encodeURIComponent(id)}`, {
+      method: "GET",
+      cache: "no-store",
+    })
+
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}))
+      return NextResponse.json(
+        { error: (data as { error?: string }).error || "Failed to fetch product." },
+        { status: response.status }
+      )
+    }
+
+    return NextResponse.json(await response.json())
+  } catch {
+    return NextResponse.json({ error: "Unable to connect to the backend." }, { status: 502 })
+  }
+}
+
 export async function DELETE(_request: NextRequest, { params }: Params) {
   if (!(await isSuperAdmin())) {
     return NextResponse.json({ error: "Only super admins can delete products." }, { status: 403 })

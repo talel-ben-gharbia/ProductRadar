@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Trash2, Shield, UserCog } from "lucide-react"
 
@@ -177,6 +178,9 @@ export default function AdminsDataTable({
           onChange={(e) => setSearch(e.target.value)}
           className="max-w-sm"
         />
+        <Button size="sm" variant="outline" asChild>
+          <Link href="/admin/admins/roles">Manage Roles</Link>
+        </Button>
         <Button size="sm" onClick={() => setCreateOpen(true)}>
           Add Admin
         </Button>

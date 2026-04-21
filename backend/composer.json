@@ -50,6 +50,8 @@
         "symfony/polyfill-php84": "*"
     },
     "scripts": {
+        "e2e:plan-switch": "php bin/e2e_plan_switch.php",
+        "smoke:module1": "php bin/module1_smoke.php",
         "auto-scripts": {
             "cache:clear": "symfony-cmd",
             "assets:install %PUBLIC_DIR%": "symfony-cmd"

@@ -16,6 +16,33 @@ class AlertRepository extends ServiceEntityRepository
         parent::__construct($registry, Alert::class);
     }
 
+    /**
+     * @param int[] $userIds
+     *
+     * @return array<int, int>
+     */
+    public function getCountMapByUserIds(array $userIds): array
+    {
+        if (count($userIds) === 0) {
+            return [];
+        }
+
+        $rows = $this->createQueryBuilder('a')
+            ->select('IDENTITY(a.alerter) AS userId, COUNT(a.id) AS totalCount')
+            ->andWhere('a.alerter IN (:userIds)')
+            ->setParameter('userIds', $userIds)
+            ->groupBy('a.alerter')
+            ->getQuery()
+            ->getArrayResult();
+
+        $map = [];
+        foreach ($rows as $row) {
+            $map[(int) $row['userId']] = (int) $row['totalCount'];
+        }
+
+        return $map;
+    }
+
     //    /**
     //     * @return Alert[] Returns an array of Alert objects
     //     */

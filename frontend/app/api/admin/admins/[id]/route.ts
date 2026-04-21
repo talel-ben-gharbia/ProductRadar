@@ -5,6 +5,7 @@ import { verifySessionToken, COOKIE_NAME } from "@/lib/admin-session"
 import { BACKEND_URL } from "@/utils/admin/constants"
 
 type Params = { params: Promise<{ id: string }> }
+const ADMIN_API_KEY = process.env.ADMIN_API_KEY ?? "dev-admin-api-key-change-me"
 
 async function getSuperAdminSession() {
   const cookieStore = await cookies()
@@ -26,6 +27,11 @@ export async function DELETE(_request: NextRequest, { params }: Params) {
   try {
     const response = await fetch(`${BACKEND_URL}/admin/api/admins/${encodeURIComponent(id)}`, {
       method: "DELETE",
+      headers: {
+        "X-Admin-Api-Key": ADMIN_API_KEY,
+        "X-Admin-Role": session.role,
+        "X-Admin-Id": String(session.id),
+      },
     })
     const data = await response.json()
     if (!response.ok) {

@@ -6,6 +6,7 @@ use App\Repository\CustomerRepository;
 use Doctrine\ORM\Mapping as ORM;
 
 #[ORM\Entity(repositoryClass: CustomerRepository::class)]
+#[ORM\Table(name: 'customer')]
 class Customer extends User
 {
     #[ORM\Column(length: 255, nullable: true)]
@@ -67,5 +68,5 @@ class Customer extends User
 
         return $this;
     }
-    
+
 }
