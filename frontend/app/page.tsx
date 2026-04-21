@@ -1,9 +1,10 @@
 import Link from "next/link"
 import Image from "next/image"
-import { BadgePercent, Flame, Gamepad2, TicketPercent } from "lucide-react"
+import { ArrowRight, BadgePercent, Flame, Gamepad2, TicketPercent, TrendingUp } from "lucide-react"
 
 import { B2CNavbar } from "@/components/B2C/b2c-navbar"
 import { Button } from "@/components/ui/button"
+import { Card } from "@/components/ui/card"
 import {
   NavigationMenu,
   NavigationMenuContent,
@@ -41,12 +42,9 @@ type ShowcaseProduct = {
 }
 
 function buildRootCategories(
-  rows: Array<{ id: number; name: string; parentId: number | null }>
+  rows: Array<{ id: number; name: string; parentId: number | null }>,
 ): RootCategory[] {
-  const byParent = new Map<
-    number | null,
-    Array<{ id: number; name: string; parentId: number | null }>
-  >()
+  const byParent = new Map<number | null, Array<{ id: number; name: string; parentId: number | null }>>()
 
   for (const row of rows) {
     const parentRows = byParent.get(row.parentId) ?? []
@@ -193,7 +191,7 @@ export default async function Page() {
     productsForShowcase = []
   }
 
-  const favoriteNow = productsForShowcase.slice(0, 4)
+  const heroProducts = productsForShowcase.slice(0, 3)
   const bestDeals = [...productsForShowcase]
     .sort((a, b) => {
       if (a.bestPrice === null && b.bestPrice === null) return 0
@@ -202,44 +200,38 @@ export default async function Page() {
       return a.bestPrice - b.bestPrice
     })
     .slice(0, 6)
-  const bestSellers = productsForShowcase.slice(4, 10)
-  const gamingPicks = productsForShowcase
-    .filter((product) => /game|gaming|xbox|playstation|gpu|headset|keyboard|mouse/i.test(product.name))
-    .slice(0, 4)
+
+  const mostPopular = productsForShowcase.slice(0, 8)
+  
+  // Added to prevent undefined reference errors from the merged UI section below
+  const bestSellers: ShowcaseProduct[] = [] 
+  const gamingPicks: ShowcaseProduct[] = []
+
+  const quickCategories = rootCategories
+    .flatMap((root) => root.under.slice(0, 2))
+    .slice(0, 8)
+    .map((item) => ({
+      id: item.id,
+      name: item.name,
+      href: `/B2C/products?categoryIds=${encodeURIComponent(item.allCategoryIds.join(","))}&categoryName=${encodeURIComponent(item.name)}`,
+    }))
 
   return (
     <div className="min-h-svh bg-[#eef2f7]">
-      <style>{`
-        @keyframes scroll-right-to-left {
-          0% { transform: translateX(100%); }
-          100% { transform: translateX(-100%); }
-        }
-        .scroll-text {
-          animation: scroll-right-to-left 15s linear infinite;
-          white-space: nowrap;
-        }
-      `}</style>
-
-      <div className="overflow-hidden bg-muted px-6 py-2">
-        <p className="scroll-text text-sm text-muted-foreground">
-          Discover the latest product trends and market insights in real-time • Track price
-          movements and competitor strategies • Make data-driven decisions with ProductRadar
-        </p>
-      </div>
-
       <B2CNavbar title="Products radar" />
 
-      <section className="border-b bg-background">
-        <div className="w-full px-4 py-2 sm:px-10">
+      <section className="border-b bg-white">
+        <div className="mx-auto w-full max-w-8xl px-4 py-2 sm:px-10">
           {rootCategories.length > 0 ? (
             <NavigationMenu viewport={false} className="w-full max-w-none justify-start">
               <NavigationMenuList className="w-full justify-start gap-2">
                 {rootCategories.map((category) => (
                   <NavigationMenuItem key={category.id} className="static">
-                    <NavigationMenuTrigger className="h-10 rounded-xl px-4 text-sm font-medium">
+                    <NavigationMenuTrigger className="h-10 rounded-lg px-4 text-sm font-medium">
                       {category.name}
                     </NavigationMenuTrigger>
-                    <NavigationMenuContent className="absolute left-0 top-full z-50 mt-2 w-screen max-w-300 rounded-xl border p-6 shadow-lg">
+
+                    <NavigationMenuContent className="absolute left-0 top-full z-50 mt-2 w-screen max-w-300 rounded-xl border bg-white p-6 shadow-lg">
                       {category.under.length > 0 ? (
                         <div className="grid w-full grid-cols-1 gap-x-8 gap-y-6 pr-1 md:grid-cols-2 lg:grid-cols-4">
                           {category.under.map((item) => (
@@ -250,15 +242,13 @@ export default async function Page() {
                               >
                                 {item.name}
                               </Link>
+
                               {item.children.length > 0 ? (
                                 <>
                                   <Separator />
                                   <ul className="mt-2 space-y-1">
                                     {item.children.map((child) => (
-                                      <li
-                                        key={`${category.id}-${item.id}-${child.id}`}
-                                        className="text-sm leading-6"
-                                      >
+                                      <li key={`${category.id}-${item.id}-${child.id}`} className="text-sm leading-6">
                                         <Link
                                           href={`/B2C/products?categoryIds=${encodeURIComponent(child.allCategoryIds.join(","))}&categoryName=${encodeURIComponent(child.name)}`}
                                           className="text-muted-foreground hover:text-primary"
@@ -270,9 +260,7 @@ export default async function Page() {
                                   </ul>
                                 </>
                               ) : (
-                                <p className="mt-2 text-sm text-muted-foreground">
-                                  No child categories
-                                </p>
+                                <p className="mt-2 text-sm text-muted-foreground">No child categories</p>
                               )}
                             </div>
                           ))}
@@ -291,48 +279,102 @@ export default async function Page() {
         </div>
       </section>
 
-      <main className="mx-auto w-full max-w-8xl space-y-7 px-4 py-8 sm:px-10">
-        <section className="rounded-2xl bg-white p-4 shadow-sm">
-          <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-900">
-            <Flame className="h-4 w-4 text-orange-500" />
-            Produits favoris
-          </div>
-          <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              {(favoriteNow.length > 0 ? favoriteNow : productsForShowcase.slice(0, 4)).map((product) => (
-                <ProductTile key={product.id} product={product} />
+      <main className="mx-auto w-full max-w-8xl space-y-8 px-4 py-8 sm:px-10">
+        <section className="rounded-2xl border bg-white p-5 shadow-sm">
+          <div className="grid gap-6 lg:grid-cols-[1.35fr_1fr]">
+            <div className="rounded-2xl bg-linear-to-br from-slate-900 via-slate-800 to-slate-700 p-6 text-white">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-200">ProductRadar</p>
+              <h1 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">
+                Friendly shopping, professional decisions.
+              </h1>
+              <p className="mt-3 max-w-xl text-sm leading-7 text-slate-200">
+                Compare products faster, spot real deals, and keep track of what matters most. The experience stays simple while your decisions get smarter.
+              </p>
+
+              <div className="mt-5 flex flex-wrap gap-3">
+                <Button asChild className="rounded-full bg-white text-slate-900 hover:bg-slate-100">
+                  <Link href="/B2C/products">Explore products</Link>
+                </Button>
+                <Button asChild variant="outline" className="rounded-full border-white/25 bg-transparent text-white hover:bg-white/10 hover:text-white">
+                  <Link href="/B2C/profile/plans">View premium plans</Link>
+                </Button>
+              </div>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
+              {(heroProducts.length > 0 ? heroProducts : productsForShowcase.slice(0, 3)).map((product) => (
+                <Link
+                  key={product.id}
+                  href={`/B2C/products/${product.id}`}
+                  className="flex items-center gap-3 rounded-xl border bg-slate-50 p-3 transition-colors hover:bg-slate-100"
+                >
+                  <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-white">
+                    {product.imageUrl ? (
+                      <img src={product.imageUrl} alt={product.name} className="h-full w-full object-contain" />
+                    ) : (
+                      <span className="text-[10px] text-muted-foreground">No image</span>
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="line-clamp-2 text-sm font-semibold text-slate-900">{product.name}</p>
+                    <p className="mt-1 text-sm text-orange-600">{toMoney(product.bestPrice)}</p>
+                  </div>
+                </Link>
               ))}
             </div>
-            <aside className="relative overflow-hidden rounded-2xl bg-linear-to-br from-emerald-700 via-emerald-600 to-lime-500 p-5 text-white">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-100">
-                Weekly Spotlight
-              </p>
-              <h3 className="mt-2 text-2xl font-semibold leading-tight">
-                Give your garden the attention it deserves.
-              </h3>
-              <p className="mt-2 text-sm text-emerald-50/90">
-                Discover smart outdoor tools and best-rated seasonal picks from our partners.
-              </p>
-              <Button asChild className="mt-5 h-9 rounded-full bg-white px-4 text-emerald-700 hover:bg-emerald-50">
-                <Link href="/B2C/products">Shop now</Link>
-              </Button>
-            </aside>
           </div>
+        </section>
+
+        <section className="rounded-2xl border bg-white p-4 shadow-sm">
+          <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-900">
+            <TrendingUp className="h-4 w-4 text-blue-700" />
+            Popular categories
+          </div>
+          {quickCategories.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              {quickCategories.map((category) => (
+                <Link
+                  key={category.id}
+                  href={category.href}
+                  className="rounded-full border bg-slate-50 px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100"
+                >
+                  {category.name}
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">No categories available.</p>
+          )}
         </section>
 
         <section className="rounded-2xl border bg-[#dce7f4] p-4 shadow-sm">
           <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-900">
-            <BadgePercent className="h-4 w-4 text-blue-700" />
-            Nos meilleurs bons plans
+            <TicketPercent className="h-4 w-4 text-blue-700" />
+            Best deals for you
           </div>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
             {(bestDeals.length > 0 ? bestDeals : productsForShowcase.slice(0, 6)).map((product) => (
               <ProductTile key={product.id} product={product} />
             ))}
           </div>
+        </section>
+
+        <section className="rounded-2xl bg-white p-4 shadow-sm">
+          <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-900">
+            <Flame className="h-4 w-4 text-orange-500" />
+            Trending now
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {(mostPopular.length > 0 ? mostPopular : productsForShowcase.slice(0, 8)).map((product) => (
+              <ProductTile key={product.id} product={product} />
+            ))}
+          </div>
           <div className="mt-4 text-center">
             <Button asChild className="h-9 rounded-full px-5">
-              <Link href="/B2C/products">Plus de bons plans</Link>
+              <Link href="/B2C/products" className="inline-flex items-center gap-2">
+                Browse more
+                <ArrowRight className="h-4 w-4" />
+              </Link>
             </Button>
           </div>
         </section>
@@ -375,12 +417,23 @@ export default async function Page() {
               <p className="mt-2 text-sm text-cyan-50/90">
                 Build your setup with top-value components and accessories selected from active deals.
               </p>
-              <Button asChild className="mt-5 h-9 rounded-full bg-white px-4 text-blue-800 hover:bg-cyan-50">
-                <Link href="/B2C/products">Explore gaming</Link>
-              </Button>
             </aside>
           </div>
         </section>
+
+        <Card className="rounded-2xl border bg-white p-6 shadow-sm">
+          <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
+            <div>
+              <h2 className="text-xl font-semibold tracking-tight text-slate-900">Want more saved items and alerts?</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Upgrade to Premium anytime and unlock higher limits instantly.
+              </p>
+            </div>
+            <Button asChild className="rounded-full">
+              <Link href="/B2C/profile/plans">See plans</Link>
+            </Button>
+          </div>
+        </Card>
       </main>
     </div>
   )

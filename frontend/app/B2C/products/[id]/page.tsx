@@ -83,6 +83,14 @@ function toDate(value: string | null): string {
   return date.toLocaleString("fr-TN")
 }
 
+function toTrustScore(value: number | null): string {
+  if (value === null || Number.isNaN(value)) {
+    return "N/A"
+  }
+
+  return `${value.toFixed(2)}/100`
+}
+
 function toSafeUrl(value: string | null | undefined): string | null {
   if (!value) {
     return null
@@ -501,6 +509,7 @@ export default async function B2CProductDetailsPage({ params }: ProductDetailsPa
                           <TableHead>Price</TableHead>
                           <TableHead>Old price</TableHead>
                           <TableHead>Availability</TableHead>
+                          <TableHead>Trust</TableHead>
                           <TableHead>Updated</TableHead>
                           <TableHead className="text-right">Actions</TableHead>
                         </TableRow>
@@ -509,7 +518,7 @@ export default async function B2CProductDetailsPage({ params }: ProductDetailsPa
                       <TableBody>
                         {activeListings.length === 0 ? (
                           <TableRow>
-                            <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
+                            <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
                               No listings found for this product.
                             </TableCell>
                           </TableRow>
@@ -567,6 +576,9 @@ export default async function B2CProductDetailsPage({ params }: ProductDetailsPa
                                   ) : (
                                     <Badge variant="destructive">Out of stock</Badge>
                                   )}
+                                </TableCell>
+                                <TableCell>
+                                  <Badge variant="outline">{toTrustScore(listing.trust_score)}</Badge>
                                 </TableCell>
                                 <TableCell>{toDate(listing.updatet_at)}</TableCell>
                                 <TableCell className="text-right">

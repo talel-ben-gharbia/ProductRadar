@@ -52,6 +52,26 @@ class PriceHistoryRepository extends ServiceEntityRepository
         return $qb->getQuery()->getArrayResult();
     }
 
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    public function findRecentRowsByListing(
+        \DateTimeImmutable $since,
+    ): array {
+        return $this->createQueryBuilder('ph')
+            ->select('IDENTITY(ph.productListing) AS listingId')
+            ->addSelect('ph.recorded_price AS recordedPrice')
+            ->addSelect('ph.recorded_at AS recordedAt')
+            ->addSelect('ph.out_of_stock AS outOfStock')
+            ->addSelect('ph.anomaly AS anomaly')
+            ->where('ph.recorded_at >= :since')
+            ->setParameter('since', $since)
+            ->orderBy('ph.recorded_at', 'ASC')
+            ->addOrderBy('ph.id', 'ASC')
+            ->getQuery()
+            ->getArrayResult();
+    }
+
     //    /**
     //     * @return PriceHistory[] Returns an array of PriceHistory objects
     //     */

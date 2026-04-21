@@ -13,10 +13,19 @@ type ProductCardProps = {
   product: Product
   bestPriceLabel: string
   offersCount: number
+  bestTrustScore?: number | null
   favoriteListingId?: number
 }
 
-export function ProductCard({ product, bestPriceLabel, offersCount, favoriteListingId }: ProductCardProps) {
+function formatTrustScore(value?: number | null): string {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return "N/A"
+  }
+
+  return `${value.toFixed(2)}/100`
+}
+
+export function ProductCard({ product, bestPriceLabel, offersCount, bestTrustScore, favoriteListingId }: ProductCardProps) {
   const router = useRouter()
 
   function openDetails() {
@@ -80,6 +89,11 @@ export function ProductCard({ product, bestPriceLabel, offersCount, favoriteList
           <p className="whitespace-nowrap text-sm text-slate-500">
             {offersCount} offre{offersCount > 1 ? "s" : ""}
           </p>
+        </div>
+
+        <div className="mt-2 flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-sm">
+          <span className="font-medium text-slate-600">Trust score</span>
+          <span className="font-semibold text-slate-900">{formatTrustScore(bestTrustScore)}</span>
         </div>
 
         <Button

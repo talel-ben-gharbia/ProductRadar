@@ -48,6 +48,7 @@ type ProductWithBestPrice = {
   product: Product
   bestPrice?: number
   bestListingId?: number
+  bestTrustScore?: number | null
   offersCount: number
 }
 
@@ -109,6 +110,7 @@ function parseCategoryIds(params?: { categoryId?: string | string[]; categoryIds
 function computeBestListingByProduct(listings: ProductListing[]) {
   const bestPriceMap = new Map<number, number>()
   const bestListingIdMap = new Map<number, number>()
+  const bestTrustScoreMap = new Map<number, number | null>()
 
   for (const listing of listings) {
     if (listing.productId === null || listing.price === null) {
@@ -123,10 +125,11 @@ function computeBestListingByProduct(listings: ProductListing[]) {
     if (currentBest === undefined || listing.price < currentBest) {
       bestPriceMap.set(listing.productId, listing.price)
       bestListingIdMap.set(listing.productId, listing.id)
+      bestTrustScoreMap.set(listing.productId, listing.trust_score)
     }
   }
 
-  return { bestPriceMap, bestListingIdMap }
+  return { bestPriceMap, bestListingIdMap, bestTrustScoreMap }
 }
 
 function formatPrice(value?: number) {
@@ -286,6 +289,7 @@ export default async function B2CProductsPage({ searchParams }: ProductsPageProp
 
     let bestPriceByProduct = new Map<number, number>()
     let bestListingIdByProduct = new Map<number, number>()
+    let bestTrustScoreByProduct = new Map<number, number | null>()
     let offersCountByProduct = new Map<number, number>()
     let refsByProduct = new Map<number, string[]>()
     try {
@@ -293,6 +297,7 @@ export default async function B2CProductsPage({ searchParams }: ProductsPageProp
       const bestListingResult = computeBestListingByProduct(listings)
       bestPriceByProduct = bestListingResult.bestPriceMap
       bestListingIdByProduct = bestListingResult.bestListingIdMap
+      bestTrustScoreByProduct = bestListingResult.bestTrustScoreMap
       offersCountByProduct = listings.reduce((acc, listing) => {
         if (listing.productId === null) {
           return acc
@@ -313,6 +318,7 @@ export default async function B2CProductsPage({ searchParams }: ProductsPageProp
       }, new Map<number, string[]>())
     } catch {
       bestPriceByProduct = new Map<number, number>()
+      bestTrustScoreByProduct = new Map<number, number | null>()
       offersCountByProduct = new Map<number, number>()
       refsByProduct = new Map<number, string[]>()
     }
@@ -321,6 +327,7 @@ export default async function B2CProductsPage({ searchParams }: ProductsPageProp
       product,
       bestPrice: bestPriceByProduct.get(product.id),
       bestListingId: bestListingIdByProduct.get(product.id),
+      bestTrustScore: bestTrustScoreByProduct.get(product.id) ?? null,
       offersCount: offersCountByProduct.get(product.id) ?? 0,
     }))
 
@@ -764,12 +771,13 @@ export default async function B2CProductsPage({ searchParams }: ProductsPageProp
               </Card>
             ) : (
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                {paginatedProducts.map(({ product, bestPrice, bestListingId, offersCount }) => (
+                {paginatedProducts.map(({ product, bestPrice, bestListingId, bestTrustScore, offersCount }) => (
                   <ProductCard
                     key={product.id}
                     product={product}
                     bestPriceLabel={bestPrice !== undefined ? formatPrice(bestPrice) : "No available price"}
                     offersCount={offersCount}
+                    bestTrustScore={bestTrustScore}
                     favoriteListingId={bestListingId}
                   />
                 ))}
