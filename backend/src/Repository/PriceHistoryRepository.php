@@ -72,6 +72,27 @@ class PriceHistoryRepository extends ServiceEntityRepository
             ->getArrayResult();
     }
 
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    public function findTrainingRows(): array
+    {
+        return $this->createQueryBuilder('ph')
+            ->select('p.id AS productId')
+            ->select('IDENTITY(ph.productListing) AS listingId')
+            ->addSelect('ph.recorded_at AS recordedAt')
+            ->addSelect('ph.recorded_price AS recordedPrice')
+            ->addSelect('ph.out_of_stock AS outOfStock')
+            ->addSelect('ph.anomaly AS anomaly')
+            ->addSelect('pl.trust_score AS trustScore')
+            ->join('ph.productListing', 'pl')
+            ->leftJoin('pl.product', 'p')
+            ->orderBy('ph.recorded_at', 'ASC')
+            ->addOrderBy('ph.id', 'ASC')
+            ->getQuery()
+            ->getArrayResult();
+    }
+
     //    /**
     //     * @return PriceHistory[] Returns an array of PriceHistory objects
     //     */

@@ -28,13 +28,19 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { COOKIE_NAME, verifyB2CSessionToken } from "@/lib/b2c-session"
+import { getBestTimeToBuy } from "@/services/admin/best-time-to-buy"
 import { getRawCategories } from "@/services/admin/categories"
 import { getPriceHistory } from "@/services/admin/price-history"
 import { getProductListings } from "@/services/admin/product-listings"
 import { getProducts } from "@/services/admin/products"
 import { getSellers, type Seller } from "@/services/admin/sellers"
 import type { CategoryRaw } from "@/services/admin/categories"
-import type { PriceHistoryEntry, Product, ProductListing } from "@/utils/types"
+import type {
+  BestTimeToBuyPrediction,
+  PriceHistoryEntry,
+  Product,
+  ProductListing,
+} from "@/utils/types"
 
 type ProductDetailsPageProps = {
   params: Promise<{
@@ -89,6 +95,14 @@ function toTrustScore(value: number | null): string {
   }
 
   return `${value.toFixed(2)}/100`
+}
+
+function toPercent(value: number): string {
+  if (Number.isNaN(value)) {
+    return "-"
+  }
+
+  return `${value.toFixed(1)}%`
 }
 
 function toSafeUrl(value: string | null | undefined): string | null {
@@ -277,6 +291,7 @@ export default async function B2CProductDetailsPage({ params }: ProductDetailsPa
   let priceHistory: PriceHistoryEntry[] = []
   let sellers: SellerWithLogo[] = []
   let categoryRows: CategoryRaw[] = []
+  let bestTimePrediction: BestTimeToBuyPrediction | null = null
   let fetchError: string | null = null
 
   try {
@@ -293,6 +308,14 @@ export default async function B2CProductDetailsPage({ params }: ProductDetailsPa
     sellers = allSellers
     priceHistory = history
     categoryRows = fetchedCategories
+
+    if (isAuthenticated && b2cSession) {
+      try {
+        bestTimePrediction = await getBestTimeToBuy(productId, b2cSession.id)
+      } catch (error) {
+        bestTimePrediction = null
+      }
+    }
   } catch (error) {
     fetchError =
       error instanceof Error
@@ -472,23 +495,29 @@ export default async function B2CProductDetailsPage({ params }: ProductDetailsPa
                 </div>
 
                 <div>
-                  {isAuthenticated ? (
-                    <ProductPriceHistoryLinearChart productId={product.id} history={priceHistory} />
-                  ) : (
-                    <Card className="rounded-xl border">
-                      <CardHeader>
-                        <CardTitle>Evolution du prix</CardTitle>
-                      </CardHeader>
-                      <CardContent className="space-y-3">
-                        <p className="text-sm text-muted-foreground">
-                          Connect your B2C account to unlock the product history chart.
-                        </p>
-                        <Button asChild variant="outline" className="w-full rounded-lg">
-                          <Link href="/B2C/products">Authenticate from the top bar</Link>
-                        </Button>
-                      </CardContent>
-                    </Card>
-                  )}
+                  <div className="space-y-4">
+                    {isAuthenticated ? (
+                      <ProductPriceHistoryLinearChart
+                        productId={product.id}
+                        history={priceHistory}
+                        bestTimePrediction={bestTimePrediction}
+                      />
+                    ) : (
+                      <Card className="rounded-xl border">
+                        <CardHeader>
+                          <CardTitle>Evolution du prix</CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                          <p className="text-sm text-muted-foreground">
+                            Connect your B2C account to unlock the product history chart.
+                          </p>
+                          <Button asChild variant="outline" className="w-full rounded-lg">
+                            <Link href="/B2C/products">Authenticate from the top bar</Link>
+                          </Button>
+                        </CardContent>
+                      </Card>
+                    )}
+                  </div>
                 </div>
               </div>
             </section>

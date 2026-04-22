@@ -2,7 +2,11 @@
 
 namespace App\Controller;
 
+use App\Entity\User;
+use App\Repository\ProductListingRepository;
 use App\Repository\PriceHistoryRepository;
+use App\Repository\UserRepository;
+use App\Service\BestTimeToBuyApiClient;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -40,5 +44,161 @@ final class PriceHistoryController extends AbstractController
         }, $rows);
 
         return $this->json($data);
+    }
+
+    #[Route('/best-time-to-buy', name: 'get_best_time_to_buy', methods: ['GET'])]
+    public function getBestTimeToBuy(
+        Request $request,
+        PriceHistoryRepository $priceHistoryRepository,
+        ProductListingRepository $productListingRepository,
+        UserRepository $userRepository,
+        BestTimeToBuyApiClient $bestTimeToBuyApiClient,
+    ): JsonResponse {
+        $productId = $request->query->getInt('productId', 0);
+        $listingId = $request->query->getInt('listingId', 0);
+        $alerterId = $request->query->getInt('alerterId', 0);
+
+        if ($alerterId <= 0 || ($productId <= 0 && $listingId <= 0)) {
+            return $this->json(['error' => 'productId or listingId and alerterId are required.'], 400);
+        }
+
+        $user = $userRepository->find($alerterId);
+        if (!$user instanceof User) {
+            return $this->json(['error' => 'User not found.'], 404);
+        }
+
+        if (!$this->hasPremiumPriceInsightAccess($user)) {
+            return $this->json([
+                'error' => 'Premium plan required.',
+                'message' => 'Best Time To Buy insights are available for premium users only.',
+            ], 403);
+        }
+
+        $listing = null;
+        if ($listingId > 0) {
+            $listing = $productListingRepository->find($listingId);
+            if ($listing === null) {
+                return $this->json(['error' => 'Listing not found.'], 404);
+            }
+        }
+
+        $rows = $productId > 0
+            ? $priceHistoryRepository->findHistoryRows($productId, null)
+            : $priceHistoryRepository->findHistoryRows(null, $listingId);
+
+        $modelRows = [];
+        foreach ($rows as $row) {
+            $recordedPrice = $row['recordedPrice'] ?? null;
+            if (!is_numeric($recordedPrice) || (float) $recordedPrice <= 0) {
+                continue;
+            }
+
+            $modelRows[] = [
+                'recorded_price' => (float) $recordedPrice,
+                'anomaly' => (bool) ($row['anomaly'] ?? false),
+                'out_of_stock' => (bool) ($row['outOfStock'] ?? false),
+                'trust_score' => $listing?->getTrustScore(),
+            ];
+        }
+
+        if (count($modelRows) < 4) {
+            return $this->json([
+                'error' => 'Not enough history.',
+                'message' => 'At least 4 valid history points are required to generate predictions.',
+            ], 422);
+        }
+
+        try {
+            $prediction = $bestTimeToBuyApiClient->predict($modelRows, $listing?->getTrustScore());
+            $prediction['prediction_source'] = 'python';
+        } catch (\Throwable $exception) {
+            $prediction = $this->buildFallbackPrediction($modelRows, $listing?->getTrustScore());
+            $prediction['prediction_source'] = 'fallback';
+        }
+
+        return $this->json([
+            'listingId' => $listingId,
+            'prediction' => $prediction,
+        ]);
+    }
+
+    private function hasPremiumPriceInsightAccess(User $user): bool
+    {
+        $subscription = $user->getSubscription();
+        if ($subscription === null || $subscription->isActive() !== true) {
+            return false;
+        }
+
+        $endDate = $subscription->getEndDate();
+        if (!$endDate instanceof \DateTimeImmutable || $endDate < new \DateTimeImmutable()) {
+            return false;
+        }
+
+        return (int) ($subscription->getPriceHistoryAccess() ?? 0) > 0;
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $rows
+     *
+     * @return array<string, float|int|string>
+     */
+    private function buildFallbackPrediction(array $rows, ?float $trustScore): array
+    {
+        $prices = [];
+        foreach ($rows as $row) {
+            if (isset($row['recorded_price']) && is_numeric($row['recorded_price'])) {
+                $prices[] = (float) $row['recorded_price'];
+            }
+        }
+
+        $currentPrice = $prices !== [] ? (float) end($prices) : 0.0;
+        $count = count($prices);
+
+        $slope = 0.0;
+        if ($count >= 2) {
+            $x = range(0, $count - 1);
+            $xMean = array_sum($x) / $count;
+            $yMean = array_sum($prices) / $count;
+            $numerator = 0.0;
+            $denominator = 0.0;
+
+            for ($i = 0; $i < $count; ++$i) {
+                $xDelta = $x[$i] - $xMean;
+                $yDelta = $prices[$i] - $yMean;
+                $numerator += $xDelta * $yDelta;
+                $denominator += $xDelta * $xDelta;
+            }
+
+            if ($denominator > 0.000001) {
+                $slope = $numerator / $denominator;
+            }
+        }
+
+        $horizonDays = 14;
+        $bestPrice = $currentPrice;
+        $bestDayOffset = 0;
+
+        for ($day = 1; $day <= $horizonDays; ++$day) {
+            $predicted = max(0.01, $currentPrice + ($slope * $day));
+            if ($predicted < $bestPrice) {
+                $bestPrice = $predicted;
+                $bestDayOffset = $day;
+            }
+        }
+
+        $dropPercent = $currentPrice > 0 ? max(0.0, (($currentPrice - $bestPrice) / $currentPrice) * 100) : 0.0;
+        $waitProbability = min(0.95, max(0.05, $dropPercent / 12));
+
+        return [
+            'action' => $bestDayOffset > 0 && $dropPercent >= 2.0 ? 'WAIT' : 'BUY_NOW',
+            'wait_probability' => round($waitProbability, 4),
+            'best_day_offset' => $bestDayOffset,
+            'predicted_best_price' => round($bestPrice, 2),
+            'current_price' => round($currentPrice, 2),
+            'expected_drop_percent' => round($dropPercent, 2),
+            'confidence' => round(min(1.0, max(0.25, (($trustScore ?? 50.0) / 100.0) * 0.7 + min(1.0, $count / 10) * 0.3)), 4),
+            'horizon_days' => $horizonDays,
+            'min_drop_ratio_to_wait' => 0.02,
+        ];
     }
 }

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { BellRing, TrendingDown, TrendingUp } from "lucide-react"
-import { CartesianGrid, Line, LineChart, XAxis } from "recharts"
+import { CartesianGrid, Line, LineChart, ReferenceLine, XAxis } from "recharts"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -28,11 +28,12 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import type { B2CAlert, PriceHistoryEntry } from "@/utils/types"
+import type { B2CAlert, BestTimeToBuyPrediction, PriceHistoryEntry } from "@/utils/types"
 
 type Props = {
   productId: number
   history: PriceHistoryEntry[]
+  bestTimePrediction?: BestTimeToBuyPrediction | null
 }
 
 type ChartDatum = {
@@ -82,7 +83,11 @@ function buildData(history: PriceHistoryEntry[]): ChartDatum[] {
     })
 }
 
-export default function ProductPriceHistoryLinearChart({ productId, history }: Props) {
+function formatPercent(value: number): string {
+  return `${value.toFixed(1)}%`
+}
+
+export default function ProductPriceHistoryLinearChart({ productId, history, bestTimePrediction }: Props) {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [alertId, setAlertId] = useState<number | null>(null)
   const [isPriceNotif, setIsPriceNotif] = useState(true)
@@ -196,6 +201,22 @@ export default function ProductPriceHistoryLinearChart({ productId, history }: P
       </CardHeader>
 
       <CardContent>
+        {bestTimePrediction ? (
+          <div className="mb-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="font-medium">
+                Premium tip: {bestTimePrediction.action === "WAIT" ? `wait ${bestTimePrediction.best_day_offset} days` : "buy now"}
+              </span>
+              <span className="text-xs font-semibold uppercase tracking-wide text-blue-700">
+                confidence {formatPercent(bestTimePrediction.confidence * 100)}
+              </span>
+            </div>
+            <div className="mt-1 text-xs text-blue-800/90">
+              Predicted best price: {toMoney(bestTimePrediction.predicted_best_price)} · Expected drop: {formatPercent(bestTimePrediction.expected_drop_percent)}
+            </div>
+          </div>
+        ) : null}
+
         <ChartContainer config={chartConfig} className="h-64 w-full">
           <LineChart
             accessibilityLayer
@@ -221,6 +242,22 @@ export default function ProductPriceHistoryLinearChart({ productId, history }: P
               strokeWidth={2}
               dot={false}
             />
+            {bestTimePrediction ? (
+              <ReferenceLine
+                y={bestTimePrediction.predicted_best_price}
+                stroke="#2563eb"
+                strokeDasharray="6 6"
+                strokeWidth={2}
+                label={{
+                  value:
+                    bestTimePrediction.action === "WAIT"
+                      ? `Best buy ~ ${bestTimePrediction.best_day_offset}d`
+                      : "Buy now",
+                  fill: "#2563eb",
+                  position: "insideTopRight",
+                }}
+              />
+            ) : null}
           </LineChart>
         </ChartContainer>
 
