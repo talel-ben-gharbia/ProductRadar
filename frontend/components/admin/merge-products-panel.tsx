@@ -9,9 +9,18 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { mergeProducts } from "@/services/admin/quality"
 
+type CandidateItem = {
+  productId: number
+  name: string
+  brand: string | null
+  description: string
+}
+
 type MergeProductsPanelProps = {
   initialPrimaryId?: number | null
   initialDuplicateIds?: number[]
+  candidateItems?: CandidateItem[]
+  onActionComplete?: () => void
 }
 
 function parseIds(raw: string): number[] {
@@ -28,6 +37,8 @@ function parseIds(raw: string): number[] {
 export default function MergeProductsPanel({
   initialPrimaryId = null,
   initialDuplicateIds = [],
+  candidateItems = [],
+  onActionComplete,
 }: MergeProductsPanelProps) {
   const [primaryIdRaw, setPrimaryIdRaw] = useState(initialPrimaryId ? String(initialPrimaryId) : "")
   const [duplicateIdsRaw, setDuplicateIdsRaw] = useState(initialDuplicateIds.join(", "))
@@ -37,6 +48,44 @@ export default function MergeProductsPanel({
     setPrimaryIdRaw(initialPrimaryId ? String(initialPrimaryId) : "")
     setDuplicateIdsRaw(initialDuplicateIds.join(", "))
   }, [initialPrimaryId, initialDuplicateIds])
+
+  const availableCandidates = candidateItems
+    .filter((item) => Number.isInteger(item.productId) && item.productId > 0)
+    .sort((a, b) => a.productId - b.productId)
+
+  function setPrimaryFromCandidates(productId: number) {
+    setPrimaryIdRaw(String(productId))
+
+    const currentDuplicates = parseIds(duplicateIdsRaw).filter((id) => id !== productId)
+    setDuplicateIdsRaw(currentDuplicates.join(", "))
+  }
+
+  function toggleDuplicateFromCandidates(productId: number) {
+    const currentPrimary = Number(primaryIdRaw)
+    if (currentPrimary === productId) {
+      return
+    }
+
+    const currentDuplicates = parseIds(duplicateIdsRaw)
+    const exists = currentDuplicates.includes(productId)
+    const nextDuplicates = exists
+      ? currentDuplicates.filter((id) => id !== productId)
+      : [...currentDuplicates, productId].sort((a, b) => a - b)
+
+    setDuplicateIdsRaw(nextDuplicates.join(", "))
+  }
+
+  function autoSelectFromCandidates() {
+    if (availableCandidates.length < 2) {
+      return
+    }
+
+    const suggestedPrimaryId = availableCandidates[0].productId
+    const suggestedDuplicates = availableCandidates.slice(1).map((item) => item.productId)
+
+    setPrimaryIdRaw(String(suggestedPrimaryId))
+    setDuplicateIdsRaw(suggestedDuplicates.join(", "))
+  }
 
   async function handleMerge() {
     const primaryId = Number(primaryIdRaw)
@@ -64,6 +113,7 @@ export default function MergeProductsPanel({
         `Merged ${result.summary.merged_count} product(s). Moved ${result.summary.moved_listings} listing(s).`,
       )
       setDuplicateIdsRaw("")
+      onActionComplete?.()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Merge failed.")
     } finally {
@@ -97,6 +147,49 @@ export default function MergeProductsPanel({
           />
         </div>
       </div>
+
+      {availableCandidates.length > 0 ? (
+        <div className="mt-4 rounded-md border bg-muted/20 p-3 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Group Candidates</p>
+            <Button type="button" variant="outline" size="sm" onClick={autoSelectFromCandidates}>
+              Auto-select (lowest ID primary)
+            </Button>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            {availableCandidates.map((candidate) => {
+              const isPrimary = Number(primaryIdRaw) === candidate.productId
+              const isDuplicate = parseIds(duplicateIdsRaw).includes(candidate.productId)
+
+              return (
+                <div key={`merge-candidate-${candidate.productId}`} className="rounded-md border bg-card px-2 py-1.5 text-xs space-y-1">
+                  <p className="font-semibold">#{candidate.productId} - {candidate.name}</p>
+                  <div className="flex flex-wrap gap-1">
+                    <Button
+                      type="button"
+                      variant={isPrimary ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setPrimaryFromCandidates(candidate.productId)}
+                    >
+                      {isPrimary ? "Primary" : "Set Primary"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={isDuplicate ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => toggleDuplicateFromCandidates(candidate.productId)}
+                      disabled={isPrimary}
+                    >
+                      {isDuplicate ? "Duplicate" : "Mark Duplicate"}
+                    </Button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      ) : null}
 
       <div className="mt-4 flex justify-end">
         <Button onClick={handleMerge} disabled={submitting}>

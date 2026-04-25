@@ -36,6 +36,19 @@ final class ProductQualityController extends AbstractController
         }
 
         $primaryId = (int) ($payload['primary_product_id'] ?? 0);
+        $listingConflictStrategy = (string) ($payload['listing_conflict_strategy'] ?? ProductMergeService::LISTING_CONFLICT_KEEP_DUPLICATE);
+        $listingSurvivorBySellerRaw = is_array($payload['listing_survivor_by_seller'] ?? null)
+            ? (array) $payload['listing_survivor_by_seller']
+            : [];
+        $listingSurvivorBySeller = [];
+        foreach ($listingSurvivorBySellerRaw as $sellerId => $listingId) {
+            $normalizedSellerId = (int) $sellerId;
+            $normalizedListingId = (int) $listingId;
+
+            if ($normalizedSellerId > 0 && $normalizedListingId > 0) {
+                $listingSurvivorBySeller[$normalizedSellerId] = $normalizedListingId;
+            }
+        }
         $duplicateIdsRaw = (array) ($payload['duplicate_product_ids'] ?? []);
         $duplicateIds = array_values(array_unique(array_filter(array_map(
             static fn (mixed $value): int => (int) $value,
@@ -44,6 +57,10 @@ final class ProductQualityController extends AbstractController
 
         if ($primaryId <= 0 || $duplicateIds === []) {
             return $this->json(['error' => 'primary_product_id and duplicate_product_ids are required.'], 422);
+        }
+
+        if (!in_array($listingConflictStrategy, [ProductMergeService::LISTING_CONFLICT_KEEP_PRIMARY, ProductMergeService::LISTING_CONFLICT_KEEP_DUPLICATE], true)) {
+            return $this->json(['error' => 'listing_conflict_strategy must be keep-primary or keep-duplicate.'], 422);
         }
 
         if (in_array($primaryId, $duplicateIds, true)) {
@@ -55,31 +72,22 @@ final class ProductQualityController extends AbstractController
             return $this->json(['error' => 'Primary product not found.'], 404);
         }
 
-        $summary = [
-            'merged_count' => 0,
-            'moved_listings' => 0,
-            'moved_alerts' => 0,
-            'moved_price_histories' => 0,
-            'moved_reviews' => 0,
-            'moved_favorites' => 0,
-        ];
+        $duplicates = [];
+        foreach ($duplicateIds as $duplicateId) {
+            $duplicate = $productRepository->find($duplicateId);
+            if ($duplicate !== null) {
+                $duplicates[] = $duplicate;
+            }
+        }
+
+        if ($duplicates === []) {
+            return $this->json(['error' => 'No duplicate products found to merge.'], 404);
+        }
 
         $entityManager->getConnection()->beginTransaction();
         try {
-            foreach ($duplicateIds as $duplicateId) {
-                $duplicate = $productRepository->find($duplicateId);
-                if ($duplicate === null) {
-                    continue;
-                }
-
-                $result = $productMergeService->mergeProducts($primary, $duplicate);
-                $summary['merged_count']++;
-                $summary['moved_listings'] += $result['moved_listings'];
-                $summary['moved_alerts'] += $result['moved_alerts'];
-                $summary['moved_price_histories'] += $result['moved_price_histories'];
-                $summary['moved_reviews'] += $result['moved_reviews'];
-                $summary['moved_favorites'] += $result['moved_favorites'];
-            }
+            $summary = $productMergeService->mergeProducts($primary, $duplicates, $listingConflictStrategy, $listingSurvivorBySeller);
+            $summary['merged_count'] = count($duplicates);
 
             $entityManager->getConnection()->commit();
         } catch (\Throwable $exception) {
@@ -93,6 +101,8 @@ final class ProductQualityController extends AbstractController
 
         return $this->json([
             'primary_product_id' => $primaryId,
+            'listing_conflict_strategy' => $listingConflictStrategy,
+            'listing_survivor_by_seller' => $listingSurvivorBySeller,
             'summary' => $summary,
         ]);
     }

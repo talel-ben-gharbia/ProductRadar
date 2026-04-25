@@ -17,7 +17,11 @@ type DuplicateGroup = {
   key: string
   label: string
   signal: string
+  confidenceScore: number
+  riskLevel: "low" | "medium" | "high"
   confidenceLabel: string
+  sellerCollisionCount: number
+  listingCount: number
   count: number
   items: DuplicateItem[]
 }
@@ -26,9 +30,54 @@ function normalize(value: string | null | undefined): string {
   return (value ?? "").trim().toLowerCase().replace(/\s+/g, " ")
 }
 
+function buildGroupStats(productIds: number[], listingsByProductId: Map<number, ProductListing[]>): {
+  listingCount: number
+  sellerCollisionCount: number
+} {
+  const sellerToProducts = new Map<number, Set<number>>()
+  let listingCount = 0
+
+  for (const productId of productIds) {
+    const listings = listingsByProductId.get(productId) ?? []
+    listingCount += listings.length
+
+    for (const listing of listings) {
+      if (listing.sellerId === null) {
+        continue
+      }
+
+      const products = sellerToProducts.get(listing.sellerId) ?? new Set<number>()
+      products.add(productId)
+      sellerToProducts.set(listing.sellerId, products)
+    }
+  }
+
+  let sellerCollisionCount = 0
+  for (const products of sellerToProducts.values()) {
+    if (products.size > 1) {
+      sellerCollisionCount += 1
+    }
+  }
+
+  return { listingCount, sellerCollisionCount }
+}
+
+function deriveRiskLevel(confidenceScore: number, sellerCollisionCount: number): "low" | "medium" | "high" {
+  if (confidenceScore >= 90 && sellerCollisionCount <= 1) {
+    return "low"
+  }
+
+  if (confidenceScore >= 80 && sellerCollisionCount <= 3) {
+    return "medium"
+  }
+
+  return "high"
+}
+
 function buildReferenceDuplicateGroups(
   listings: ProductListing[],
   productsById: Map<number, Product>,
+  listingsByProductId: Map<number, ProductListing[]>,
 ): DuplicateGroup[] {
   const groups = new Map<string, Set<number>>()
 
@@ -49,8 +98,8 @@ function buildReferenceDuplicateGroups(
 
   return Array.from(groups.entries())
     .filter(([, productIds]) => productIds.size > 1)
-    .map(([ref, productIds]) => {
-      const items = Array.from(productIds)
+    .map(([ref, refProductIds]) => {
+      const items = Array.from(refProductIds)
         .map((id) => {
           const product = productsById.get(id)
           return {
@@ -62,11 +111,22 @@ function buildReferenceDuplicateGroups(
         })
         .sort((a, b) => a.name.localeCompare(b.name))
 
+      const groupProductIds = items
+        .map((item) => item.productId)
+        .filter((id): id is number => id !== null)
+      const stats = buildGroupStats(groupProductIds, listingsByProductId)
+      const confidenceScore = Math.min(100, 95 + Math.min(5, Math.max(0, stats.sellerCollisionCount - 1)))
+      const riskLevel = deriveRiskLevel(confidenceScore, stats.sellerCollisionCount)
+
       return {
         key: `ref:${ref}`,
         label: `Ref: ${ref}`,
         signal: "same ref",
-        confidenceLabel: "100% confidence",
+        confidenceScore,
+        riskLevel,
+        confidenceLabel: `${confidenceScore}% confidence`,
+        sellerCollisionCount: stats.sellerCollisionCount,
+        listingCount: stats.listingCount,
         count: items.length,
         items,
       }
@@ -76,6 +136,8 @@ function buildReferenceDuplicateGroups(
 
 function buildNameDescBrandGroups(
   products: Product[],
+  productsById: Map<number, Product>,
+  listingsByProductId: Map<number, ProductListing[]>,
   excludedProductIds: Set<number>,
 ): DuplicateGroup[] {
   const groups = new Map<string, Product[]>()
@@ -107,11 +169,40 @@ function buildNameDescBrandGroups(
     .map(([key, value]) => {
       const sample = value[0]
 
+      const productIds = value.map((product) => product.id)
+      const stats = buildGroupStats(productIds, listingsByProductId)
+
+      const categoryIds = new Set(
+        productIds
+          .map((id) => productsById.get(id)?.categoryId ?? null)
+          .filter((categoryId): categoryId is number => categoryId !== null),
+      )
+      const sameCategoryBonus = categoryIds.size === 1 && categoryIds.values().next().value !== undefined ? 8 : 0
+
+      const refs = new Set<string>()
+      for (const productId of productIds) {
+        for (const listing of listingsByProductId.get(productId) ?? []) {
+          const ref = normalize(listing.ref)
+          if (ref) {
+            refs.add(ref)
+          }
+        }
+      }
+
+      const referenceOverlapBonus = refs.size > 0 && refs.size < Math.max(2, productIds.length * 2) ? 6 : 0
+      const collisionPenalty = Math.min(10, stats.sellerCollisionCount * 2)
+      const confidenceScore = Math.max(55, Math.min(98, 78 + sameCategoryBonus + referenceOverlapBonus - collisionPenalty))
+      const riskLevel = deriveRiskLevel(confidenceScore, stats.sellerCollisionCount)
+
       return {
         key: `ndb:${key}`,
         label: sample.name,
         signal: "same normalized name + description + brand",
-        confidenceLabel: "85% confidence",
+        confidenceScore,
+        riskLevel,
+        confidenceLabel: `${confidenceScore}% confidence`,
+        sellerCollisionCount: stats.sellerCollisionCount,
+        listingCount: stats.listingCount,
         count: value.length,
         items: value
           .map((product) => ({
@@ -165,8 +256,19 @@ export default async function DuplicatesPage({ searchParams }: DuplicatesPagePro
   try {
     const [products, listings] = await Promise.all([getProducts(), getProductListings()])
     const productsById = new Map<number, Product>(products.map((product) => [product.id, product]))
+    const listingsByProductId = new Map<number, ProductListing[]>()
 
-    level1Groups = buildReferenceDuplicateGroups(listings, productsById)
+    for (const listing of listings) {
+      if (listing.productId === null) {
+        continue
+      }
+
+      const current = listingsByProductId.get(listing.productId) ?? []
+      current.push(listing)
+      listingsByProductId.set(listing.productId, current)
+    }
+
+    level1Groups = buildReferenceDuplicateGroups(listings, productsById, listingsByProductId)
 
     const level1ProductIds = new Set<number>()
     for (const group of level1Groups) {
@@ -177,24 +279,12 @@ export default async function DuplicatesPage({ searchParams }: DuplicatesPagePro
       }
     }
 
-    level2Groups = buildNameDescBrandGroups(products, level1ProductIds)
+    level2Groups = buildNameDescBrandGroups(products, productsById, listingsByProductId, level1ProductIds)
   } catch (error) {
     fetchError = error instanceof Error ? error.message : "Unable to load duplicate monitoring data"
   }
 
   const totalGroups = level1Groups.length + level2Groups.length
-  const mergeReadyGroups = [...level1Groups, ...level2Groups].filter((group) =>
-    group.items.filter((item) => item.productId !== null).length > 1,
-  ).length
-  const uniqueProductIds = new Set<number>()
-  for (const group of [...level1Groups, ...level2Groups]) {
-    for (const item of group.items) {
-      if (item.productId !== null) {
-        uniqueProductIds.add(item.productId)
-      }
-    }
-  }
-
   return (
     <section className="w-full max-w-none space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -226,26 +316,9 @@ export default async function DuplicatesPage({ searchParams }: DuplicatesPagePro
           </div>
 
           <div className="rounded-lg border bg-card p-4">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Total Duplicate Groups</p>
-            <p className="mt-1 text-3xl font-bold">{totalGroups}</p>
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-3">
-            <div className="rounded-lg border bg-card p-4">
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Merge-Ready Groups</p>
-              <p className="mt-1 text-3xl font-bold">{mergeReadyGroups}</p>
-              <p className="mt-1 text-xs text-muted-foreground">Groups with at least 2 product IDs available for merge.</p>
-            </div>
-            <div className="rounded-lg border bg-card p-4">
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Products Involved</p>
-              <p className="mt-1 text-3xl font-bold">{uniqueProductIds.size}</p>
-              <p className="mt-1 text-xs text-muted-foreground">Unique products participating in duplicate signals.</p>
-            </div>
-            <div className="rounded-lg border bg-card p-4">
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Recommended Order</p>
-              <p className="mt-1 text-lg font-semibold">Level 1, then Level 2</p>
-              <p className="mt-1 text-xs text-muted-foreground">Resolve exact reference matches first for safest cleanup.</p>
-            </div>
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Recommended Order</p>
+            <p className="mt-1 text-lg font-semibold">Level 1, then Level 2</p>
+            <p className="mt-1 text-xs text-muted-foreground">Resolve exact reference matches first for safest cleanup.</p>
           </div>
 
           <div className="rounded-lg border bg-card p-4">

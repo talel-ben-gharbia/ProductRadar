@@ -1,5 +1,7 @@
 export type MergeProductsResponse = {
   primary_product_id: number
+  listing_conflict_strategy?: "keep-primary" | "keep-duplicate"
+  listing_survivor_by_seller?: Record<string, number>
   summary: {
     merged_count: number
     moved_listings: number
@@ -9,6 +11,8 @@ export type MergeProductsResponse = {
     moved_favorites: number
   }
 }
+
+export type ListingConflictStrategy = "keep-primary" | "keep-duplicate"
 
 export type SplitListingResponse = {
   message: string
@@ -25,13 +29,20 @@ async function parseJson(response: Response): Promise<unknown> {
   return response.json().catch(() => ({}))
 }
 
-export async function mergeProducts(primaryProductId: number, duplicateProductIds: number[]): Promise<MergeProductsResponse> {
+export async function mergeProducts(
+  primaryProductId: number,
+  duplicateProductIds: number[],
+  listingConflictStrategy: ListingConflictStrategy = "keep-duplicate",
+  listingSurvivorBySeller: Record<number, number> = {},
+): Promise<MergeProductsResponse> {
   const response = await fetch("/api/admin/quality/products/merge", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       primary_product_id: primaryProductId,
       duplicate_product_ids: duplicateProductIds,
+      listing_conflict_strategy: listingConflictStrategy,
+      listing_survivor_by_seller: listingSurvivorBySeller,
     }),
   })
 
