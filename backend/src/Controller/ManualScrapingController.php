@@ -97,6 +97,10 @@ final class ManualScrapingController extends AbstractController
 
         $webhookPayload = [
             'trigger' => 'manual_admin_scrape',
+            // Legacy-friendly flat fields expected by existing n8n workflows.
+            'seller_id' => $seller->getId(),
+            'category_id' => $category->getId(),
+            'start_url' => $resolvedLink,
             'seller' => [
                 'id' => $seller->getId(),
                 'name' => $seller->getName(),

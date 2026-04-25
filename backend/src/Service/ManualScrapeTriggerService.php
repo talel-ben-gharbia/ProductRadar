@@ -34,6 +34,11 @@ final class ManualScrapeTriggerService
             ];
         }
 
+        $timeoutSeconds = (int) ($_ENV['N8N_MANUAL_SCRAPE_TIMEOUT'] ?? $_SERVER['N8N_MANUAL_SCRAPE_TIMEOUT'] ?? 180);
+        if ($timeoutSeconds <= 0) {
+            $timeoutSeconds = 180;
+        }
+
         $context = stream_context_create([
             'http' => [
                 'method' => 'POST',
@@ -43,7 +48,7 @@ final class ManualScrapeTriggerService
                 ]),
                 'content' => $json,
                 'ignore_errors' => true,
-                'timeout' => 20,
+                'timeout' => $timeoutSeconds,
             ],
         ]);
 

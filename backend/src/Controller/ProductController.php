@@ -39,6 +39,42 @@ final class ProductController extends AbstractController
         return $this->json($data);
     }
 
+    #[Route('/products/{id}', name: 'get_product', methods: ['GET'])]
+    public function getProduct(int $id, ProductRepository $productRepository): JsonResponse
+    {
+        $product = $productRepository->find($id);
+        if (!$product) {
+            return $this->json(['error' => 'Product not found.'], 404);
+        }
+
+        return $this->json([
+            'id' => $product->getId(),
+            'name' => $product->getName(),
+            'brand' => $product->getBrand(),
+            'description' => $product->getDescription(),
+            'specs_json' => $product->getSpecsJson(),
+            'image_url' => $product->getImageUrl(),
+            'categoryId' => $product->getCategory()?->getId(),
+            'listings' => array_map(
+                static fn($listing) => [
+                    'id' => $listing->getId(),
+                    'sellerId' => $listing->getSeller()?->getId(),
+                    'sellerName' => $listing->getSeller()?->getName(),
+                    'ref' => $listing->getRef(),
+                    'price' => $listing->getPrice(),
+                    'old_price' => $listing->getOldPrice(),
+                    'product_url' => $listing->getProductUrl(),
+                    'availability' => $listing->isAvailability(),
+                    'trust_score' => $listing->getTrustScore(),
+                    'is_active' => $listing->isActive(),
+                    'created_at' => $listing->getCreatedAt()?->format(DATE_ATOM),
+                    'updatet_at' => $listing->getUpdatetAt()?->format(DATE_ATOM),
+                ],
+                $product->getProductListings()->toArray(),
+            ),
+        ]);
+    }
+
     #[Route('/products', name: 'create_product', methods: ['POST'])]
     public function createProduct(Request $request, CategoryRepository $categoryRepository, EntityManagerInterface $entityManager): JsonResponse
     {
