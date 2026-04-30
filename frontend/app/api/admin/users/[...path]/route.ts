@@ -8,6 +8,20 @@ type Params = { params: Promise<{ path: string[] }> }
 
 const ADMIN_API_KEY = process.env.ADMIN_API_KEY ?? "dev-admin-api-key-change-me"
 
+function buildBackendCandidates(baseUrl: string): string[] {
+  const normalized = baseUrl.replace(/\/+$/, "")
+
+  if (normalized.includes("127.0.0.1:8000") || normalized.includes("localhost:8000")) {
+    return [normalized, normalized.replace(":8000", ":8001")]
+  }
+
+  if (normalized.includes("127.0.0.1:8001") || normalized.includes("localhost:8001")) {
+    return [normalized, normalized.replace(":8001", ":8000")]
+  }
+
+  return [normalized]
+}
+
 async function getAdminSession() {
   const cookieStore = await cookies()
   const token = cookieStore.get(COOKIE_NAME)?.value
@@ -41,7 +55,7 @@ async function proxyRequest(request: NextRequest, params: Params, method: "GET" 
 
   const { path } = await params.params
   const suffix = path.length > 0 ? `/${path.map(encodeURIComponent).join("/")}` : ""
-  const targetUrl = `${BACKEND_URL}/admin/api/users${suffix}${request.nextUrl.search}`
+  const candidates = buildBackendCandidates(BACKEND_URL)
 
   const headers: HeadersInit = {
     "X-Admin-Api-Key": ADMIN_API_KEY,
@@ -56,27 +70,35 @@ async function proxyRequest(request: NextRequest, params: Params, method: "GET" 
     body = rawBody
   }
 
-  try {
-    const response = await fetch(targetUrl, {
-      method,
-      headers,
-      body,
-      cache: "no-store",
-    })
+  let lastErrorMessage = "Unable to connect to the backend."
 
-    const data = await parseBackendResponse(response)
-    if (!response.ok) {
-      const error = (data as { error?: string }).error || "Backend request failed."
-      return NextResponse.json({ error }, { status: response.status })
+  for (const candidate of candidates) {
+    const targetUrl = `${candidate}/admin/api/users${suffix}${request.nextUrl.search}`
+
+    try {
+      const response = await fetch(targetUrl, {
+        method,
+        headers,
+        body,
+        cache: "no-store",
+      })
+
+      const data = await parseBackendResponse(response)
+      if (!response.ok) {
+        const error = (data as { error?: string }).error || "Backend request failed."
+        return NextResponse.json({ error }, { status: response.status })
+      }
+
+      return NextResponse.json(data)
+    } catch (error) {
+      lastErrorMessage = error instanceof Error ? error.message : lastErrorMessage
     }
-
-    return NextResponse.json(data)
-  } catch {
-    return NextResponse.json(
-      { error: "Unable to connect to the backend." },
-      { status: 502 },
-    )
   }
+
+  return NextResponse.json(
+    { error: `Unable to connect to the backend. ${lastErrorMessage}` },
+    { status: 502 },
+  )
 }
 
 export async function GET(request: NextRequest, params: Params) {

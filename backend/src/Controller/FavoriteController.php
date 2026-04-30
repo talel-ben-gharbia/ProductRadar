@@ -2,6 +2,8 @@
 
 namespace App\Controller;
 
+use App\Entity\B2BCompany;
+use App\Entity\B2BMarket;
 use App\Entity\Favorite;
 use App\Repository\FavoriteRepository;
 use App\Repository\ProductListingRepository;
@@ -118,6 +120,8 @@ final class FavoriteController extends AbstractController
             return $this->json(['error' => 'Client not found.'], 404);
         }
 
+        $isB2B = $client instanceof B2BCompany || $client instanceof B2BMarket;
+
         // Authenticated users without subscription are treated as Freemium.
         $favoritesLimit = (int) ($client->getSubscription()?->getFavoritesLimit() ?? self::DEFAULT_FREEMIUM_FAVORITES_LIMIT);
         if ($favoritesLimit <= 0) {
@@ -131,7 +135,7 @@ final class FavoriteController extends AbstractController
         ]);
 
         // Only enforce limit if creating a new favorite
-        if (!$existing) {
+        if (!$isB2B && !$existing) {
             $currentFavoritesCount = $favoriteRepository->count(['client' => $client]);
             
             if ($currentFavoritesCount >= $favoritesLimit) {

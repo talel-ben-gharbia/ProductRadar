@@ -4,6 +4,8 @@ namespace App\Controller;
 
 use App\Entity\PartnerRequest;
 use App\Entity\User;
+use App\Entity\B2BCompany;
+use App\Entity\B2BMarket;
 use App\Repository\PartnerRequestRepository;
 use App\Repository\UserRepository;
 use Doctrine\ORM\EntityManagerInterface;
@@ -28,7 +30,8 @@ final class PartnerRequestController extends AbstractController
         }
 
         $email = mb_strtolower(trim((string) ($payload['email'] ?? '')));
-        $fullName = $this->normalizeOptional((string) ($payload['fullName'] ?? ''));
+        $password = (string) ($payload['password'] ?? '');
+        $confirmPassword = (string) ($payload['confirmPassword'] ?? $payload['passwordConfirmation'] ?? $payload['comfirmPassword'] ?? '');
         $accountType = strtoupper(trim((string) ($payload['accountType'] ?? '')));
         $companyName = $this->normalizeOptional((string) ($payload['companyName'] ?? ''));
         $companyMarket = $this->normalizeOptional((string) ($payload['companyMarket'] ?? ''));
@@ -40,8 +43,16 @@ final class PartnerRequestController extends AbstractController
             return $this->json(['error' => 'Invalid account type.'], 422);
         }
 
-        if ($email === '' || $companyName === null || $companyMarket === null || $companyCountry === '' || $companyWebsite === null) {
-            return $this->json(['error' => 'Email, company name, market, country, and website are required.'], 422);
+        if ($email === '' || $password === '' || $confirmPassword === '' || $companyName === null || $companyMarket === null || $companyCountry === '' || $companyWebsite === null) {
+            return $this->json(['error' => 'Email, password, company name, market, country, and website are required.'], 422);
+        }
+
+        if (mb_strlen($password) < 8) {
+            return $this->json(['error' => 'Password must be at least 8 characters.'], 422);
+        }
+
+        if ($password !== $confirmPassword) {
+            return $this->json(['error' => 'Password confirmation does not match.'], 422);
         }
 
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
@@ -62,18 +73,43 @@ final class PartnerRequestController extends AbstractController
             return $this->json(['error' => 'A pending partner request already exists for this email.'], 409);
         }
 
+        $encryptedPassword = $this->encryptProvisioningPassword($password);
+        if ($encryptedPassword === null) {
+            return $this->json(['error' => 'Server is missing B2B password encryption configuration.'], 500);
+        }
+
         $partnerRequest = new PartnerRequest();
         $partnerRequest->setEmail($email);
-        $partnerRequest->setFullName($fullName);
+        $partnerRequest->setFullName(null);
         $partnerRequest->setAccountType($accountType);
         $partnerRequest->setCompanyName($companyName);
         $partnerRequest->setCompanyMarket($companyMarket);
         $partnerRequest->setCompanyCountry($companyCountry);
         $partnerRequest->setCompanyWebsite($companyWebsite);
+        $partnerRequest->setB2bPassword($encryptedPassword);
         $partnerRequest->setNotes($notes);
         $partnerRequest->setCreatedAt(new \DateTimeImmutable());
 
+        // Also create an unverified B2B user record immediately so the business can be tracked.
+        $b2bUser = $accountType === 'B2B_MARKET' ? new B2BMarket() : new B2BCompany();
+        $b2bUser->setEmail($email);
+        $b2bUser->setFullName(null);
+        // firebase_uid is non-nullable in the schema; use a temporary placeholder until provisioning completes
+        $b2bUser->setFirebaseUid('pending_' . uniqid('', true));
+        $b2bUser->setIsActive(true);
+        $b2bUser->setAccountStatus('PENDING_REVIEW');
+
+        $b2bUser->setCompanyName($companyName);
+        $b2bUser->setCompanyMarket($companyMarket);
+        $b2bUser->setCompanyCountry($companyCountry);
+        $b2bUser->setCompanyWebsite($companyWebsite);
+        $b2bUser->setB2bStatus('PENDING');
+        $b2bUser->setJoinedAt(new \DateTimeImmutable());
+        $b2bUser->setUpdatedAt(null);
+        $b2bUser->setIsVerified(false);
+
         $entityManager->persist($partnerRequest);
+        $entityManager->persist($b2bUser);
         $entityManager->flush();
 
         return $this->json([
@@ -87,5 +123,34 @@ final class PartnerRequestController extends AbstractController
         $trimmed = trim($value);
 
         return $trimmed === '' ? null : $trimmed;
+    }
+
+    private function encryptProvisioningPassword(string $password): ?string
+    {
+        $secret = $this->resolveProvisioningSecret();
+        if (!is_string($secret) || trim($secret) === '') {
+            return null;
+        }
+
+        $key = hash('sha256', $secret, true);
+        $iv = random_bytes(16);
+        $ciphertext = openssl_encrypt($password, 'AES-256-CBC', $key, OPENSSL_RAW_DATA, $iv);
+
+        if (!is_string($ciphertext) || $ciphertext === '') {
+            return null;
+        }
+
+        return base64_encode($iv) . ':' . base64_encode($ciphertext);
+    }
+
+    private function resolveProvisioningSecret(): string
+    {
+        $secret = $_ENV['B2B_PROVISIONING_SECRET']
+            ?? $_SERVER['B2B_PROVISIONING_SECRET']
+            ?? $_ENV['APP_SECRET']
+            ?? $_SERVER['APP_SECRET']
+            ?? '';
+
+        return is_string($secret) ? $secret : '';
     }
 }

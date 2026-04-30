@@ -6,16 +6,21 @@ use App\Entity\AdminActivityLog;
 use App\Entity\B2BCompany;
 use App\Entity\B2BMarket;
 use App\Entity\PartnerRequest;
+use App\Entity\Subscription;
+use App\Entity\User;
 use App\Repository\AdminRepository;
 use App\Repository\PartnerRequestRepository;
+use App\Repository\SellerRepository;
 use App\Repository\UserRepository;
 use App\Security\AdminApiGuard;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
+use Symfony\Component\Mailer\MailerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Component\Mime\Email;
 
 #[Route('/admin/api/users/b2b')]
 final class B2BVerificationController extends AbstractController
@@ -95,10 +100,12 @@ final class B2BVerificationController extends AbstractController
         Request $request,
         PartnerRequestRepository $partnerRequestRepository,
         UserRepository $userRepository,
+        SellerRepository $sellerRepository,
         EntityManagerInterface $entityManager,
         AdminRepository $adminRepository,
         AdminApiGuard $adminApiGuard,
         LoggerInterface $logger,
+        MailerInterface $mailer,
     ): JsonResponse {
         $authError = $adminApiGuard->assertAuthorized($request);
         if ($authError !== null) {
@@ -142,11 +149,74 @@ final class B2BVerificationController extends AbstractController
         if ($status === 'APPROVED') {
             $existingUser = $userRepository->findOneBy(['email' => $partnerRequest->getEmail()]);
             if ($existingUser !== null) {
-                return $this->json(['error' => 'An account already exists with this partner email.'], 409);
+                if (!$existingUser instanceof B2BCompany && !$existingUser instanceof B2BMarket) {
+                    return $this->json(['error' => 'An account already exists with this partner email.'], 409);
+                }
+
+                if ($existingUser->isVerified() === true) {
+                    return $this->json(['error' => 'This B2B account has already been approved.'], 409);
+                }
+
+                $approvedUser = $existingUser;
             }
 
-            $approvedUser = $this->createVerifiedB2bUser($partnerRequest);
-            $entityManager->persist($approvedUser);
+            if (!$this->sellerWebsiteExists((string) $partnerRequest->getCompanyWebsite(), $sellerRepository)) {
+                return $this->json(['error' => 'Company website is not recognized in the seller table.'], 422);
+            }
+
+            $plainPassword = $this->decryptProvisioningPassword((string) $partnerRequest->getB2bPassword());
+            if ($plainPassword === null) {
+                return $this->json(['error' => 'Unable to decrypt B2B provisioning password.'], 500);
+            }
+
+            try {
+                // Create the B2B record only if the request did not already create one.
+                if ($approvedUser === null) {
+                    $approvedUser = $this->createVerifiedB2bUser($partnerRequest);
+                }
+
+                $approvedUser->setIsActive(true);
+                $approvedUser->setAccountStatus('ACTIVE');
+                $approvedUser->setB2bStatus('APPROVED');
+                $approvedUser->setIsVerified(true);
+                $approvedUser->setUpdatedAt(new \DateTimeImmutable());
+
+                $this->attachUnlimitedB2bSubscription($approvedUser);
+                $entityManager->persist($approvedUser);
+                $entityManager->flush();
+
+                // Now attempt to provision the Firebase account. If this fails, remove the newly created user.
+                $firebaseUid = $this->provisionFirebaseB2bUser((string) $partnerRequest->getEmail(), $plainPassword, $logger);
+                if ($firebaseUid === null) {
+                    $logger->error('Firebase provisioning failed for B2B approval', ['email' => $partnerRequest->getEmail()]);
+
+                    $entityManager->remove($approvedUser);
+                    $entityManager->flush();
+
+                    return $this->json(['error' => 'Unable to provision Firebase B2B account.'], 502);
+                }
+
+                $approvedUser->setFirebaseUid($firebaseUid);
+                $entityManager->flush();
+            } catch (\Throwable $e) {
+                $logger->error('Exception during B2B approval flow', ['exception' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
+                if (isset($approvedUser) && $approvedUser instanceof User) {
+                    try {
+                        $entityManager->remove($approvedUser);
+                        $entityManager->flush();
+                    } catch (\Throwable $_) {
+                        // ignore rollback error
+                    }
+                }
+
+                // In dev mode, return the exception message to simplify debugging locally.
+                $appEnv = $_ENV['APP_ENV'] ?? $_SERVER['APP_ENV'] ?? 'prod';
+                if (is_string($appEnv) && strtolower($appEnv) === 'dev') {
+                    return $this->json(['error' => 'Internal server error during B2B approval.', 'exception' => $e->getMessage(), 'trace' => $e->getTraceAsString()], 500);
+                }
+
+                return $this->json(['error' => 'Internal server error during B2B approval.'], 500);
+            }
         }
 
         $after = [
@@ -174,6 +244,8 @@ final class B2BVerificationController extends AbstractController
         if ($approvedUser !== null) {
             $responsePayload = $this->serializeApprovedUser($approvedUser);
             $responsePayload['reviewer_note'] = $reviewerNote;
+
+            $this->sendApprovalConfirmationEmail((string) $approvedUser->getEmail(), (string) $approvedUser->getCompanyName(), $logger, $mailer);
         }
 
         $logger->info('B2B moderation decision completed', [
@@ -225,7 +297,8 @@ final class B2BVerificationController extends AbstractController
 
         $user->setEmail((string) $partnerRequest->getEmail());
         $user->setFullName($partnerRequest->getFullName());
-        $user->setFirebaseUid('pending_partner_' . $partnerRequest->getId());
+        // firebase_uid is non-nullable in DB — use a temporary placeholder until provisioning succeeds
+        $user->setFirebaseUid('pending_' . uniqid('', true));
         $user->setIsActive(true);
         $user->setAccountStatus('ACTIVE');
 
@@ -239,6 +312,171 @@ final class B2BVerificationController extends AbstractController
         $user->setIsVerified(true);
 
         return $user;
+    }
+
+    private function attachUnlimitedB2bSubscription(User $user): void
+    {
+        $subscription = $user->getSubscription() ?? new Subscription();
+        $unlimitedLimit = 2147483647;
+
+        $subscription
+            ->setPlanType('B2B')
+            ->setStartDate(new \DateTimeImmutable())
+            ->setEndDate((new \DateTimeImmutable())->modify('+100 years'))
+            ->setActive(true)
+            ->setAlertsLimit($unlimitedLimit)
+            ->setFavoritesLimit($unlimitedLimit)
+            ->setPriceHistoryAccess(6);
+
+        $user->setSubscription($subscription);
+    }
+
+    private function sellerWebsiteExists(string $companyWebsite, SellerRepository $sellerRepository): bool
+    {
+        return $sellerRepository->findOneByWebsiteHost($companyWebsite) !== null;
+    }
+
+    private function decryptProvisioningPassword(string $encrypted): ?string
+    {
+        $secret = $this->resolveProvisioningSecret();
+        if (!is_string($secret) || trim($secret) === '') {
+            return null;
+        }
+
+        $parts = explode(':', $encrypted, 2);
+        if (count($parts) !== 2) {
+            return null;
+        }
+
+        $iv = base64_decode($parts[0], true);
+        $ciphertext = base64_decode($parts[1], true);
+        if (!is_string($iv) || strlen($iv) !== 16 || !is_string($ciphertext) || $ciphertext === '') {
+            return null;
+        }
+
+        $key = hash('sha256', $secret, true);
+        $plain = openssl_decrypt($ciphertext, 'AES-256-CBC', $key, OPENSSL_RAW_DATA, $iv);
+
+        return is_string($plain) && $plain !== '' ? $plain : null;
+    }
+
+    private function provisionFirebaseB2bUser(string $email, string $password, LoggerInterface $logger): ?string
+    {
+        $apiKey = $_ENV['FIREBASE_WEB_API_KEY']
+            ?? $_SERVER['FIREBASE_WEB_API_KEY']
+            ?? $_ENV['NEXT_PUBLIC_FIREBASE_API_KEY']
+            ?? $_SERVER['NEXT_PUBLIC_FIREBASE_API_KEY']
+            ?? 'AIzaSyBHztYA2cs7XtsOsu1gFWOKzBeT6R2gRG4';
+        if (!is_string($apiKey) || trim($apiKey) === '') {
+            return null;
+        }
+
+        $signup = $this->postJson(
+            'https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=' . urlencode($apiKey),
+            [
+                'email' => $email,
+                'password' => $password,
+                'returnSecureToken' => true,
+            ],
+        );
+
+        if (($signup['status'] >= 200 && $signup['status'] < 300) && is_array($signup['data']) && isset($signup['data']['localId']) && is_string($signup['data']['localId'])) {
+            return $signup['data']['localId'];
+        }
+
+        $logger->warning('Firebase signUp did not return localId', ['email' => $email, 'response' => $signup]);
+
+        $signIn = $this->postJson(
+            'https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=' . urlencode($apiKey),
+            [
+                'email' => $email,
+                'password' => $password,
+                'returnSecureToken' => true,
+            ],
+        );
+        if (($signIn['status'] >= 200 && $signIn['status'] < 300) && is_array($signIn['data']) && isset($signIn['data']['localId']) && is_string($signIn['data']['localId'])) {
+            return $signIn['data']['localId'];
+        }
+
+        $logger->warning('Firebase signIn did not return localId', ['email' => $email, 'response' => $signIn]);
+
+        return null;
+    }
+
+    /**
+     * @return array{status: int, data: array<string, mixed>|null}
+     */
+    private function postJson(string $url, array $payload): array
+    {
+        $headers = [
+            'Content-Type: application/json',
+            'Accept: application/json',
+        ];
+
+        $context = stream_context_create([
+            'http' => [
+                'method' => 'POST',
+                'header' => implode("\r\n", $headers),
+                'content' => json_encode($payload, JSON_THROW_ON_ERROR),
+                'ignore_errors' => true,
+                'timeout' => 15,
+            ],
+        ]);
+
+        $raw = @file_get_contents($url, false, $context);
+        $status = 0;
+        if (isset($http_response_header) && is_array($http_response_header) && isset($http_response_header[0])) {
+            if (preg_match('/\s(\d{3})\s/', (string) $http_response_header[0], $matches) === 1) {
+                $status = (int) $matches[1];
+            }
+        }
+
+        $data = null;
+        if (is_string($raw) && $raw !== '') {
+            $decoded = json_decode($raw, true);
+            if (is_array($decoded)) {
+                $data = $decoded;
+            }
+        }
+
+        return [
+            'status' => $status,
+            'data' => $data,
+        ];
+    }
+
+    private function sendApprovalConfirmationEmail(string $businessEmail, string $companyName, LoggerInterface $logger, MailerInterface $mailer): void
+    {
+        $from = $_ENV['B2B_NOTIFICATIONS_FROM'] ?? $_SERVER['B2B_NOTIFICATIONS_FROM'] ?? 'your-gmail-address@gmail.com';
+        $subject = 'Your ProductRadar B2B account has been approved';
+        $message = "Hello,\n\nYour B2B registration for {$companyName} has been approved successfully.\nYou can now sign in and access the B2B dashboard.\n\nBest regards,\nProductRadar Team";
+
+        try {
+            $email = (new Email())
+                ->from($from)
+                ->to($businessEmail)
+                ->subject($subject)
+                ->text($message);
+
+            $mailer->send($email);
+        } catch (\Throwable $e) {
+            $logger->warning('B2B approval email could not be sent.', [
+                'email' => $businessEmail,
+                'from' => $from,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    private function resolveProvisioningSecret(): string
+    {
+        $secret = $_ENV['B2B_PROVISIONING_SECRET']
+            ?? $_SERVER['B2B_PROVISIONING_SECRET']
+            ?? $_ENV['APP_SECRET']
+            ?? $_SERVER['APP_SECRET']
+            ?? '';
+
+        return is_string($secret) ? $secret : '';
     }
 
     private function serializeApprovedUser(B2BCompany|B2BMarket $user): array

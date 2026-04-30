@@ -3,6 +3,8 @@
 namespace App\Controller;
 
 use App\Entity\Alert;
+use App\Entity\B2BCompany;
+use App\Entity\B2BMarket;
 use App\Repository\AlertRepository;
 use App\Repository\ProductRepository;
 use App\Repository\UserRepository;
@@ -105,6 +107,8 @@ final class AlertController extends AbstractController
             return $this->json(['error' => 'Alerter not found.'], 404);
         }
 
+        $isB2B = $alerter instanceof B2BCompany || $alerter instanceof B2BMarket;
+
         // Authenticated users without subscription are treated as Freemium.
         $alertsLimit = (int) ($alerter->getSubscription()?->getAlertsLimit() ?? self::DEFAULT_FREEMIUM_ALERTS_LIMIT);
         if ($alertsLimit <= 0) {
@@ -123,7 +127,7 @@ final class AlertController extends AbstractController
         ]);
 
         // Only enforce limit if creating a new alert
-        if (!$existing && $totalAlertsCount >= $alertsLimit) {
+        if (!$isB2B && !$existing && $totalAlertsCount >= $alertsLimit) {
             return $this->json([
                 'error' => 'Alert limit reached.',
                 'message' => 'You have reached the maximum number of alerts (' . $alertsLimit . ') for your plan.',

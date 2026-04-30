@@ -13,7 +13,7 @@ type B2CProfile = {
   id: number
   email: string
   firebase_uid: string
-  type: "customer"
+  type: "customer" | "b2b_company" | "b2b_market"
   full_name: string | null
   adress: string | null
 }
@@ -79,6 +79,8 @@ export function B2CNavAuth() {
     return name || "Account"
   }, [customer?.full_name])
 
+  const isB2BSession = customer?.type === "b2b_company" || customer?.type === "b2b_market"
+
   async function logout() {
     await fetch("/api/b2c/auth/logout", { method: "POST" })
     setOpen(false)
@@ -135,6 +137,16 @@ export function B2CNavAuth() {
             <BellRing className="h-4 w-4" />
             <span>My alerts</span>
           </Link>
+          {isB2BSession ? (
+            <Link
+              href="/B2B/dashboard"
+              onClick={() => setOpen(false)}
+              className="mx-1 flex items-center gap-2 rounded-md px-2.5 py-2 text-sm transition-colors hover:bg-muted/60"
+            >
+              <User className="h-4 w-4" />
+              <span>B2B dashboard</span>
+            </Link>
+          ) : null}
           <button
             type="button"
             onClick={logout}

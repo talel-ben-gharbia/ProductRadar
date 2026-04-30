@@ -2,7 +2,6 @@
 
 import { useState } from "react"
 
-import B2BDashboard from "@/components/B2B/b2b-dashboard"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -10,8 +9,9 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 
 type PartnerForm = {
-  fullName: string
   email: string
+  password: string
+  confirmPassword: string
   accountType: "B2B_COMPANY" | "B2B_MARKET"
   companyName: string
   companyMarket: string
@@ -21,8 +21,9 @@ type PartnerForm = {
 }
 
 const INITIAL_FORM: PartnerForm = {
-  fullName: "",
   email: "",
+  password: "",
+  confirmPassword: "",
   accountType: "B2B_COMPANY",
   companyName: "",
   companyMarket: "",
@@ -42,6 +43,12 @@ export default function BecomePartnerPage() {
     setSubmitting(true)
     setError(null)
     setSuccess(null)
+
+    if (form.password !== form.confirmPassword) {
+      setError("Password confirmation does not match.")
+      setSubmitting(false)
+      return
+    }
 
     try {
       const response = await fetch("/api/b2b/partner-request", {
@@ -66,30 +73,18 @@ export default function BecomePartnerPage() {
   }
 
   return (
-    <main className="mx-auto w-full max-w-7xl space-y-10 px-4 py-10 sm:px-6 lg:px-8">
-      <B2BDashboard />
-
+    <main className="mx-auto w-full max-w-3xl px-4 py-10 sm:px-6 lg:px-8">
       <section id="partner-request" className="mx-auto w-full max-w-3xl">
         <Card>
           <CardHeader>
             <CardTitle className="text-2xl">Become a Partner</CardTitle>
             <CardDescription>
-              Submit your B2B application. An admin will verify it, then your partner request is removed from the queue.
+              Submit your B2B application. The admin will verify your company website before account activation.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <form className="space-y-5" onSubmit={onSubmit}>
               <div className="grid gap-5 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="fullName">Full Name</Label>
-                  <Input
-                    id="fullName"
-                    value={form.fullName}
-                    onChange={(e) => setForm((prev) => ({ ...prev, fullName: e.target.value }))}
-                    placeholder="Your full name"
-                  />
-                </div>
-
                 <div className="space-y-2">
                   <Label htmlFor="email">Business Email</Label>
                   <Input
@@ -101,6 +96,32 @@ export default function BecomePartnerPage() {
                     placeholder="name@company.com"
                   />
                 </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="password">Password</Label>
+                  <Input
+                    id="password"
+                    type="password"
+                    required
+                    minLength={8}
+                    value={form.password}
+                    onChange={(e) => setForm((prev) => ({ ...prev, password: e.target.value }))}
+                    placeholder="At least 8 characters"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="confirmPassword">Confirm Password</Label>
+                <Input
+                  id="confirmPassword"
+                  type="password"
+                  required
+                  minLength={8}
+                  value={form.confirmPassword}
+                  onChange={(e) => setForm((prev) => ({ ...prev, confirmPassword: e.target.value }))}
+                  placeholder="Retype your password"
+                />
               </div>
 
               <div className="space-y-2">

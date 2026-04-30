@@ -42,6 +42,9 @@ class PartnerRequest
     #[ORM\Column(type: 'text', nullable: true)]
     private ?string $notes = null;
 
+    #[ORM\Column(type: 'text')]
+    private ?string $b2b_password = null;
+
     #[ORM\Column]
     private ?\DateTimeImmutable $created_at = null;
 
@@ -142,6 +145,18 @@ class PartnerRequest
     public function setNotes(?string $notes): static
     {
         $this->notes = $notes;
+
+        return $this;
+    }
+
+    public function getB2bPassword(): ?string
+    {
+        return $this->b2b_password;
+    }
+
+    public function setB2bPassword(string $b2b_password): static
+    {
+        $this->b2b_password = $b2b_password;
 
         return $this;
     }

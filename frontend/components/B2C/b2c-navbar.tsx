@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
@@ -35,6 +35,8 @@ type B2CNotification = {
   created_at: string | null
 }
 
+type SessionType = "customer" | "b2b_company" | "b2b_market" | null
+
 function formatPrice(value: number | null): string {
   if (value === null) {
     return "No available price"
@@ -57,7 +59,7 @@ export function B2CNavbar({
   const [notificationsLoading, setNotificationsLoading] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
-  const [authChecked, setAuthChecked] = useState(false)
+  const [sessionType, setSessionType] = useState<SessionType>(null)
   const containerRef = useRef<HTMLDivElement | null>(null)
   const notificationsRef = useRef<HTMLDivElement | null>(null)
   const abortRef = useRef<AbortController | null>(null)
@@ -123,7 +125,7 @@ export function B2CNavbar({
     }
   }, [trimmedQuery])
 
-  async function loadNotifications(forceAuthenticated = false) {
+  const loadNotifications = useCallback(async (forceAuthenticated = false) => {
     if (!isAuthenticated && !forceAuthenticated) {
       setNotifications([])
       setNotificationsLoading(false)
@@ -146,21 +148,21 @@ export function B2CNavbar({
     } finally {
       setNotificationsLoading(false)
     }
-  }
+  }, [isAuthenticated])
 
   useEffect(() => {
     let cancelled = false
 
     fetch("/api/b2c/auth/me", { cache: "no-store" })
       .then((response) => response.json())
-      .then((data: { customer?: { id?: number } | null }) => {
+      .then((data: { customer?: { id?: number; type?: SessionType } | null }) => {
         if (cancelled) {
           return
         }
 
         const authenticated = Boolean(data.customer?.id)
         setIsAuthenticated(authenticated)
-        setAuthChecked(true)
+        setSessionType(authenticated ? (data.customer?.type ?? null) : null)
 
         if (authenticated) {
           loadNotifications(true)
@@ -171,7 +173,7 @@ export function B2CNavbar({
       .catch(() => {
         if (!cancelled) {
           setIsAuthenticated(false)
-          setAuthChecked(true)
+          setSessionType(null)
           setNotifications([])
         }
       })
@@ -185,7 +187,9 @@ export function B2CNavbar({
     if (notificationsOpen && isAuthenticated) {
       loadNotifications()
     }
-  }, [notificationsOpen, isAuthenticated])
+  }, [loadNotifications, notificationsOpen, isAuthenticated])
+
+  const isB2BSession = sessionType === "b2b_company" || sessionType === "b2b_market"
 
   const unreadCount = notifications.filter((item) => !item.is_read).length
 
@@ -394,10 +398,19 @@ export function B2CNavbar({
               <span>My alerts</span>
             </Link>
           </Button>
+
+          {isB2BSession ? (
+            <Button asChild variant="outline" size="sm" className="h-9 rounded-full px-4">
+              <Link href="/B2B/dashboard">Dashboard</Link>
+            </Button>
+          ) : null}
+
           <B2CNavAuth />
-          <Button asChild className="h-9 rounded-full px-4">
-            <Link href="/B2B">Become a Partner</Link>
-          </Button>
+          {!isB2BSession ? (
+            <Button asChild className="h-9 rounded-full px-4">
+              <Link href="/B2B">Become a Partner</Link>
+            </Button>
+          ) : null}
         </div>
       </div>
     </nav>
