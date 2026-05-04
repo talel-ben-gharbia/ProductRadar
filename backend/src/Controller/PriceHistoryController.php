@@ -125,7 +125,7 @@ final class PriceHistoryController extends AbstractController
     private function hasPremiumPriceInsightAccess(User $user): bool
     {
         $subscription = $user->getSubscription();
-        if ($subscription === null || $subscription->isActive() !== true) {
+        if ($subscription === null || !$subscription instanceof SubscriptionB2C || $subscription->isActive() !== true) {
             return false;
         }
 

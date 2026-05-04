@@ -117,16 +117,21 @@ class ProductListingRepository extends ServiceEntityRepository
             ->addSelect('pl.product_url AS product_url')
             ->addSelect('pl.availability AS availability')
             ->addSelect('pl.trust_score AS trust_score')
-            ->addSelect('pl.created_at AS created_at')
-            ->addSelect('pl.updatet_at AS updatet_at')
+                ->addSelect('pl.trust_score_breakdown AS trust_score_breakdown')
+                ->addSelect('pl.created_at AS created_at')
+                ->addSelect('pl.updated_at AS updated_at')
             ->addSelect('pl.is_active AS is_active')
             ->addSelect('p.id AS productId')
             ->addSelect('p.name AS productName')
+                ->addSelect('p.brand AS productBrand')
             ->addSelect('p.image_url AS productImageUrl')
+                ->addSelect('c.id AS categoryId')
+                ->addSelect('c.name AS categoryName')
             ->addSelect('s.id AS sellerId')
             ->addSelect('s.name AS sellerName')
             ->leftJoin('pl.product', 'p')
-            ->leftJoin('pl.seller', 's');
+                ->leftJoin('p.category', 'c')
+                ->leftJoin('pl.seller', 's');
     }
 
 //    /**
@@ -144,13 +149,16 @@ class ProductListingRepository extends ServiceEntityRepository
 //        ;
 //    }
 
-//    public function findOneBySomeField($value): ?ProductListing
-//    {
-//        return $this->createQueryBuilder('p')
-//            ->andWhere('p.exampleField = :val')
-//            ->setParameter('val', $value)
-//            ->getQuery()
-//            ->getOneOrNullResult()
-//        ;
-//    }
+    /**
+     * @return ProductListing[]
+     */
+    public function findByBrandName(string $brandName): array
+    {
+        return $this->createQueryBuilder('pl')
+            ->join('pl.product', 'p')
+            ->where('LOWER(p.brand) = :brand')
+            ->setParameter('brand', mb_strtolower(trim($brandName)))
+            ->getQuery()
+            ->getResult();
+    }
 }

@@ -170,12 +170,21 @@ final class RecalculateTrustScoreCommand extends Command
                 $listing->getOldPrice(),
                 $listing->getPrice(),
                 $listing->isAvailability(),
-                $listing->getUpdatetAt(),
+                $listing->getUpdatedAt(),
                 $productPriceScore,
                 $sellerScore,
             );
 
             $listing->setTrustScore($score);
+            $listing->setTrustScoreBreakdown($this->buildTrustScoreBreakdown(
+                $listingRows,
+                $listing->getOldPrice(),
+                $listing->getPrice(),
+                $listing->isAvailability(),
+                $listing->getUpdatedAt(),
+                $productPriceScore,
+                $sellerScore,
+            ));
             ++$updated;
         }
 
@@ -292,5 +301,114 @@ final class RecalculateTrustScoreCommand extends Command
         $finalScore = 100 * $stretched;
 
         return round(max(0.0, min(100.0, $finalScore)), 2);
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $rows
+     * @return array<string, mixed>
+     */
+    private function buildTrustScoreBreakdown(
+        array $rows,
+        ?float $oldPrice,
+        ?float $currentPrice,
+        ?bool $availability,
+        ?\DateTimeImmutable $updatedAt,
+        float $productPriceScore,
+        float $sellerScore,
+    ): array {
+        $historyCount = count($rows);
+        $outOfStockCount = 0;
+        $anomalyCount = 0;
+        $prices = [];
+
+        foreach ($rows as $row) {
+            if (($row['outOfStock'] ?? false) === true) {
+                ++$outOfStockCount;
+            }
+
+            if (($row['anomaly'] ?? false) === true) {
+                ++$anomalyCount;
+            }
+
+            $recordedPrice = $row['recordedPrice'] ?? null;
+            if (is_numeric($recordedPrice)) {
+                $prices[] = (float) $recordedPrice;
+            }
+        }
+
+        $stockReliability = 0.6;
+        $anomalyReliability = 0.6;
+        if ($historyCount > 0) {
+            $stockReliability = 1 - ($outOfStockCount / $historyCount);
+            $anomalyReliability = 1 - ($anomalyCount / $historyCount);
+        }
+
+        $priceStability = 0.45;
+        if (count($prices) >= 2) {
+            $mean = array_sum($prices) / count($prices);
+            if ($mean > 0) {
+                $sumSquared = 0.0;
+                foreach ($prices as $price) {
+                    $delta = $price - $mean;
+                    $sumSquared += $delta * $delta;
+                }
+
+                $variance = $sumSquared / count($prices);
+                $stdDev = sqrt($variance);
+                $cv = $stdDev / $mean;
+                $priceStability = 1 - min(1.0, $cv / 0.4);
+            }
+        }
+
+        $freshness = 0.35;
+        if ($updatedAt instanceof \DateTimeImmutable) {
+            $daysSinceUpdate = max(0, (int) floor((time() - $updatedAt->getTimestamp()) / 86400));
+            $freshness = exp(-$daysSinceUpdate / 21);
+        }
+
+        $availabilityScore = 0.5;
+        if ($availability === true) {
+            $availabilityScore = 1.0;
+        } elseif ($availability === false) {
+            $availabilityScore = 0.2;
+        }
+
+        $discountHonesty = 0.45;
+        if ($oldPrice !== null && $currentPrice !== null) {
+            if ($oldPrice <= 0 || $currentPrice <= 0) {
+                $discountHonesty = 0.35;
+            } elseif ($oldPrice < $currentPrice) {
+                $discountHonesty = 0.15;
+            } else {
+                $discountRatio = ($oldPrice - $currentPrice) / $oldPrice;
+                $discountHonesty = min(1.0, 0.55 + (1.5 * $discountRatio));
+            }
+        }
+
+        $dataQuality = min(1.0, $historyCount / 12);
+        $historyWeight = 0.15 + (0.55 * $dataQuality);
+        $listingWeight = 1 - $historyWeight;
+
+        return [
+            'history' => [
+                'count' => $historyCount,
+                'out_of_stock_count' => $outOfStockCount,
+                'anomaly_count' => $anomalyCount,
+                'stock_reliability' => round(max(0.0, min(1.0, $stockReliability)), 4),
+                'anomaly_reliability' => round(max(0.0, min(1.0, $anomalyReliability)), 4),
+                'price_stability' => round(max(0.0, min(1.0, $priceStability)), 4),
+            ],
+            'listing' => [
+                'freshness' => round(max(0.0, min(1.0, $freshness)), 4),
+                'availability_score' => round(max(0.0, min(1.0, $availabilityScore)), 4),
+                'discount_honesty' => round(max(0.0, min(1.0, $discountHonesty)), 4),
+                'product_price_score' => round(max(0.0, min(1.0, $productPriceScore)), 4),
+                'seller_score' => round(max(0.0, min(1.0, $sellerScore)), 4),
+            ],
+            'weights' => [
+                'history_weight' => round($historyWeight, 4),
+                'listing_weight' => round($listingWeight, 4),
+            ],
+        ];
     }
 }

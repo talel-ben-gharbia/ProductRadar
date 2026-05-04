@@ -609,7 +609,7 @@ export default async function B2CProductDetailsPage({ params }: ProductDetailsPa
                                 <TableCell>
                                   <Badge variant="outline">{toTrustScore(listing.trust_score)}</Badge>
                                 </TableCell>
-                                <TableCell>{toDate(listing.updatet_at)}</TableCell>
+                                <TableCell>{toDate(listing.updated_at)}</TableCell>
                                 <TableCell className="text-right">
                                   <div className="flex items-center justify-end gap-2">
                                     {isAuthenticated ? (

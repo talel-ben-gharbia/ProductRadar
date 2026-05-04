@@ -232,11 +232,11 @@ export default function UsersDataTable({
                   <TableCell>
                     <div className="text-xs text-muted-foreground">
                       <div>
-                        Alerts: <span className="font-medium text-foreground">{user.usage.alerts_used}</span>
+                        Alerts: <span className="font-medium text-foreground">{user.usage?.alerts_used ?? 0}</span>
                         {` / ${user.subscription?.alerts_limit ?? 3}`}
                       </div>
                       <div>
-                        Favorites: <span className="font-medium text-foreground">{user.usage.favorites_used}</span>
+                        Favorites: <span className="font-medium text-foreground">{user.usage?.favorites_used ?? 0}</span>
                         {` / ${user.subscription?.favorites_limit ?? 5}`}
                       </div>
                     </div>

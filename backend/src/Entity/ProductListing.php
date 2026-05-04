@@ -35,7 +35,7 @@ class ProductListing
     private ?\DateTimeImmutable $created_at = null;
 
     #[ORM\Column(nullable: true)]
-    private ?\DateTimeImmutable $updatet_at = null;
+    private ?\DateTimeImmutable $updated_at = null;
 
     #[ORM\Column]
     private ?bool $is_active = null;
@@ -46,6 +46,9 @@ class ProductListing
     #[ORM\ManyToOne(inversedBy: 'productlisting')]
     #[ORM\JoinColumn(nullable: false)]
     private ?Seller $seller = null;
+
+    #[ORM\Column(type: 'json', nullable: true)]
+    private ?array $trust_score_breakdown = null;
 
     #[ORM\Column(length: 255)]
     private ?string $ref = null;
@@ -152,14 +155,16 @@ class ProductListing
         return $this;
     }
 
-    public function getUpdatetAt(): ?\DateTimeImmutable
+
+
+    public function getUpdatedAt(): ?\DateTimeImmutable
     {
-        return $this->updatet_at;
+        return $this->updated_at;
     }
 
-    public function setUpdatetAt(?\DateTimeImmutable $updatet_at): static
+    public function setUpdatedAt(?\DateTimeImmutable $updated_at): static
     {
-        $this->updatet_at = $updatet_at;
+        $this->updated_at = $updated_at;
 
         return $this;
     }
@@ -208,6 +213,18 @@ class ProductListing
     public function setRef(string $ref): static
     {
         $this->ref = $ref;
+
+        return $this;
+    }
+
+    public function getTrustScoreBreakdown(): ?array
+    {
+        return $this->trust_score_breakdown;
+    }
+
+    public function setTrustScoreBreakdown(?array $trustScoreBreakdown): static
+    {
+        $this->trust_score_breakdown = $trustScoreBreakdown;
 
         return $this;
     }

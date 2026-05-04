@@ -27,7 +27,7 @@ final class ProductListingController extends AbstractController
 
         $data = array_map(static function (array $row): array {
             $createdAt = $row['created_at'] ?? null;
-            $updatedAt = $row['updatet_at'] ?? null;
+            $updatedAt = $row['updated_at'] ?? null;
 
             return [
                 'id' => $row['id'] ?? null,
@@ -37,12 +37,17 @@ final class ProductListingController extends AbstractController
                 'product_url' => $row['product_url'] ?? null,
                 'availability' => $row['availability'] ?? null,
                 'trust_score' => $row['trust_score'] ?? null,
+                'trust_score_breakdown' => $row['trust_score_breakdown'] ?? null,
                 'created_at' => $createdAt instanceof \DateTimeInterface ? $createdAt->format(DATE_ATOM) : $createdAt,
-                'updatet_at' => $updatedAt instanceof \DateTimeInterface ? $updatedAt->format(DATE_ATOM) : $updatedAt,
+                'updated_at' => $updatedAt instanceof \DateTimeInterface ? $updatedAt->format(DATE_ATOM) : $updatedAt,
+
                 'is_active' => $row['is_active'] ?? null,
                 'productId' => $row['productId'] ?? null,
                 'productName' => $row['productName'] ?? null,
+                'productBrand' => $row['productBrand'] ?? null,
                 'productImageUrl' => $row['productImageUrl'] ?? null,
+                'categoryId' => $row['categoryId'] ?? null,
+                'categoryName' => $row['categoryName'] ?? null,
                 'sellerId' => $row['sellerId'] ?? null,
                 'sellerName' => $row['sellerName'] ?? null,
             ];
@@ -89,7 +94,7 @@ final class ProductListingController extends AbstractController
         $listing->setAvailability(array_key_exists('availability', $body) ? (bool) $body['availability'] : null);
         $listing->setIsActive(array_key_exists('is_active', $body) ? (bool) $body['is_active'] : true);
         $listing->setCreatedAt(new \DateTimeImmutable());
-        $listing->setUpdatetAt(new \DateTimeImmutable());
+        $listing->setUpdatedAt(new \DateTimeImmutable());
 
         $entityManager->persist($listing);
         $entityManager->flush();
@@ -105,7 +110,8 @@ final class ProductListingController extends AbstractController
             'availability' => $listing->isAvailability(),
             'is_active' => $listing->isActive(),
             'created_at' => $listing->getCreatedAt()?->format(DATE_ATOM),
-            'updatet_at' => $listing->getUpdatetAt()?->format(DATE_ATOM),
+            'updated_at' => $listing->getUpdatedAt()?->format(DATE_ATOM),
+
         ], 201);
     }
 
@@ -125,7 +131,7 @@ final class ProductListingController extends AbstractController
         }
 
         $listing->setIsActive((bool) $body['is_active']);
-    $listing->setUpdatetAt(new \DateTimeImmutable());
+        $listing->setUpdatedAt(new \DateTimeImmutable());
         $entityManager->flush();
 
         return $this->json(['id' => $listing->getId(), 'is_active' => $listing->isActive()]);
@@ -147,7 +153,7 @@ final class ProductListingController extends AbstractController
         }
 
         $listing->setAvailability((bool) $body['availability']);
-    $listing->setUpdatetAt(new \DateTimeImmutable());
+        $listing->setUpdatedAt(new \DateTimeImmutable());
         $entityManager->flush();
 
         return $this->json(['id' => $listing->getId(), 'availability' => $listing->isAvailability()]);
@@ -201,7 +207,7 @@ final class ProductListingController extends AbstractController
             $listing->setProduct($product);
         }
 
-        $listing->setUpdatetAt(new \DateTimeImmutable());
+        $listing->setUpdatedAt(new \DateTimeImmutable());
 
         $entityManager->flush();
 

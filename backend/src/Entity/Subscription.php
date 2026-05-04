@@ -6,6 +6,7 @@ use App\Repository\SubscriptionRepository;
 use Doctrine\ORM\Mapping as ORM;
 
 #[ORM\Entity(repositoryClass: SubscriptionRepository::class)]
+#[ORM\Table(name: 'subscription_b2c')]
 class Subscription
 {
     #[ORM\Id]

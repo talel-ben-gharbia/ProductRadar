@@ -5,8 +5,8 @@ namespace App\Controller;
 use App\Entity\AdminActivityLog;
 use App\Entity\B2BCompany;
 use App\Entity\B2BMarket;
+use App\Entity\B2BSubscription;
 use App\Entity\PartnerRequest;
-use App\Entity\Subscription;
 use App\Entity\User;
 use App\Repository\AdminRepository;
 use App\Repository\PartnerRequestRepository;
@@ -160,8 +160,22 @@ final class B2BVerificationController extends AbstractController
                 $approvedUser = $existingUser;
             }
 
-            if (!$this->sellerWebsiteExists((string) $partnerRequest->getCompanyWebsite(), $sellerRepository)) {
-                return $this->json(['error' => 'Company website is not recognized in the seller table.'], 422);
+            $isMarketRequest = strtoupper((string) $partnerRequest->getAccountType()) === 'B2B_MARKET';
+            $sellerId = $payload['seller_id'] ?? null;
+            $seller = null;
+
+            // Seller integration applies to both B2B companies and B2B markets.
+            if ($sellerId) {
+                $seller = $sellerRepository->find($sellerId);
+                if (!$seller) {
+                    return $this->json(['error' => 'Provided Seller ID does not exist.'], 404);
+                }
+            } else {
+                // Auto-create seller if not provided
+                $seller = new \App\Entity\Seller();
+                $seller->setName((string) $partnerRequest->getCompanyName());
+                $seller->setUrl((string) $partnerRequest->getCompanyWebsite());
+                $entityManager->persist($seller);
             }
 
             $plainPassword = $this->decryptProvisioningPassword((string) $partnerRequest->getB2bPassword());
@@ -171,9 +185,8 @@ final class B2BVerificationController extends AbstractController
 
             try {
                 // Create the B2B record only if the request did not already create one.
-                if ($approvedUser === null) {
-                    $approvedUser = $this->createVerifiedB2bUser($partnerRequest);
-                }
+                // 2. Create/Promote User in local DB
+                $approvedUser = $this->createVerifiedB2bUser($partnerRequest, $entityManager);
 
                 $approvedUser->setIsActive(true);
                 $approvedUser->setAccountStatus('ACTIVE');
@@ -181,19 +194,31 @@ final class B2BVerificationController extends AbstractController
                 $approvedUser->setIsVerified(true);
                 $approvedUser->setUpdatedAt(new \DateTimeImmutable());
 
-                $this->attachUnlimitedB2bSubscription($approvedUser);
+                if (($approvedUser instanceof B2BCompany || $approvedUser instanceof B2BMarket) && $seller !== null) {
+                    $approvedUser->setSeller($seller);
+                }
+
+                $planType = $payload['plan_type'] ?? 'SILVER';
+                $durationMonths = (int) ($payload['duration_months'] ?? 3);
+                $subscription = $this->attachB2bSubscription($approvedUser, $planType, $durationMonths);
+
+                $entityManager->persist($subscription);
                 $entityManager->persist($approvedUser);
                 $entityManager->flush();
 
                 // Now attempt to provision the Firebase account. If this fails, remove the newly created user.
-                $firebaseUid = $this->provisionFirebaseB2bUser((string) $partnerRequest->getEmail(), $plainPassword, $logger);
+                $provisionResult = $this->provisionFirebaseB2bUser((string) $partnerRequest->getEmail(), $plainPassword, $logger);
+                $firebaseUid = $provisionResult['uid'] ?? null;
                 if ($firebaseUid === null) {
                     $logger->error('Firebase provisioning failed for B2B approval', ['email' => $partnerRequest->getEmail()]);
 
                     $entityManager->remove($approvedUser);
                     $entityManager->flush();
 
-                    return $this->json(['error' => 'Unable to provision Firebase B2B account.'], 502);
+                    return $this->json([
+                        'error' => 'Firebase Error: This email already exists in Firebase Auth but the password does not match. If you are testing, please delete the user from the Firebase Console first.',
+                        'firebase_details' => $provisionResult['error'] ?? 'Unknown error'
+                    ], 502);
                 }
 
                 $approvedUser->setFirebaseUid($firebaseUid);
@@ -291,14 +316,26 @@ final class B2BVerificationController extends AbstractController
         return $trimmed === '' ? null : $trimmed;
     }
 
-    private function createVerifiedB2bUser(PartnerRequest $partnerRequest): B2BCompany|B2BMarket
+    private function createVerifiedB2bUser(PartnerRequest $partnerRequest, EntityManagerInterface $entityManager): B2BCompany|B2BMarket
     {
-        $user = $partnerRequest->getAccountType() === 'B2B_MARKET' ? new B2BMarket() : new B2BCompany();
+        $email = (string) $partnerRequest->getEmail();
+        $userRepo = $entityManager->getRepository(User::class);
+        $existing = $userRepo->findOneBy(['email' => $email]);
 
-        $user->setEmail((string) $partnerRequest->getEmail());
+        if ($existing instanceof B2BCompany || $existing instanceof B2BMarket) {
+            $user = $existing;
+        } else {
+            // Fallback if for some reason the pre-created user is missing or of wrong type
+            $user = $partnerRequest->getAccountType() === 'B2B_MARKET' ? new B2BMarket() : new B2BCompany();
+            $user->setEmail($email);
+            $user->setJoinedAt(new \DateTimeImmutable());
+        }
+
         $user->setFullName($partnerRequest->getFullName());
         // firebase_uid is non-nullable in DB — use a temporary placeholder until provisioning succeeds
-        $user->setFirebaseUid('pending_' . uniqid('', true));
+        if (!$user->getFirebaseUid() || str_starts_with($user->getFirebaseUid(), 'pending_')) {
+            $user->setFirebaseUid('pending_' . uniqid('', true));
+        }
         $user->setIsActive(true);
         $user->setAccountStatus('ACTIVE');
 
@@ -307,28 +344,43 @@ final class B2BVerificationController extends AbstractController
         $user->setCompanyCountry((string) $partnerRequest->getCompanyCountry());
         $user->setCompanyWebsite((string) $partnerRequest->getCompanyWebsite());
         $user->setB2bStatus('APPROVED');
-        $user->setJoinedAt(new \DateTimeImmutable());
         $user->setUpdatedAt(new \DateTimeImmutable());
         $user->setIsVerified(true);
+        $user->setOwnerUser($user);
 
         return $user;
     }
 
-    private function attachUnlimitedB2bSubscription(User $user): void
+    private function attachB2bSubscription(B2BCompany|B2BMarket $user, string $planType, int $durationMonths): B2BSubscription
     {
-        $subscription = $user->getSubscription() ?? new Subscription();
-        $unlimitedLimit = 2147483647;
+        $startDate = new \DateTimeImmutable();
+        $endDate = $startDate->modify('+' . $durationMonths . ' months');
 
-        $subscription
-            ->setPlanType('B2B')
-            ->setStartDate(new \DateTimeImmutable())
-            ->setEndDate((new \DateTimeImmutable())->modify('+100 years'))
-            ->setActive(true)
-            ->setAlertsLimit($unlimitedLimit)
-            ->setFavoritesLimit($unlimitedLimit)
-            ->setPriceHistoryAccess(6);
+        // Enforce valid plan types: SILVER or GOLD only
+        $cleanPlan = strtoupper(trim($planType));
+        // Accept both 'SILVER' and 'B2B_SILVER' from frontend
+        $cleanPlan = str_replace('B2B_', '', $cleanPlan);
+        if (!in_array($cleanPlan, ['SILVER', 'GOLD'])) {
+            $cleanPlan = 'SILVER';
+        }
 
-        $user->setSubscription($subscription);
+        $subscription = new B2BSubscription();
+        $subscription->setOwnerType($user instanceof B2BMarket ? 'MARKET' : 'COMPANY');
+        $subscription->setPlanType('B2B_' . $cleanPlan);
+        $subscription->setDurationMonths($durationMonths);
+        $subscription->setStartDate($startDate);
+        $subscription->setEndDate($endDate);
+        $subscription->setActive(true);
+        $subscription->setCreatedAt(new \DateTimeImmutable());
+        $subscription->setActivatedAt(new \DateTimeImmutable());
+
+        if ($user instanceof B2BCompany) {
+            $subscription->setCompany($user);
+        } elseif ($user instanceof B2BMarket) {
+            $subscription->setMarket($user);
+        }
+
+        return $subscription;
     }
 
     private function sellerWebsiteExists(string $companyWebsite, SellerRepository $sellerRepository): bool
@@ -360,7 +412,7 @@ final class B2BVerificationController extends AbstractController
         return is_string($plain) && $plain !== '' ? $plain : null;
     }
 
-    private function provisionFirebaseB2bUser(string $email, string $password, LoggerInterface $logger): ?string
+    private function provisionFirebaseB2bUser(string $email, string $password, LoggerInterface $logger): array
     {
         $apiKey = $_ENV['FIREBASE_WEB_API_KEY']
             ?? $_SERVER['FIREBASE_WEB_API_KEY']
@@ -368,7 +420,7 @@ final class B2BVerificationController extends AbstractController
             ?? $_SERVER['NEXT_PUBLIC_FIREBASE_API_KEY']
             ?? 'AIzaSyBHztYA2cs7XtsOsu1gFWOKzBeT6R2gRG4';
         if (!is_string($apiKey) || trim($apiKey) === '') {
-            return null;
+            return ['uid' => null, 'error' => 'API Key missing'];
         }
 
         $signup = $this->postJson(
@@ -381,7 +433,7 @@ final class B2BVerificationController extends AbstractController
         );
 
         if (($signup['status'] >= 200 && $signup['status'] < 300) && is_array($signup['data']) && isset($signup['data']['localId']) && is_string($signup['data']['localId'])) {
-            return $signup['data']['localId'];
+            return ['uid' => $signup['data']['localId'], 'error' => null];
         }
 
         $logger->warning('Firebase signUp did not return localId', ['email' => $email, 'response' => $signup]);
@@ -395,12 +447,12 @@ final class B2BVerificationController extends AbstractController
             ],
         );
         if (($signIn['status'] >= 200 && $signIn['status'] < 300) && is_array($signIn['data']) && isset($signIn['data']['localId']) && is_string($signIn['data']['localId'])) {
-            return $signIn['data']['localId'];
+            return ['uid' => $signIn['data']['localId'], 'error' => null];
         }
 
         $logger->warning('Firebase signIn did not return localId', ['email' => $email, 'response' => $signIn]);
 
-        return null;
+        return ['uid' => null, 'error' => ['signup' => $signup['data'] ?? 'No data', 'signin' => $signIn['data'] ?? 'No data']];
     }
 
     /**
@@ -474,9 +526,9 @@ final class B2BVerificationController extends AbstractController
             ?? $_SERVER['B2B_PROVISIONING_SECRET']
             ?? $_ENV['APP_SECRET']
             ?? $_SERVER['APP_SECRET']
-            ?? '';
+            ?? 'default-b2b-provisioning-secret-key-12345';
 
-        return is_string($secret) ? $secret : '';
+        return is_string($secret) && trim($secret) !== '' ? $secret : 'default-b2b-provisioning-secret-key-12345';
     }
 
     private function serializeApprovedUser(B2BCompany|B2BMarket $user): array

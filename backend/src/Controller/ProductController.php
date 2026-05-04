@@ -68,7 +68,7 @@ final class ProductController extends AbstractController
                     'trust_score' => $listing->getTrustScore(),
                     'is_active' => $listing->isActive(),
                     'created_at' => $listing->getCreatedAt()?->format(DATE_ATOM),
-                    'updatet_at' => $listing->getUpdatetAt()?->format(DATE_ATOM),
+                    'updated_at' => $listing->getUpdatedAt()?->format(DATE_ATOM),
                 ],
                 $product->getProductListings()->toArray(),
             ),

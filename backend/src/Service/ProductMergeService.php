@@ -251,11 +251,6 @@ final class ProductMergeService
         foreach ($histories as $history) {
             $source->removePriceHistory($history);
             $target->addPriceHistory($history);
-
-            $seller = $target->getSeller();
-            if ($seller !== null && $seller->getId() !== null) {
-                $history->setSeller($seller->getId());
-            }
         }
 
         return $movedCount;
@@ -263,23 +258,11 @@ final class ProductMergeService
 
     private function normalizeSurvivorPriceHistory(ProductListing $listing): int
     {
-        $sellerId = $listing->getSeller()?->getId();
         $changedCount = 0;
 
         foreach ($listing->getPriceHistories()->toArray() as $history) {
-            $wasChanged = false;
-
             if ($history->getProductListing()?->getId() !== $listing->getId()) {
                 $history->setProductListing($listing);
-                $wasChanged = true;
-            }
-
-            if ($sellerId !== null && $history->getSeller() !== $sellerId) {
-                $history->setSeller($sellerId);
-                $wasChanged = true;
-            }
-
-            if ($wasChanged) {
                 $changedCount++;
             }
         }

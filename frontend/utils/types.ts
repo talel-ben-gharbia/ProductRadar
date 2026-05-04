@@ -18,7 +18,7 @@ export type ProductListing = {
   availability: boolean | null
   trust_score: number | null
   created_at: string | null
-  updatet_at: string | null
+  updated_at: string | null
   is_active: boolean | null
   productId: number | null
   productName: string | null

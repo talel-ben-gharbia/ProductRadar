@@ -52,6 +52,7 @@ function AdminSidebar() {
     "/admin/reviews",
     "/admin/data-management",
   ].includes(item.id))
+  const b2bWorkflowsItems = SIDEBAR_CONSTANTS.filter((item) => item.id === "/admin/b2b-workflows")
   const userAccountItems = SIDEBAR_CONSTANTS.filter((item) => item.id === "/admin/users")
 
   useEffect(() => {
@@ -83,6 +84,19 @@ function AdminSidebar() {
   function isItemActive(id: string): boolean {
     if (id === "/admin/") return pathname === "/admin"
     return pathname.startsWith(id)
+  }
+
+  function getItemPathCandidates(item: { id: string; items?: { url: string }[]; sections?: { items: { url: string }[] }[] }): string[] {
+    const nestedUrls = [
+      ...(item.items ?? []).map((subItem) => subItem.url),
+      ...(item.sections ?? []).flatMap((section) => section.items.map((subItem) => subItem.url)),
+    ]
+
+    return [item.id, ...nestedUrls]
+  }
+
+  function isItemOrChildActive(item: { id: string; items?: { url: string }[]; sections?: { items: { url: string }[] }[] }): boolean {
+    return getItemPathCandidates(item).some((url) => isSubItemActive(url.split("?")[0] ?? url) || isItemActive(url))
   }
 
   function isSubItemActive(url: string): boolean {
@@ -144,7 +158,7 @@ function AdminSidebar() {
                 <Collapsible
                   key={item.id}
                   asChild
-                  defaultOpen={item.isActive || active}
+                  defaultOpen={item.isActive || active || isItemOrChildActive(item)}
                   className="group/collapsible"
                 >
                   <SidebarMenuItem>
@@ -259,7 +273,7 @@ function AdminSidebar() {
                 <Collapsible
                   key={item.id}
                   asChild
-                  defaultOpen={item.isActive || active}
+                  defaultOpen={item.isActive || active || isItemOrChildActive(item)}
                   className="group/collapsible"
                 >
                   <SidebarMenuItem>
@@ -477,6 +491,77 @@ function AdminSidebar() {
           </SidebarMenu>
         </SidebarGroup>
 
+        <SidebarSeparator className="mx-2 my-2" />
+
+        <SidebarGroup className="px-2 py-1">
+          <SidebarGroupLabel className="px-2">B2B Workflows</SidebarGroupLabel>
+          <SidebarMenu className="gap-1">
+            {b2bWorkflowsItems.map((item) => {
+              const active = isItemActive(item.id)
+
+              return (
+                <Collapsible
+                  key={item.id}
+                  asChild
+                  defaultOpen={item.isActive || active || isItemOrChildActive(item)}
+                  className="group/collapsible"
+                >
+                  <SidebarMenuItem>
+                    {item.items && item.items.length > 0 ? (
+                      <>
+                        <CollapsibleTrigger asChild>
+                          <SidebarMenuButton
+                            tooltip={item.name}
+                            isActive={active}
+                            data-active={active || undefined}
+                          >
+                            <item.icon className="size-4" />
+                            <span>{item.name}</span>
+                            <ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90 group-data-[collapsible=icon]:hidden" />
+                          </SidebarMenuButton>
+                        </CollapsibleTrigger>
+
+                        <CollapsibleContent className="grid transition-[grid-template-rows] duration-300 ease-in-out data-[state=open]:grid-rows-[1fr] data-[state=closed]:grid-rows-[0fr]">
+                          <div className="overflow-hidden">
+                            <SidebarMenuSub>
+                              {item.items.map((subItem) => (
+                                <SidebarMenuSubItem key={subItem.title}>
+                                  <SidebarMenuSubButton
+                                    asChild
+                                    isActive={isSubItemActive(subItem.url.split("?")[0] ?? subItem.url)}
+                                    data-active={isSubItemActive(subItem.url.split("?")[0] ?? subItem.url) || undefined}
+                                    className="font-normal"
+                                  >
+                                    <Link href={subItem.url}>
+                                      <span>{subItem.title}</span>
+                                    </Link>
+                                  </SidebarMenuSubButton>
+                                </SidebarMenuSubItem>
+                              ))}
+                            </SidebarMenuSub>
+                          </div>
+                        </CollapsibleContent>
+                      </>
+                    ) : (
+                      <SidebarMenuButton
+                        asChild
+                        tooltip={item.name}
+                        isActive={active}
+                        data-active={active || undefined}
+                      >
+                        <Link href={item.id}>
+                          <item.icon className="size-4" />
+                          <span>{item.name}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    )}
+                  </SidebarMenuItem>
+                </Collapsible>
+              )
+            })}
+          </SidebarMenu>
+        </SidebarGroup>
+
         {userAccountItems.length > 0 && (
           <>
             <SidebarSeparator className="mx-2 my-2" />
@@ -490,7 +575,7 @@ function AdminSidebar() {
                     <Collapsible
                       key={item.id}
                       asChild
-                      defaultOpen={item.isActive || active}
+                      defaultOpen={item.isActive || active || isItemOrChildActive(item)}
                       className="group/collapsible"
                     >
                       <SidebarMenuItem>

@@ -2,24 +2,37 @@
 
 import { useMemo } from "react"
 import { usePathname } from "next/navigation"
-import { Building2 } from "lucide-react"
+import { Building2, Star } from "lucide-react"
 
+import { useB2B } from "@/components/B2B/b2b-context"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
 
+const PAGE_TITLES: Record<string, string> = {
+  "/B2B/dashboard": "Overview",
+  "/B2B/dashboard/listings": "My Listings",
+  "/B2B/dashboard/competitor-pricing": "Competitor Pricing",
+  "/B2B/dashboard/stock-monitoring": "Stock Monitoring",
+  "/B2B/dashboard/alerts": "Alerts & Notifications",
+  "/B2B/dashboard/reports": "Reports",
+  "/B2B/dashboard/ads-requests": "Ads Requests",
+  "/B2B/dashboard/scraping-requests": "Scraping Requests",
+  "/B2B/dashboard/settings": "Settings",
+  "/B2B/dashboard/share-of-shelf": "Share of Shelf",
+  "/B2B/dashboard/price-dispersion": "Price Dispersion",
+  "/B2B/dashboard/competitors": "Competitor Ranking",
+  "/B2B/dashboard/stock-intelligence": "Stock Intelligence",
+  "/B2B/dashboard/reviews-sentiment": "Reviews & Sentiment",
+  "/B2B/dashboard/demand-intelligence": "Demand Intelligence",
+}
+
 function B2BNavbar() {
   const pathname = usePathname()
+  const { summary, planType, isGold, mode } = useB2B()
 
   const pageTitle = useMemo(() => {
-    if (pathname === "/B2B/dashboard") {
-      return "Dashboard"
-    }
-
-    const segment = pathname.split("/").filter(Boolean).at(-1) ?? "B2B"
-    return segment
-      .replace(/-/g, " ")
-      .replace(/\b\w/g, (letter) => letter.toUpperCase())
+    return PAGE_TITLES[pathname] ?? pathname.split("/").filter(Boolean).at(-1)?.replace(/-/g, " ").replace(/\b\w/g, (l) => l.toUpperCase()) ?? "B2B"
   }, [pathname])
 
   return (
@@ -35,9 +48,24 @@ function B2BNavbar() {
           </Avatar>
           <div>
             <p className="text-sm font-semibold tracking-tight">{pageTitle}</p>
-            <p className="text-xs text-muted-foreground">Product Radar B2B panel</p>
+            <p className="text-xs text-muted-foreground">
+              {mode === "market" ? "Market Intelligence" : "Seller Intelligence"} • {summary?.user?.company_name ?? "Workspace"}
+            </p>
           </div>
         </div>
+      </div>
+
+      <div className="flex items-center gap-3">
+        {planType && (
+          <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ${
+            isGold
+              ? "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400"
+              : "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300"
+          }`}>
+            <Star className="size-2.5" />
+            {planType} plan
+          </span>
+        )}
       </div>
     </header>
   )

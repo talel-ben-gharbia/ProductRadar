@@ -32,6 +32,17 @@ class Notification
     #[ORM\ManyToOne(inversedBy: 'notifications')]
     private ?User $client = null;
 
+    #[ORM\ManyToOne(targetEntity: B2BCompany::class)]
+    #[ORM\JoinColumn(name: 'company_id', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
+    private ?B2BCompany $company = null;
+
+    #[ORM\ManyToOne(targetEntity: B2BMarket::class)]
+    #[ORM\JoinColumn(name: 'market_id', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
+    private ?B2BMarket $market = null;
+
+    #[ORM\Column(length: 20, nullable: true)]
+    private ?string $severity = null;
+
     public function getId(): ?int
     {
         return $this->id;
@@ -105,6 +116,42 @@ class Notification
     public function setClient(?User $client): static
     {
         $this->client = $client;
+
+        return $this;
+    }
+
+    public function getCompany(): ?B2BCompany
+    {
+        return $this->company;
+    }
+
+    public function setCompany(?B2BCompany $company): static
+    {
+        $this->company = $company;
+
+        return $this;
+    }
+
+    public function getMarket(): ?B2BMarket
+    {
+        return $this->market;
+    }
+
+    public function setMarket(?B2BMarket $market): static
+    {
+        $this->market = $market;
+
+        return $this;
+    }
+
+    public function getSeverity(): ?string
+    {
+        return $this->severity;
+    }
+
+    public function setSeverity(?string $severity): static
+    {
+        $this->severity = $severity !== null ? strtoupper($severity) : null;
 
         return $this;
     }

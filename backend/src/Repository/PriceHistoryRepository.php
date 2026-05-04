@@ -27,7 +27,6 @@ class PriceHistoryRepository extends ServiceEntityRepository
             ->addSelect('ph.recorded_at AS recordedAt')
             ->addSelect('ph.out_of_stock AS outOfStock')
             ->addSelect('ph.anomaly AS anomaly')
-            ->addSelect('ph.seller AS sellerFromHistory')
             ->addSelect('pl.id AS listingId')
             ->addSelect('IDENTITY(pl.seller) AS sellerFromListing')
             ->addSelect('s.name AS sellerFromListingName')

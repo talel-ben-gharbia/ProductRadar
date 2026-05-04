@@ -28,9 +28,6 @@ class PriceHistory
     #[ORM\ManyToOne(inversedBy: 'priceHistories')]
     private ?ProductListing $productListing = null;
 
-    #[ORM\Column]
-    private ?int $seller = null;
-
     public function getId(): ?int
     {
         return $this->id;
@@ -92,18 +89,6 @@ class PriceHistory
     public function setProductListing(?ProductListing $productListing): static
     {
         $this->productListing = $productListing;
-
-        return $this;
-    }
-
-    public function getSeller(): ?int
-    {
-        return $this->seller;
-    }
-
-    public function setSeller(int $seller): static
-    {
-        $this->seller = $seller;
 
         return $this;
     }

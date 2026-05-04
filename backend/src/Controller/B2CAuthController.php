@@ -5,7 +5,7 @@ namespace App\Controller;
 use App\Entity\B2BCompany;
 use App\Entity\B2BMarket;
 use App\Entity\Customer;
-use App\Entity\Subscription;
+use App\Entity\SubscriptionB2C;
 use App\Entity\User;
 use App\Repository\UserRepository;
 use App\Service\SubscriptionLifecycleService;
@@ -227,9 +227,9 @@ final class B2CAuthController extends AbstractController
         ];
     }
 
-    private function serializeSubscription(?Subscription $subscription): ?array
+    private function serializeSubscription(?SubscriptionB2C $subscription): ?array
     {
-        if (!$subscription instanceof Subscription) {
+        if (!$subscription instanceof SubscriptionB2C) {
             return null;
         }
 

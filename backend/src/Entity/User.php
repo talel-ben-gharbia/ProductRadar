@@ -58,7 +58,7 @@ class User
     private Collection $favorite;
 
     #[ORM\OneToOne(mappedBy: 'client', cascade: ['persist', 'remove'])]
-    private ?Subscription $subscription = null;
+    private ?SubscriptionB2C $subscription = null;
 
     /**
      * @var Collection<int, Notification>
@@ -210,12 +210,12 @@ class User
         return $this;
     }
 
-    public function getSubscription(): ?Subscription
+    public function getSubscription(): ?SubscriptionB2C
     {
         return $this->subscription;
     }
 
-    public function setSubscription(?Subscription $subscription): static
+    public function setSubscription(?SubscriptionB2C $subscription): static
     {
         // unset the owning side of the relation if necessary
         if ($subscription === null && $this->subscription !== null) {

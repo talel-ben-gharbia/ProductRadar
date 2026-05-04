@@ -6,6 +6,15 @@ export type Seller = {
   url: string | null
 }
 
+export type SellerInput = {
+  name: string
+  url: string
+}
+
+async function parseJson(response: Response): Promise<unknown> {
+  return response.json().catch(() => ({}))
+}
+
 async function fetchSellersFromApi(): Promise<Seller[]> {
   try {
     const endpoint =
@@ -41,5 +50,41 @@ export async function getSellers(): Promise<Seller[]> {
     }
 
     throw new Error("Unable to load sellers from backend. Unknown sellers service error")
+  }
+}
+
+async function writeSeller(endpoint: string, method: "POST" | "PUT" | "DELETE", payload?: SellerInput): Promise<Seller> {
+  const response = await fetch(endpoint, {
+    method,
+    headers: payload ? { "Content-Type": "application/json" } : undefined,
+    body: payload ? JSON.stringify(payload) : undefined,
+    cache: "no-store",
+  })
+
+  const data = (await parseJson(response)) as { error?: string }
+  if (!response.ok) {
+    throw new Error(data.error || "Seller request failed.")
+  }
+
+  return data as Seller
+}
+
+export async function createSeller(input: SellerInput): Promise<Seller> {
+  return writeSeller("/api/admin/sellers", "POST", input)
+}
+
+export async function updateSeller(id: number, input: SellerInput): Promise<Seller> {
+  return writeSeller(`/api/admin/sellers/${id}`, "PUT", input)
+}
+
+export async function deleteSeller(id: number): Promise<void> {
+  const response = await fetch(`/api/admin/sellers/${id}`, {
+    method: "DELETE",
+    cache: "no-store",
+  })
+
+  const data = (await parseJson(response)) as { error?: string }
+  if (!response.ok) {
+    throw new Error(data.error || "Failed to delete seller.")
   }
 }

@@ -37,7 +37,7 @@ type ProductListingSummary = {
   trust_score: number | null
   is_active: boolean | null
   created_at: string | null
-  updatet_at: string | null
+  updated_at: string | null
 }
 
 type ListingOption = {
@@ -123,7 +123,7 @@ function scoreListingOption(option: ListingOption): number {
     score += 1
   }
 
-  score += parseIsoDate(listing.updatet_at) / 100000000000000
+  score += parseIsoDate(listing.updated_at) / 100000000000000
 
   return score
 }
@@ -230,7 +230,7 @@ async function fetchProduct(id: number): Promise<ProductDetails> {
       trust_score: item.trust_score == null ? null : Number(item.trust_score),
       is_active: item.is_active == null ? null : Boolean(item.is_active),
       created_at: item.created_at == null ? null : String(item.created_at),
-      updatet_at: item.updatet_at == null ? null : String(item.updatet_at),
+      updated_at: item.updated_at == null ? null : String(item.updated_at),
     }
   })
 
@@ -255,7 +255,7 @@ export default function DuplicateCompareMergePanel({ items, onActionComplete }: 
   const [primaryIdRaw, setPrimaryIdRaw] = useState(mergeCandidates[0] ? String(mergeCandidates[0].productId) : "")
   const [duplicateIdRaw, setDuplicateIdRaw] = useState(mergeCandidates[1] ? String(mergeCandidates[1].productId) : "")
   const [strategy, setStrategy] = useState<MergeStrategy>("keep-primary")
-  const [listingSurvivorBySeller, setListingSurvivorBySeller] = useState<Record<number, number>>({})
+  const [listingSurvivorBySeller, setListingSurvivorBySeller] = useState<Record<number, number | undefined>>({})
   const [unavailableProductIds, setUnavailableProductIds] = useState<number[]>([])
   const [submitting, setSubmitting] = useState(false)
 

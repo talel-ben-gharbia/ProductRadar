@@ -11,6 +11,14 @@ use Doctrine\ORM\Mapping as ORM;
 ])]
 class B2BMarket extends User
 {
+    #[ORM\OneToOne(targetEntity: User::class)]
+    #[ORM\JoinColumn(name: 'owner_user_id', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
+    private ?User $ownerUser = null;
+
+    #[ORM\ManyToOne(targetEntity: Seller::class)]
+    #[ORM\JoinColumn(name: 'seller_id', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
+    private ?Seller $seller = null;
+
     #[ORM\Column(length: 255, nullable: true)]
     private ?string $full_name = null;
 
@@ -37,6 +45,9 @@ class B2BMarket extends User
 
     #[ORM\Column]
     private ?bool $is_verified = null;
+
+    #[ORM\Column(type: 'json', nullable: true)]
+    private ?array $usage_json = null;
 
     public function getFullName(): ?string
     {
@@ -146,4 +157,39 @@ class B2BMarket extends User
         return $this;
     }
 
+    public function getOwnerUser(): ?User
+    {
+        return $this->ownerUser;
+    }
+
+    public function setOwnerUser(?User $ownerUser): static
+    {
+        $this->ownerUser = $ownerUser;
+
+        return $this;
+    }
+
+    public function getUsageJson(): ?array
+    {
+        return $this->usage_json;
+    }
+
+    public function setUsageJson(?array $usageJson): static
+    {
+        $this->usage_json = $usageJson;
+
+        return $this;
+    }
+
+    public function getSeller(): ?Seller
+    {
+        return $this->seller;
+    }
+
+    public function setSeller(?Seller $seller): static
+    {
+        $this->seller = $seller;
+
+        return $this;
+    }
 }

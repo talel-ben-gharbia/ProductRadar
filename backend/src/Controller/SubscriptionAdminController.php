@@ -5,7 +5,7 @@ namespace App\Controller;
 use App\Entity\B2BCompany;
 use App\Entity\B2BMarket;
 use App\Entity\Customer;
-use App\Entity\Subscription;
+use App\Entity\SubscriptionB2C;
 use App\Entity\User;
 use App\Repository\UserRepository;
 use App\Service\SubscriptionLifecycleService;
@@ -45,7 +45,7 @@ final class SubscriptionAdminController extends AbstractController
             }
 
             $subscription = $user->getSubscription();
-            if (!$subscription instanceof Subscription) {
+            if (!$subscription instanceof SubscriptionB2C) {
                 $subscription = $subscriptionLifecycleService->ensureDefaultFreePlan($user);
                 $entityManager->persist($subscription);
                 $created++;
@@ -97,7 +97,7 @@ final class SubscriptionAdminController extends AbstractController
         $stats = $subscriptionRepository->getAdminStats();
 
         return $this->json([
-            'items' => array_map(fn(Subscription $subscription) => $this->serializeSubscription($subscription), $result['items']),
+            'items' => array_map(fn(SubscriptionB2C $subscription) => $this->serializeSubscription($subscription), $result['items']),
             'pagination' => [
                 'limit' => $limit,
                 'offset' => $offset,
@@ -120,14 +120,14 @@ final class SubscriptionAdminController extends AbstractController
         }
 
         $subscription = $subscriptionRepository->find($id);
-        if (!$subscription instanceof Subscription) {
+        if (!$subscription instanceof SubscriptionB2C) {
             return $this->json(['error' => 'Subscription not found.'], 404);
         }
 
         return $this->json($this->serializeSubscription($subscription));
     }
 
-    private function serializeSubscription(Subscription $subscription): array
+    private function serializeSubscription(SubscriptionB2C $subscription): array
     {
         $client = $subscription->getClient();
         $customer = $client instanceof Customer ? $client : null;

@@ -5,22 +5,22 @@ namespace App\Repository;
 use App\Entity\B2BCompany;
 use App\Entity\B2BMarket;
 use App\Entity\Customer;
-use App\Entity\Subscription;
+use App\Entity\SubscriptionB2C;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
 
 /**
- * @extends ServiceEntityRepository<Subscription>
+ * @extends ServiceEntityRepository<SubscriptionB2C>
  */
 class SubscriptionRepository extends ServiceEntityRepository
 {
     public function __construct(ManagerRegistry $registry)
     {
-        parent::__construct($registry, Subscription::class);
+        parent::__construct($registry, SubscriptionB2C::class);
     }
 
     /**
-     * @return array{items: Subscription[], total: int}
+     * @return array{items: SubscriptionB2C[], total: int}
      */
     public function paginateForAdmin(array $filters, int $limit, int $offset): array
     {
@@ -58,7 +58,7 @@ class SubscriptionRepository extends ServiceEntityRepository
         $this->applyAccountTypeFilter($qb, 'u', (string) ($filters['accountType'] ?? ''));
         $this->applyAccountTypeFilter($countQb, 'u', (string) ($filters['accountType'] ?? ''));
 
-        /** @var Subscription[] $items */
+        /** @var SubscriptionB2C[] $items */
         $items = $qb->getQuery()->getResult();
 
         $total = (int) $countQb->getQuery()->getSingleScalarResult();

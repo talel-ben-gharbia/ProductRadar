@@ -346,6 +346,15 @@ export default async function B2CProductsPage({ searchParams }: ProductsPageProp
         const refs = refsByProduct.get(product.id) ?? []
         return refs.some((ref) => ref.includes(normalizedSearchTerm))
       })
+
+      // Log the search for B2B Demand Intelligence
+      try {
+        fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/analytics/log-search`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ query: searchTerm, resultsCount: products.length }),
+        }).catch(() => {}) // Fire and forget
+      } catch { /* ignore */ }
     }
 
     if (pricedOnly) {

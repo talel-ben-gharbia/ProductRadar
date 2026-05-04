@@ -2,7 +2,7 @@
 
 namespace App\Service;
 
-use App\Entity\Subscription;
+use App\Entity\SubscriptionB2C;
 use App\Entity\User;
 
 final class SubscriptionLifecycleService
@@ -11,14 +11,14 @@ final class SubscriptionLifecycleService
     public const PLAN_PREMIUM_MONTHLY = 'PREMIUM_MONTHLY';
     public const PLAN_PREMIUM_YEARLY = 'PREMIUM_YEARLY';
 
-    public function ensureDefaultFreePlan(User $user): Subscription
+    public function ensureDefaultFreePlan(User $user): SubscriptionB2C
     {
         $subscription = $user->getSubscription();
-        if ($subscription instanceof Subscription) {
+        if ($subscription instanceof SubscriptionB2C) {
             return $subscription;
         }
 
-        $subscription = new Subscription();
+        $subscription = new SubscriptionB2C();
         $subscription->setClient($user);
         $user->setSubscription($subscription);
 
@@ -27,7 +27,7 @@ final class SubscriptionLifecycleService
         return $subscription;
     }
 
-    public function resyncExistingSubscription(Subscription $subscription): bool
+    public function resyncExistingSubscription(SubscriptionB2C $subscription): bool
     {
         $changed = false;
         $normalizedPlan = $this->normalizePlanType((string) $subscription->getPlanType());
@@ -107,7 +107,7 @@ final class SubscriptionLifecycleService
         ], true);
     }
 
-    private function applyPlanConfiguration(Subscription $subscription, string $normalizedPlan): void
+    private function applyPlanConfiguration(SubscriptionB2C $subscription, string $normalizedPlan): void
     {
         $now = new \DateTimeImmutable();
 

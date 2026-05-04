@@ -740,7 +740,7 @@ export default function ProductListingsDataTable({
                     <TableCell className="w-44">{toDate(listing.created_at)}</TableCell>
                   ) : null}
                   {visibleColumns.updatedAt ? (
-                    <TableCell className="w-44">{toDate(listing.updatet_at)}</TableCell>
+                    <TableCell className="w-44">{toDate(listing.updated_at)}</TableCell>
                   ) : null}
                   {visibleColumns.productLink ? (
                     <TableCell className="w-28">

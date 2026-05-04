@@ -33,7 +33,7 @@ export async function mergeProducts(
   primaryProductId: number,
   duplicateProductIds: number[],
   listingConflictStrategy: ListingConflictStrategy = "keep-duplicate",
-  listingSurvivorBySeller: Record<number, number> = {},
+  listingSurvivorBySeller: Record<number, number | undefined> = {},
 ): Promise<MergeProductsResponse> {
   const response = await fetch("/api/admin/quality/products/merge", {
     method: "POST",
@@ -42,7 +42,9 @@ export async function mergeProducts(
       primary_product_id: primaryProductId,
       duplicate_product_ids: duplicateProductIds,
       listing_conflict_strategy: listingConflictStrategy,
-      listing_survivor_by_seller: listingSurvivorBySeller,
+      listing_survivor_by_seller: Object.fromEntries(
+        Object.entries(listingSurvivorBySeller).filter(([_, v]) => v !== undefined)
+      ),
     }),
   })
 

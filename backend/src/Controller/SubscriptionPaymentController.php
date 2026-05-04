@@ -3,7 +3,7 @@
 namespace App\Controller;
 
 use App\Entity\Customer;
-use App\Entity\Subscription;
+use App\Entity\SubscriptionB2C;
 use App\Repository\UserRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use Stripe\Exception\ApiErrorException;
@@ -256,9 +256,9 @@ final class SubscriptionPaymentController extends AbstractController
         }
 
         $subscription = $user->getSubscription();
-        if (!$subscription instanceof Subscription) {
+        if (!$subscription instanceof SubscriptionB2C) {
             // Create new subscription and establish bidirectional relationship
-            $subscription = new Subscription();
+            $subscription = new SubscriptionB2C();
             $subscription->setClient($user);
             $this->entityManager->persist($subscription);
             // Important: flush immediately to ensure subscription is created
@@ -298,9 +298,9 @@ final class SubscriptionPaymentController extends AbstractController
         return str_contains($url, '?') ? $url . '&' . $param : $url . '?' . $param;
     }
 
-    private function serializeSubscription(?Subscription $subscription): ?array
+    private function serializeSubscription(?SubscriptionB2C $subscription): ?array
     {
-        if (!$subscription instanceof Subscription) {
+        if (!$subscription instanceof SubscriptionB2C) {
             return null;
         }
 

@@ -14,6 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { Building, ShieldCheck, Clock, Store, Tag, XCircle, CheckCircle } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import {
   Table,
@@ -32,6 +33,7 @@ import {
   type B2BReviewActivity,
   updateB2BStatus,
 } from "@/services/admin/users"
+import { getSellers, type Seller } from "@/services/admin/sellers"
 
 const PAGE_SIZE = 20
 
@@ -56,6 +58,12 @@ export default function B2BVerificationTable() {
   const [reviewAction, setReviewAction] = useState<Extract<B2BStatus, "APPROVED" | "REJECTED"> | null>(null)
   const [reviewTargetIds, setReviewTargetIds] = useState<number[]>([])
   const [reviewerNote, setReviewerNote] = useState("")
+  const [sellerId, setSellerId] = useState("")
+  const [planType, setPlanType] = useState("SILVER")
+  const [durationMonths, setDurationMonths] = useState("3")
+  const [sellers, setSellers] = useState<Seller[]>([])
+  const [detailsDialogOpen, setDetailsDialogOpen] = useState(false)
+  const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null)
 
   const reviewActionLabel = reviewAction === "APPROVED" ? "approve" : "reject"
 
@@ -76,14 +84,16 @@ export default function B2BVerificationTable() {
       setError(null)
 
       try {
-        const [response] = await Promise.all([
+        const [response, , sellersList] = await Promise.all([
           getPendingB2BUsers(PAGE_SIZE, offset, search),
           loadRecentReviews(),
+          getSellers().catch(() => []),
         ])
         if (cancelled) return
         setUsers(response.items)
         setTotal(response.pagination.total)
         setSelectedIds(new Set())
+        setSellers(sellersList as Seller[])
       } catch (err) {
         if (cancelled) return
         setError(err instanceof Error ? err.message : "Failed to fetch pending B2B users.")
@@ -139,6 +149,9 @@ export default function B2BVerificationTable() {
     setReviewTargetIds(ids)
     setReviewAction(action)
     setReviewerNote("")
+    setSellerId("")
+    setPlanType("SILVER")
+    setDurationMonths("3")
     setReviewDialogOpen(true)
   }
 
@@ -157,11 +170,19 @@ export default function B2BVerificationTable() {
 
       for (const id of reviewTargetIds) {
         try {
-          await updateB2BStatus(id, reviewAction, reviewerNote.trim() || undefined)
+          await updateB2BStatus(
+            id, 
+            reviewAction, 
+            reviewerNote.trim() || undefined,
+            (sellerId && reviewAction === "APPROVED") ? parseInt(sellerId, 10) : undefined,
+            reviewAction === "APPROVED" ? planType : undefined,
+            reviewAction === "APPROVED" ? parseInt(durationMonths, 10) : undefined
+          )
           processedIds.push(id)
           successCount += 1
-        } catch {
+        } catch (err: any) {
           failedCount += 1
+          toast.error(`Error for ID ${id}: ${err.message || "Unknown error"}`)
         }
       }
 
@@ -309,9 +330,20 @@ export default function B2BVerificationTable() {
                   <TableCell className="space-x-2 text-right">
                     <Button
                       size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setSelectedUser(user)
+                        setDetailsDialogOpen(true)
+                      }}
+                    >
+                      Details
+                    </Button>
+                    <Button
+                      size="sm"
                       variant="default"
                       disabled={processing}
                       onClick={() => openReviewDialog([user.id], "APPROVED")}
+                      className="bg-emerald-600 hover:bg-emerald-700"
                     >
                       Approve
                     </Button>
@@ -394,47 +426,206 @@ export default function B2BVerificationTable() {
         )}
       </div>
 
-      <Dialog open={reviewDialogOpen} onOpenChange={setReviewDialogOpen}>
-        <DialogContent className="sm:max-w-lg">
+      <Dialog open={detailsDialogOpen} onOpenChange={setDetailsDialogOpen}>
+        <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle>
-              {reviewAction === "APPROVED" ? "Approve" : "Reject"} {reviewTargetIds.length} request(s)
-            </DialogTitle>
+            <DialogTitle>Partner Request Details</DialogTitle>
             <DialogDescription>
-              Add an optional reviewer note. It will be stored in the moderation audit trail.
+              Full profile information for {selectedUser?.company_name || selectedUser?.email}.
             </DialogDescription>
           </DialogHeader>
 
-          <Textarea
-            value={reviewerNote}
-            onChange={(event) => setReviewerNote(event.target.value)}
-            maxLength={1000}
-            placeholder="Optional note for audit trail"
-            rows={5}
-          />
+          {selectedUser && (
+            <div className="grid gap-6 py-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Account Type</p>
+                  <Badge variant="outline" className="rounded-md">{selectedUser.account_type}</Badge>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Requested On</p>
+                  <p className="text-sm font-medium">{formatDate(selectedUser.joined_at)}</p>
+                </div>
+              </div>
+
+              <div className="space-y-3 rounded-xl border bg-muted/20 p-4">
+                <h4 className="text-xs font-semibold">Business Information</h4>
+                <div className="grid grid-cols-2 gap-x-8 gap-y-4">
+                  <div>
+                    <p className="text-[10px] uppercase text-muted-foreground">Company Name</p>
+                    <p className="text-sm font-medium">{selectedUser.company_name || "-"}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase text-muted-foreground">Website</p>
+                    {selectedUser.company_website ? (
+                      <a href={selectedUser.company_website} target="_blank" rel="noreferrer" className="text-sm font-medium text-primary hover:underline">
+                        {selectedUser.company_website}
+                      </a>
+                    ) : "-"}
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase text-muted-foreground">Market / Industry</p>
+                    <p className="text-sm font-medium">{selectedUser.company_market || "-"}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase text-muted-foreground">Location</p>
+                    <p className="text-sm font-medium">{selectedUser.company_country || "-"}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-3 rounded-xl border bg-muted/20 p-4">
+                <h4 className="text-xs font-semibold">Contact Person</h4>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-[10px] uppercase text-muted-foreground">Full Name</p>
+                    <p className="text-sm font-medium">{selectedUser.full_name || "-"}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase text-muted-foreground">Email Address</p>
+                    <p className="text-sm font-medium">{selectedUser.email}</p>
+                  </div>
+                </div>
+              </div>
+
+              {selectedUser.company_website && (
+                 <div className="space-y-2">
+                    <p className="text-xs font-semibold text-muted-foreground">Website Verification Preview</p>
+                    <div className="overflow-hidden rounded-xl border bg-slate-100 dark:bg-slate-900">
+                       <iframe 
+                         src={selectedUser.company_website} 
+                         className="h-48 w-full border-0 opacity-50 grayscale transition-all hover:opacity-100 hover:grayscale-0"
+                         title="Website Preview"
+                       />
+                    </div>
+                 </div>
+              )}
+            </div>
+          )}
 
           <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setReviewDialogOpen(false)}
-              disabled={processing}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              variant={reviewAction === "REJECTED" ? "destructive" : "default"}
-              onClick={handleModerationSubmit}
-              disabled={processing}
-            >
-              {processing
-                ? "Processing..."
-                : reviewAction === "APPROVED"
-                  ? "Approve"
-                  : "Reject"}
-            </Button>
+            <Button variant="outline" onClick={() => setDetailsDialogOpen(false)}>Close</Button>
+            <Button variant="destructive" onClick={() => { setDetailsDialogOpen(false); openReviewDialog([selectedUser!.id], "REJECTED"); }}>Reject</Button>
+            <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={() => { setDetailsDialogOpen(false); openReviewDialog([selectedUser!.id], "APPROVED"); }}>Approve Request</Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={reviewDialogOpen} onOpenChange={setReviewDialogOpen}>
+        <DialogContent className="sm:max-w-lg overflow-hidden p-0">
+          <div className={`h-2 w-full ${reviewAction === "APPROVED" ? "bg-emerald-500" : "bg-red-500"}`} />
+          <div className="px-6 pt-5 pb-6">
+            <DialogHeader className="mb-4">
+              <DialogTitle className="flex items-center gap-2 text-xl">
+                {reviewAction === "APPROVED" ? (
+                  <CheckCircle className="size-5 text-emerald-500" />
+                ) : (
+                  <XCircle className="size-5 text-red-500" />
+                )}
+                {reviewAction === "APPROVED" ? "Approve" : "Reject"} {reviewTargetIds.length} request(s)
+              </DialogTitle>
+              <DialogDescription>
+                {reviewAction === "APPROVED" 
+                  ? "Configure the partner account details and subscription plan before approving." 
+                  : "Are you sure you want to reject these requests? This action is recorded."}
+              </DialogDescription>
+            </DialogHeader>
+
+            {reviewAction === "APPROVED" && (
+              <div className="space-y-5">
+                <div className="space-y-2 rounded-xl border bg-slate-50 p-4 dark:bg-slate-900/50">
+                  <label className="flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-300">
+                    <Store className="size-4 text-slate-500" />
+                    Seller Account Integration
+                  </label>
+                  <select
+                    className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
+                    value={sellerId}
+                    onChange={(e) => setSellerId(e.target.value)}
+                    disabled={processing}
+                  >
+                    <option value="">-- Create a new seller automatically --</option>
+                    {sellers.map((s) => (
+                      <option key={s.id} value={s.id}>{s.name} (ID: {s.id})</option>
+                    ))}
+                  </select>
+                  <p className="text-[11px] leading-relaxed text-muted-foreground">
+                    If selected, this B2B Company will be linked to the existing seller to display its listings. If left blank, a new seller will be automatically created using the company name.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2 rounded-xl border border-emerald-100 bg-emerald-50/50 p-4 dark:border-emerald-900/30 dark:bg-emerald-950/20">
+                    <label className="flex items-center gap-2 text-sm font-semibold text-emerald-800 dark:text-emerald-400">
+                      <ShieldCheck className="size-4 text-emerald-600 dark:text-emerald-500" />
+                      Subscription Plan
+                    </label>
+                    <select
+                      className="flex h-10 w-full rounded-lg border-emerald-200 bg-white px-3 py-2 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-emerald-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-emerald-800 dark:bg-slate-950"
+                      value={planType}
+                      onChange={(e) => setPlanType(e.target.value)}
+                      disabled={processing}
+                    >
+                      <option value="SILVER">Silver Plan (Includes Premium)</option>
+                      <option value="GOLD">Gold Plan (Includes Premium)</option>
+                    </select>
+                  </div>
+                  <div className="space-y-2 rounded-xl border bg-slate-50 p-4 dark:bg-slate-900/50">
+                    <label className="flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-300">
+                      <Clock className="size-4 text-slate-500" />
+                      Contract Duration
+                    </label>
+                    <select
+                      className="flex h-10 w-full rounded-lg border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
+                      value={durationMonths}
+                      onChange={(e) => setDurationMonths(e.target.value)}
+                      disabled={processing}
+                    >
+                      <option value="3">3 Months</option>
+                      <option value="6">6 Months</option>
+                      <option value="12">12 Months (Annual)</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="mt-5 space-y-2">
+              <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Audit Trail Note</label>
+              <Textarea
+                value={reviewerNote}
+                onChange={(event) => setReviewerNote(event.target.value)}
+                maxLength={1000}
+                placeholder="Optional explanation for this moderation decision..."
+                rows={3}
+                className="resize-none rounded-lg focus-visible:ring-1 focus-visible:ring-indigo-500"
+              />
+            </div>
+
+            <DialogFooter className="mt-6 sm:justify-between">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setReviewDialogOpen(false)}
+                disabled={processing}
+                className="hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                className={reviewAction === "APPROVED" ? "bg-emerald-600 px-6 hover:bg-emerald-700" : "bg-red-600 px-6 hover:bg-red-700"}
+                onClick={handleModerationSubmit}
+                disabled={processing}
+              >
+                {processing
+                  ? "Processing..."
+                  : reviewAction === "APPROVED"
+                    ? "Confirm Approval"
+                    : "Confirm Rejection"}
+              </Button>
+            </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

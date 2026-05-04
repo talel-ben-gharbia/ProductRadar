@@ -264,7 +264,7 @@ export default async function ProductInfoPage({ params }: ProductInfoPageProps) 
                             <Badge variant="outline">Inactive</Badge>
                           )}
                         </TableCell>
-                        <TableCell>{toDate(listing.updatet_at)}</TableCell>
+                        <TableCell>{toDate(listing.updated_at)}</TableCell>
                         <TableCell>
                           <Button asChild variant="outline" size="sm">
                             <a href={listing.product_url} target="_blank" rel="noreferrer">

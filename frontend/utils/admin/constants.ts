@@ -1,6 +1,7 @@
 import type { LucideIcon } from "lucide-react"
 import {
   Activity,
+  Briefcase,
   Database,
   Home,
   Layers,
@@ -128,6 +129,29 @@ const SIDEBAR_CONSTANTS: SidebarItem[] = [
     ],
   },
   {
+    id: "/admin/b2b-workflows",
+    name: "B2B Workflows",
+    icon: Briefcase,
+    items: [
+      {
+        title: "B2B Subscriptions",
+        url: "/admin/b2b-workflows/subscriptions",
+      },
+      {
+        title: "Ads Requests",
+        url: "/admin/b2b-workflows/ads-requests",
+      },
+      {
+        title: "Scraping Requests",
+        url: "/admin/b2b-workflows/scraping-requests",
+      },
+      {
+        title: "Business Reports",
+        url: "/admin/b2b-workflows/reports",
+      },
+    ],
+  },
+  {
     id: "/admin/users",
     name: "Users & Accounts",
     icon: Users,
@@ -193,6 +217,10 @@ const SUPER_ADMIN_SIDEBAR_CONSTANTS: SidebarItem[] = [
       {
         title: "Data Quality",
         url: "/admin/quality-control",
+      },
+      {
+        title: "Seller Listing Collisions",
+        url: "/admin/quality-control/seller-collisions",
       },
       {
         title: "Export Data",

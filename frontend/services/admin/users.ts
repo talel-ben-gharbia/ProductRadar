@@ -182,6 +182,9 @@ export async function updateB2BStatus(
   id: number,
   status: Extract<B2BStatus, "APPROVED" | "REJECTED">,
   reviewerNote?: string,
+  sellerId?: number,
+  planType?: string,
+  durationMonths?: number
 ): Promise<AdminUser> {
   const response = await fetch(`/api/admin/users/b2b/${id}/status`, {
     method: "PATCH",
@@ -189,6 +192,9 @@ export async function updateB2BStatus(
     body: JSON.stringify({
       status,
       reviewer_note: reviewerNote,
+      seller_id: sellerId,
+      plan_type: planType,
+      duration_months: durationMonths,
     }),
   })
 

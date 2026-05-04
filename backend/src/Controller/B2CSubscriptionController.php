@@ -5,7 +5,7 @@ namespace App\Controller;
 use App\Entity\B2BCompany;
 use App\Entity\B2BMarket;
 use App\Entity\Customer;
-use App\Entity\Subscription;
+use App\Entity\SubscriptionB2C;
 use App\Repository\UserRepository;
 use App\Service\SubscriptionLifecycleService;
 use Doctrine\ORM\EntityManagerInterface;
@@ -70,7 +70,7 @@ final class B2CSubscriptionController extends AbstractController
         ]);
     }
 
-    private function serializeSubscription(Subscription $subscription): array
+    private function serializeSubscription(SubscriptionB2C $subscription): array
     {
         return [
             'id' => $subscription->getId(),
