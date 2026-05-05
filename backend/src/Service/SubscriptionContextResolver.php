@@ -50,7 +50,7 @@ final class SubscriptionContextResolver
         }
 
         // Step 1: Check B2B subscription
-        $b2bSub = $this->entityManager->getRepository(B2BSubscriptionB2C::class)->findOneBy([
+        $b2bSub = $this->entityManager->getRepository(B2BSubscription::class)->findOneBy([
             'owner_type' => $owner::class,
             'active' => true,
         ]);
@@ -208,7 +208,7 @@ final class SubscriptionContextResolver
         };
 
         // If SILVER, inherit B2C limits as fallback
-        if ($b2bSub->getPlanType() === 'SILVER' && $b2cSub instanceof Subscription) {
+        if ($b2bSub->getPlanType() === 'SILVER' && $b2cSub instanceof SubscriptionB2C) {
             $b2cLimits = $this->computeB2CLimits($b2cSub);
             return array_merge($b2cLimits, $b2bLimits);
         }
@@ -269,7 +269,7 @@ final class SubscriptionContextResolver
         return [
             'plan' => $sub->getPlanType(),
             'active' => $sub->isActive(),
-            'created_at' => $sub->getCreatedAt()?->format(\DateTimeInterface::ATOM),
+            'created_at' => $sub->getStartDate()?->format(\DateTimeInterface::ATOM),
         ];
     }
 

@@ -318,4 +318,83 @@ class ProductListing
 
         return $this;
     }
+
+    /**
+     * Get count of price changes in the last 90 days.
+     * Used by TrustScoreExplainer to measure price stability.
+     */
+    public function getPriceHistoryCount(): int
+    {
+        $ninetyDaysAgo = new \DateTimeImmutable('-90 days');
+        
+        return $this->priceHistories
+            ->filter(fn(PriceHistory $ph) => $ph->getRecordedAt() >= $ninetyDaysAgo)
+            ->count();
+    }
+
+    /**
+     * Get seller trust rating (0-5 stars).
+     * For now returns a calculated average. Can be extended to store seller ratings.
+     * Used by TrustScoreExplainer to measure seller reliability.
+     */
+    public function getSellerTrust(): ?float
+    {
+        // Placeholder: could be extended with actual seller rating system
+        // For now, return neutral rating (3.5)
+        if (!$this->seller) {
+            return 3.5;
+        }
+        
+        // In future: integrate with seller rating/review system
+        return 3.5;
+    }
+
+    /**
+     * Check if product is currently in stock.
+     * Uses the availability flag from latest observation.
+     * Used by TrustScoreExplainer to measure stock consistency.
+     */
+    public function getIsInStock(): bool
+    {
+        return $this->availability ?? false;
+    }
+
+    /**
+     * Get total count of stock observations (price history records).
+     * Used by TrustScoreExplainer to measure observation depth.
+     */
+    public function getStockObservationCount(): int
+    {
+        return $this->priceHistories->count();
+    }
+
+    /**
+     * Calculate percentage of time product was in stock based on observations.
+     * Returns value between 0 and 1 (0% to 100%).
+     * Used by TrustScoreExplainer to measure stock reliability.
+     */
+    public function getInStockPercentage(): float
+    {
+        $total = $this->priceHistories->count();
+        
+        if ($total === 0) {
+            // No history: assume current availability
+            return $this->availability ? 1.0 : 0.5;
+        }
+        
+        $inStock = $this->priceHistories
+            ->filter(fn(PriceHistory $ph) => !$ph->isOutOfStock())
+            ->count();
+        
+        return $inStock / $total;
+    }
+
+    /**
+     * Get the product's category via the product relation.
+     * Used by CompetitorDetectionEngine to filter by category.
+     */
+    public function getCategory(): ?Category
+    {
+        return $this->product?->getCategory();
+    }
 }

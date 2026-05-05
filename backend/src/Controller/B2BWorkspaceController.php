@@ -105,7 +105,7 @@ final class B2BWorkspaceController extends AbstractController
                 return $this->json(['error' => 'Notification not found.'], 404);
             }
 
-            $notification->setRead(true);
+            $notification->setIsRead(true);
             $entityManager->flush();
 
             return $this->json(['id' => $notification->getId(), 'is_read' => true]);

@@ -102,7 +102,7 @@ final class CompetitorDetectionEngine
      *   "risks": [...]
      * }
      */
-    public function generateVendorIntelligence(string $sellerName, string $category = null): array
+    public function generateVendorIntelligence(string $sellerName, ?string $category = null): array
     {
         $qb = $this->entityManager->createQueryBuilder()
             ->select('pl')

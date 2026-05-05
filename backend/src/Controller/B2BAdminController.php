@@ -243,14 +243,14 @@ final class B2BAdminController extends AbstractController
         return $this->json([
             'items' => array_map(fn (B2BReport $r) => [
                 'id' => $r->getId(),
-                'type' => $r->getType(),
+                'type' => $r->getReportType(),
                 'status' => $r->getStatus(),
                 'period_start' => $r->getPeriodStart()?->format(\DateTimeInterface::ATOM),
                 'period_end' => $r->getPeriodEnd()?->format(\DateTimeInterface::ATOM),
                 'company_name' => $r->getCompany()?->getCompanyName(),
                 'market_name' => $r->getMarket()?->getCompanyName(),
                 'created_at' => $r->getCreatedAt()?->format(\DateTimeInterface::ATOM),
-                'file_url' => $r->getFileUrl(),
+                'file_url' => $r->getFilePath(),
             ], $items),
             'pagination' => ['limit' => $limit, 'offset' => $offset, 'total' => $total],
         ]);

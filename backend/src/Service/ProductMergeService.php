@@ -153,7 +153,7 @@ final class ProductMergeService
                     $this->mergeListingFields($survivorListing, $listing);
                 }
 
-                $survivorListing->setUpdatetAt(new \DateTimeImmutable());
+                $survivorListing->setUpdatedAt(new \DateTimeImmutable());
                 $movedListings++;
             }
 
@@ -236,11 +236,11 @@ final class ProductMergeService
             $target->setCreatedAt($source->getCreatedAt());
         }
 
-        if ($target->getUpdatetAt() === null && $source->getUpdatetAt() !== null) {
-            $target->setUpdatetAt($source->getUpdatetAt());
+        if ($target->getUpdatedAt() === null && $source->getUpdatedAt() !== null) {
+            $target->setUpdatedAt($source->getUpdatedAt());
         }
 
-        $target->setUpdatetAt(new \DateTimeImmutable());
+        $target->setUpdatedAt(new \DateTimeImmutable());
     }
 
     private function moveListingRelations(ProductListing $source, ProductListing $target): int
