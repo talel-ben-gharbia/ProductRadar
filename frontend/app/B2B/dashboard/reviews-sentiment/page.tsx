@@ -85,7 +85,11 @@ export default function ReviewsSentimentPage() {
               </BarChart>
             </ResponsiveContainer>
           ) : (
-            <div className="flex h-full items-center justify-center text-sm text-muted-foreground">No review data</div>
+            <div className="flex h-full flex-col items-center justify-center text-sm text-muted-foreground">
+              <MessageSquare className="mb-2 size-8 opacity-30" />
+              <span>No review data</span>
+              <span className="text-xs text-muted-foreground/70 mt-1">Review data will appear once product ratings are collected.</span>
+            </div>
           )}
         </CardContent>
       </Card>
@@ -106,7 +110,11 @@ export default function ReviewsSentimentPage() {
               </thead>
               <tbody className="divide-y divide-border/50">
                 {data.length === 0 ? (
-                  <tr><td colSpan={5} className="px-4 py-12 text-center text-muted-foreground">No data</td></tr>
+                  <tr><td colSpan={5} className="px-4 py-16 text-center">
+                    <MessageSquare className="mx-auto mb-3 size-10 text-muted-foreground/30" />
+                    <p className="text-sm font-medium text-muted-foreground">No review data yet</p>
+                    <p className="text-xs text-muted-foreground/70 mt-1">Product reviews and sentiment scores will appear once tracked.</p>
+                  </td></tr>
                 ) : (
                   data.map((item, i) => {
                     const gap = Number(item.rating_gap_vs_competitors ?? 0)

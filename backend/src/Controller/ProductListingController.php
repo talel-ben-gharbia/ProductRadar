@@ -2,10 +2,12 @@
 
 namespace App\Controller;
 
+use App\Entity\B2BCompany;
 use App\Entity\ProductListing;
 use App\Repository\ProductRepository;
 use App\Repository\ProductListingRepository;
 use App\Repository\SellerRepository;
+use App\Service\B2BNotificationService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -14,6 +16,10 @@ use Symfony\Component\Routing\Attribute\Route;
 
 final class ProductListingController extends AbstractController
 {
+    public function __construct(
+        private readonly B2BNotificationService $b2bNotificationService,
+    ) {
+    }
     #[Route('/product-listings', name: 'get_product_listings', methods: ['GET'])]
     public function getProductListings(Request $request, ProductListingRepository $productListingRepository): JsonResponse
     {
@@ -156,6 +162,8 @@ final class ProductListingController extends AbstractController
         $listing->setUpdatedAt(new \DateTimeImmutable());
         $entityManager->flush();
 
+        $this->detectCompetitorAlerts($listing, $entityManager);
+
         return $this->json(['id' => $listing->getId(), 'availability' => $listing->isAvailability()]);
     }
 
@@ -211,6 +219,9 @@ final class ProductListingController extends AbstractController
 
         $entityManager->flush();
 
+        // Detect competitive alerts after price/availability changes
+        $this->detectCompetitorAlerts($listing, $entityManager);
+
         return $this->json(['id' => $listing->getId()]);
     }
 
@@ -226,5 +237,56 @@ final class ProductListingController extends AbstractController
         $entityManager->flush();
 
         return $this->json(['success' => true]);
+    }
+
+    private function detectCompetitorAlerts(ProductListing $listing, EntityManagerInterface $entityManager): void
+    {
+        $product = $listing->getProduct();
+        $seller = $listing->getSeller();
+        if (!$product || !$seller) return;
+
+        $listingSellerId = $seller->getId();
+        $listingPrice = $listing->getPrice();
+        $listingAvailable = $listing->isAvailability();
+
+        // Find all B2B companies whose seller matches the product's competitors
+        $b2bCompanies = $entityManager->getRepository(B2BCompany::class)->findBy(['b2b_status' => 'APPROVED', 'is_verified' => true]);
+
+        foreach ($b2bCompanies as $company) {
+            $companySeller = $company->getSeller();
+            if (!$companySeller || $companySeller->getId() === $listingSellerId) continue;
+
+            // Check if this company also sells the same product
+            $companyListings = $entityManager->getRepository(ProductListing::class)->findBy([
+                'product' => $product,
+                'seller' => $companySeller,
+                'is_active' => true,
+            ]);
+
+            foreach ($companyListings as $companyListing) {
+                if ($listingPrice !== null && $companyListing->getPrice() !== null) {
+                    // Alert 1: Competitor undercut — this listing is cheaper than the vendor's
+                    if ($listingPrice < $companyListing->getPrice()) {
+                        $this->b2bNotificationService->alertUndercut(
+                            $company,
+                            $companyListing,
+                            $seller->getName() ?? 'Unknown',
+                            $listingPrice
+                        );
+                    }
+                }
+
+                // Alert 2: Competitor OOS — this listing went OOS and vendor is in stock
+                if ($listingAvailable === false && $companyListing->isAvailability() === true) {
+                    $this->b2bNotificationService->notifyCompany(
+                        $company,
+                        'STOCK_OPPORTUNITY',
+                        sprintf('"%s" just went out of stock on "%s". You are in stock — consider promoting this product.', $seller->getName() ?? 'A competitor', $product->getName()),
+                        'HIGH',
+                        $companyListing
+                    );
+                }
+            }
+        }
     }
 }

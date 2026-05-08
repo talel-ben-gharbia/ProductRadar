@@ -21,6 +21,19 @@ type WatchlistItem = {
   total_sellers: number
 }
 
+function formatFollowedAt(value: string | null): string {
+  if (!value) {
+    return "Tracked recently"
+  }
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return "Tracked recently"
+  }
+
+  return `Tracked since ${date.toLocaleDateString()}`
+}
+
 export default function WatchlistPage() {
   const { isGold, isSilver } = useB2B()
   const [items, setItems] = useState<WatchlistItem[]>([])
@@ -204,6 +217,13 @@ export default function WatchlistPage() {
                       {item.highest_price !== null ? `${item.highest_price.toFixed(2)} DT` : "-"}
                     </p>
                   </div>
+                </div>
+
+                <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                  <Badge variant="secondary" className="rounded-full px-2 py-0.5 text-[10px] uppercase tracking-wider">
+                    {item.total_sellers} sellers
+                  </Badge>
+                  <span>{formatFollowedAt(item.followed_at)}</span>
                 </div>
 
                 <div className="mt-4 flex gap-2">

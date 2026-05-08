@@ -3,6 +3,7 @@
 namespace App\Entity;
 
 use App\Repository\B2BAdsRequestRepository;
+use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 
 #[ORM\Entity(repositoryClass: B2BAdsRequestRepository::class)]
@@ -26,6 +27,15 @@ class B2BAdsRequest
 
     #[ORM\Column(length: 20)]
     private ?string $request_type = null;
+
+    #[ORM\Column(length: 20)]
+    private ?string $target_type = null;
+
+    #[ORM\Column(type: Types::TEXT)]
+    private ?string $target_url = null;
+
+    #[ORM\Column(length: 255, nullable: true)]
+    private ?string $brand_filter = null;
 
     #[ORM\ManyToOne(targetEntity: Product::class)]
     #[ORM\JoinColumn(name: 'product_id', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
@@ -90,6 +100,42 @@ class B2BAdsRequest
     public function setRequestType(string $requestType): static
     {
         $this->request_type = strtoupper($requestType);
+
+        return $this;
+    }
+
+    public function getTargetType(): ?string
+    {
+        return $this->target_type;
+    }
+
+    public function setTargetType(string $targetType): static
+    {
+        $this->target_type = strtoupper($targetType);
+
+        return $this;
+    }
+
+    public function getTargetUrl(): ?string
+    {
+        return $this->target_url;
+    }
+
+    public function setTargetUrl(string $targetUrl): static
+    {
+        $this->target_url = $targetUrl;
+
+        return $this;
+    }
+
+    public function getBrandFilter(): ?string
+    {
+        return $this->brand_filter;
+    }
+
+    public function setBrandFilter(?string $brandFilter): static
+    {
+        $this->brand_filter = $brandFilter;
 
         return $this;
     }

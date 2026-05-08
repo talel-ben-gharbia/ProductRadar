@@ -63,7 +63,10 @@ export default function CompetitorsPage() {
               </BarChart>
             </ResponsiveContainer>
           ) : (
-            <div className="flex h-full items-center justify-center text-sm text-muted-foreground">No competitor data</div>
+            <div className="flex h-full flex-col items-center justify-center text-sm text-muted-foreground">
+              <Layers className="mb-2 size-8 opacity-30" />
+              <span>No competitor data</span>
+            </div>
           )}
         </CardContent>
       </Card>
@@ -85,7 +88,11 @@ export default function CompetitorsPage() {
               </thead>
               <tbody className="divide-y divide-border/50">
                 {data.length === 0 ? (
-                  <tr><td colSpan={6} className="px-4 py-12 text-center text-muted-foreground">No data</td></tr>
+                  <tr><td colSpan={6} className="px-4 py-16 text-center">
+                    <Layers className="mx-auto mb-3 size-10 text-muted-foreground/30" />
+                    <p className="text-sm font-medium text-muted-foreground">No competitor data yet</p>
+                    <p className="text-xs text-muted-foreground/70 mt-1">Competitor data will appear once listings from other sellers are tracked.</p>
+                  </td></tr>
                 ) : (
                   data.map((item, i) => (
                     <tr key={item.brand ?? i} className="transition-colors hover:bg-muted/20">

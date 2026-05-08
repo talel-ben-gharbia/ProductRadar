@@ -1,3 +1,4 @@
+import TrustScoreAdmin from "./trust-score-admin"
 import ProductListingsDataTable from "@/components/admin/product-listings-data-table"
 import {
   getProductListings,
@@ -101,6 +102,8 @@ export default async function ProductListingsPage({
   return (
     <section className="w-full max-w-none space-y-4">
       <h1 className="text-2xl font-bold">Product Listings</h1>
+
+      <TrustScoreAdmin />
 
       <ProductListingsDataTable
         productListings={productListings}

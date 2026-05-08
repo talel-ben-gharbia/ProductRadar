@@ -121,6 +121,22 @@ class B2BReport
 
     public function setFilePath(?string $filePath): static
     {
+        if ($filePath !== null) {
+            if (str_contains($filePath, '..')) {
+                throw new \InvalidArgumentException('Path traversal detected in file_path.');
+            }
+            if (str_contains($filePath, "\0")) {
+                throw new \InvalidArgumentException('Null byte detected in file_path.');
+            }
+            $normalized = str_replace('\\', '/', $filePath);
+            if (str_starts_with($normalized, '/')) {
+                throw new \InvalidArgumentException('Absolute path not allowed in file_path.');
+            }
+            if (preg_match('/^[a-zA-Z]:\//', $normalized)) {
+                throw new \InvalidArgumentException('Windows drive letter not allowed in file_path.');
+            }
+        }
+
         $this->file_path = $filePath;
 
         return $this;

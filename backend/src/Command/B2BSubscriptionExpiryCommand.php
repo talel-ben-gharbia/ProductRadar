@@ -8,6 +8,7 @@ use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
+use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 
@@ -26,7 +27,7 @@ final class B2BSubscriptionExpiryCommand extends Command
 
     protected function configure(): void
     {
-        $this->addOption('days', 'd', null, 'Days threshold for expiry warning (default: 7)', 7);
+        $this->addOption('days', 'd', InputOption::VALUE_OPTIONAL, 'Days threshold for expiry warning (default: 7)', 7);
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int

@@ -74,7 +74,11 @@ export default function ShareOfShelfPage() {
               </BarChart>
             </ResponsiveContainer>
           ) : (
-            <div className="flex h-full items-center justify-center text-sm text-muted-foreground">No share of shelf data available</div>
+            <div className="flex h-full flex-col items-center justify-center text-sm text-muted-foreground">
+              <BarChart3 className="mb-2 size-8 opacity-30" />
+              <span>No share of shelf data available</span>
+              <span className="text-xs text-muted-foreground/70 mt-1">Category presence data will appear once listings are categorized.</span>
+            </div>
           )}
         </CardContent>
       </Card>
@@ -95,8 +99,12 @@ export default function ShareOfShelfPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/50">
-                {data.length === 0 ? (
-                  <tr><td colSpan={4} className="px-4 py-12 text-center text-muted-foreground">No data</td></tr>
+                  {data.length === 0 ? (
+                  <tr><td colSpan={4} className="px-4 py-16 text-center">
+                    <BarChart3 className="mx-auto mb-3 size-10 text-muted-foreground/30" />
+                    <p className="text-sm font-medium text-muted-foreground">No category data yet</p>
+                    <p className="text-xs text-muted-foreground/70 mt-1">Category breakdown will populate as products are assigned to categories.</p>
+                  </td></tr>
                 ) : (
                   data.map((item, i) => (
                     <tr key={item.category_id ?? i} className="transition-colors hover:bg-muted/20">

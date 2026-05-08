@@ -27,6 +27,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { BACKEND_URL } from "@/utils/admin/constants"
 import { COOKIE_NAME, verifyB2CSessionToken } from "@/lib/b2c-session"
 import { getBestTimeToBuy } from "@/services/admin/best-time-to-buy"
 import { getRawCategories } from "@/services/admin/categories"
@@ -285,6 +286,23 @@ export default async function B2CProductDetailsPage({ params }: ProductDetailsPa
   const sessionToken = cookieStore.get(COOKIE_NAME)?.value
   const b2cSession = sessionToken ? await verifyB2CSessionToken(sessionToken) : null
   const isAuthenticated = Boolean(b2cSession)
+
+  let b2bSellerId: number | null = null
+  if (b2cSession?.type === "b2b_company") {
+    try {
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 3000)
+      const response = await fetch(
+        `${BACKEND_URL}/api/b2b/workspace/${encodeURIComponent(b2cSession.firebase_uid)}/summary`,
+        { cache: "no-store", signal: controller.signal },
+      )
+      clearTimeout(timeoutId)
+      if (response.ok) {
+        const summary = await response.json()
+        b2bSellerId = summary?.user?.seller_id ?? null
+      }
+    } catch {}
+  }
 
   let product: Product | null = null
   let listings: ProductListing[] = []
@@ -557,9 +575,17 @@ export default async function B2CProductDetailsPage({ params }: ProductDetailsPa
                             const sellerName = listing.sellerName?.trim() || seller?.name || "Unknown seller"
                             const sellerLogo = getSellerLogoUrl(seller, listing)
                             const sellerLink = toSafeUrl(seller?.url)
+                            const isOwnSellerListing = b2bSellerId !== null && listing.sellerId === b2bSellerId
 
                             return (
-                              <TableRow key={listing.id}>
+                              <TableRow
+                                key={listing.id}
+                                className={
+                                  isOwnSellerListing
+                                    ? "bg-emerald-50/80 ring-1 ring-inset ring-emerald-400 dark:bg-emerald-950/25 dark:ring-emerald-700"
+                                    : ""
+                                }
+                              >
                                 <TableCell>
                                   <div className="flex items-center gap-3">
                                     <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border bg-muted/40">
@@ -578,18 +604,40 @@ export default async function B2CProductDetailsPage({ params }: ProductDetailsPa
                                     </div>
 
                                     <div>
-                                      <p className="font-medium">{sellerName}</p>
+                                      <p className={isOwnSellerListing ? "font-medium text-emerald-700 dark:text-emerald-300" : "font-medium"}>
+                                        {sellerName}
+                                        {isOwnSellerListing && (
+                                          <Badge
+                                            variant="secondary"
+                                            className="ml-2 border border-emerald-200 bg-emerald-100 text-[9px] uppercase tracking-wider text-emerald-700 dark:border-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300"
+                                          >
+                                            You
+                                          </Badge>
+                                        )}
+                                      </p>
                                       {sellerLink ? (
                                         <a
                                           href={sellerLink}
                                           target="_blank"
                                           rel="noreferrer"
-                                          className="text-xs text-muted-foreground hover:text-primary"
+                                          className={
+                                            isOwnSellerListing
+                                              ? "text-xs text-emerald-700 hover:text-emerald-800 dark:text-emerald-300 dark:hover:text-emerald-200"
+                                              : "text-xs text-muted-foreground hover:text-primary"
+                                          }
                                         >
                                           {getDomainLabel(sellerLink)}
                                         </a>
                                       ) : (
-                                        <p className="text-xs text-muted-foreground">{getDomainLabel(listing.product_url)}</p>
+                                        <p
+                                          className={
+                                            isOwnSellerListing
+                                              ? "text-xs text-emerald-700 dark:text-emerald-300"
+                                              : "text-xs text-muted-foreground"
+                                          }
+                                        >
+                                          {getDomainLabel(listing.product_url)}
+                                        </p>
                                       )}
                                     </div>
                                   </div>

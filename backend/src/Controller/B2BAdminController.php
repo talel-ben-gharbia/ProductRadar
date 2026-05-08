@@ -10,6 +10,9 @@ use App\Entity\B2BMarket;
 use App\Entity\B2BReport;
 use App\Entity\B2BScrapingRequest;
 use App\Entity\B2BSubscription;
+use App\Entity\TrustScoreWeight;
+use App\Service\B2BNotificationService;
+use App\Service\TrustScoreCalculationService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -26,6 +29,7 @@ final class B2BAdminController extends AbstractController
         Request $request,
         AdminApiGuard $adminApiGuard,
         EntityManagerInterface $entityManager,
+        B2BNotificationService $b2bNotificationService,
     ): JsonResponse {
         if ($errorResponse = $adminApiGuard->assertAuthorized($request)) {
             return $errorResponse;
@@ -49,6 +53,8 @@ final class B2BAdminController extends AbstractController
 
         $entityManager->flush();
 
+        $b2bNotificationService->notifySubscriptionApproved($subscription, $admin);
+
         return $this->json([
             'id' => $subscription->getId(),
             'status' => 'APPROVED',
@@ -62,6 +68,7 @@ final class B2BAdminController extends AbstractController
         Request $request,
         AdminApiGuard $adminApiGuard,
         EntityManagerInterface $entityManager,
+        B2BNotificationService $b2bNotificationService,
     ): JsonResponse {
         if ($errorResponse = $adminApiGuard->assertAuthorized($request)) {
             return $errorResponse;
@@ -71,6 +78,8 @@ final class B2BAdminController extends AbstractController
         if (!$subscription instanceof B2BSubscription) {
             return $this->json(['error' => 'Subscription not found.'], 404);
         }
+
+        $b2bNotificationService->notifySubscriptionRejected($subscription);
 
         $subscription->setActive(false);
         $subscription->setUpdatedAt(new \DateTimeImmutable());
@@ -87,6 +96,7 @@ final class B2BAdminController extends AbstractController
         Request $request,
         AdminApiGuard $adminApiGuard,
         EntityManagerInterface $entityManager,
+        B2BNotificationService $b2bNotificationService,
     ): JsonResponse {
         if ($errorResponse = $adminApiGuard->assertAuthorized($request)) {
             return $errorResponse;
@@ -109,12 +119,13 @@ final class B2BAdminController extends AbstractController
         $campaign->setAdsRequest($adsRequest);
         $campaign->setStatus('ACTIVE');
         $campaign->setAgreedPrice($this->normalizeNullableFloat($body['agreed_price'] ?? null));
-        $campaign->setStartsAt(new \DateTimeImmutable($body['starts_at'] ?? 'now'));
+        $startsAt = new \DateTimeImmutable($body['starts_at'] ?? 'now');
+        $campaign->setStartsAt($startsAt);
 
         $durationDays = $adsRequest->getDurationDays();
         if ($durationDays !== null && $durationDays > 0) {
             $campaign->setEndsAt(
-                (new \DateTimeImmutable())->add(new \DateInterval("P{$durationDays}D"))
+                $startsAt->add(new \DateInterval("P{$durationDays}D"))
             );
         }
 
@@ -122,8 +133,19 @@ final class B2BAdminController extends AbstractController
         $campaign->setCreatedAt(new \DateTimeImmutable());
         $campaign->setUpdatedAt(new \DateTimeImmutable());
 
+        $adminId = $adminApiGuard->getAdminId($request);
+        $admin = $adminId !== null ? $entityManager->find(Admin::class, $adminId) : null;
+
         $entityManager->persist($campaign);
         $entityManager->flush();
+
+        $campaignDetails = [
+            'agreed_price' => $campaign->getAgreedPrice(),
+            'duration_days' => $durationDays,
+        ];
+        if ($admin instanceof Admin) {
+            $b2bNotificationService->notifyAdsRequestApproved($adsRequest, $admin, $campaignDetails);
+        }
 
         return $this->json([
             'ads_request_id' => $adsRequest->getId(),
@@ -138,6 +160,7 @@ final class B2BAdminController extends AbstractController
         Request $request,
         AdminApiGuard $adminApiGuard,
         EntityManagerInterface $entityManager,
+        B2BNotificationService $b2bNotificationService,
     ): JsonResponse {
         if ($errorResponse = $adminApiGuard->assertAuthorized($request)) {
             return $errorResponse;
@@ -153,6 +176,8 @@ final class B2BAdminController extends AbstractController
 
         $entityManager->flush();
 
+        $b2bNotificationService->notifyAdsRequestRejected($adsRequest);
+
         return $this->json(['status' => 'REJECTED']);
     }
 
@@ -162,6 +187,7 @@ final class B2BAdminController extends AbstractController
         Request $request,
         AdminApiGuard $adminApiGuard,
         EntityManagerInterface $entityManager,
+        B2BNotificationService $b2bNotificationService,
     ): JsonResponse {
         if ($errorResponse = $adminApiGuard->assertAuthorized($request)) {
             return $errorResponse;
@@ -177,6 +203,8 @@ final class B2BAdminController extends AbstractController
 
         $entityManager->flush();
 
+        $b2bNotificationService->notifyScrapingRequestApproved($scrapingRequest);
+
         return $this->json([
             'id' => $scrapingRequest->getId(),
             'status' => 'APPROVED',
@@ -189,6 +217,7 @@ final class B2BAdminController extends AbstractController
         Request $request,
         AdminApiGuard $adminApiGuard,
         EntityManagerInterface $entityManager,
+        B2BNotificationService $b2bNotificationService,
     ): JsonResponse {
         if ($errorResponse = $adminApiGuard->assertAuthorized($request)) {
             return $errorResponse;
@@ -210,7 +239,69 @@ final class B2BAdminController extends AbstractController
 
         $entityManager->flush();
 
+        $b2bNotificationService->notifyScrapingRequestRejected($scrapingRequest, $rejectionReason);
+
         return $this->json(['status' => 'REJECTED']);
+    }
+
+    #[Route('/subscriptions/{subscriptionId}/approve-renewal', name: 'b2b_admin_approve_renewal', methods: ['POST'])]
+    public function approveRenewal(
+        int $subscriptionId,
+        Request $request,
+        AdminApiGuard $adminApiGuard,
+        EntityManagerInterface $entityManager,
+        B2BNotificationService $b2bNotificationService,
+    ): JsonResponse {
+        if ($errorResponse = $adminApiGuard->assertAuthorized($request)) {
+            return $errorResponse;
+        }
+
+        $renewalRequest = $entityManager->find(B2BSubscription::class, $subscriptionId);
+        if (!$renewalRequest instanceof B2BSubscription) {
+            return $this->json(['error' => 'Renewal request not found.'], 404);
+        }
+
+        $adminId = $adminApiGuard->getAdminId($request);
+        $admin = $adminId !== null ? $entityManager->find(Admin::class, $adminId) : null;
+
+        $criteria = $renewalRequest->getCompany() !== null
+            ? ['company' => $renewalRequest->getCompany()]
+            : ['market' => $renewalRequest->getMarket()];
+
+        $currentSub = $entityManager->getRepository(B2BSubscription::class)->findOneBy(
+            $criteria + ['active' => true],
+            ['created_at' => 'DESC', 'id' => 'DESC']
+        );
+
+        $targetSub = $currentSub ?? $renewalRequest;
+        $durationMonths = $renewalRequest->getDurationMonths() ?? 12;
+        $currentEnd = $targetSub->getEndDate() ?? new \DateTimeImmutable();
+        $newEnd = $currentEnd > new \DateTimeImmutable()
+            ? (clone $currentEnd)->modify("+{$durationMonths} months")
+            : (new \DateTimeImmutable())->modify("+{$durationMonths} months");
+
+        $targetSub->setEndDate($newEnd);
+        $targetSub->setUpdatedAt(new \DateTimeImmutable());
+        $targetSub->setActive(true);
+
+        if ($admin instanceof Admin && $targetSub !== $renewalRequest) {
+            $renewalRequest->setUpdatedAt(new \DateTimeImmutable());
+        }
+
+        // Remove the pending request if separate from current
+        if ($currentSub instanceof B2BSubscription && $currentSub->getId() !== $renewalRequest->getId()) {
+            $entityManager->remove($renewalRequest);
+        }
+
+        $entityManager->flush();
+
+        $b2bNotificationService->notifySubscriptionRenewed($targetSub);
+
+        return $this->json([
+            'status' => 'RENEWED',
+            'id' => $targetSub->getId(),
+            'new_end_date' => $newEnd->format(\DateTimeInterface::ATOM),
+        ]);
     }
 
     #[Route('/reports', name: 'b2b_admin_list_reports', methods: ['GET'])]
@@ -350,9 +441,17 @@ final class B2BAdminController extends AbstractController
                 'id' => $ar->getId(),
                 'owner_type' => $ar->getOwnerType(),
                 'request_type' => $ar->getRequestType(),
+                'target_type' => $ar->getTargetType(),
+                'target_url' => $ar->getTargetUrl(),
+                'product_id' => $ar->getProduct()?->getId(),
+                'product_name' => $ar->getProduct()?->getName(),
+                'category_id' => $ar->getCategory()?->getId(),
+                'category_name' => $ar->getCategory()?->getName(),
+                'brand_filter' => $ar->getBrandFilter(),
                 'status' => $ar->getStatus(),
                 'budget_proposal' => $ar->getBudgetProposal(),
                 'duration_days' => $ar->getDurationDays(),
+                'notes' => $ar->getNotes(),
                 'company_id' => $ar->getCompany()?->getId(),
                 'company_name' => $ar->getCompany()?->getCompanyName(),
                 'created_at' => $ar->getCreatedAt()?->format(\DateTimeInterface::ATOM),
@@ -589,6 +688,114 @@ final class B2BAdminController extends AbstractController
             }, $items),
             'pagination' => ['limit' => $limit, 'offset' => $offset, 'total' => $total],
         ]);
+    }
+
+    #[Route('/trust-score/recalculate', name: 'b2b_admin_recalculate_trust_scores', methods: ['POST'])]
+    public function recalculateTrustScores(
+        Request $request,
+        AdminApiGuard $adminApiGuard,
+        TrustScoreCalculationService $trustScoreService,
+    ): JsonResponse {
+        if ($errorResponse = $adminApiGuard->assertAuthorized($request)) {
+            return $errorResponse;
+        }
+
+        $full = filter_var((string) $request->query->get('full', 'false'), FILTER_VALIDATE_BOOLEAN);
+
+        set_time_limit(300);
+
+        $updated = $full
+            ? $trustScoreService->recalculateAllListings()
+            : $trustScoreService->recalculateStaleListings();
+
+        return $this->json([
+            'status' => 'ok',
+            'mode' => $full ? 'full' : 'incremental',
+            'updated' => $updated,
+        ]);
+    }
+
+    #[Route('/trust-score/weights', name: 'b2b_admin_get_trust_score_weights', methods: ['GET'])]
+    public function getTrustScoreWeights(
+        Request $request,
+        AdminApiGuard $adminApiGuard,
+    ): JsonResponse {
+        if ($errorResponse = $adminApiGuard->assertAuthorized($request)) {
+            return $errorResponse;
+        }
+
+        $conn = $this->entityManager->getConnection();
+        $rows = $conn->fetchAllAssociative('
+            SELECT id, weight_key, weight_label, weight_value::numeric(5,4) AS weight_value, weight_group, sort_order
+            FROM trust_score_weight ORDER BY sort_order
+        ');
+
+        return $this->json(['items' => $rows]);
+    }
+
+    #[Route('/trust-score/weights', name: 'b2b_admin_update_trust_score_weights', methods: ['POST'])]
+    public function updateTrustScoreWeights(
+        Request $request,
+        AdminApiGuard $adminApiGuard,
+        TrustScoreCalculationService $trustScoreService,
+    ): JsonResponse {
+        if ($errorResponse = $adminApiGuard->assertAuthorized($request)) {
+            return $errorResponse;
+        }
+
+        $body = json_decode((string) $request->getContent(), true);
+        if (!is_array($body) || !isset($body['weights'])) {
+            return $this->json(['error' => 'Invalid request body. Expected {weights: [{id, weight_value}]}'], 400);
+        }
+
+        $conn = $this->entityManager->getConnection();
+        $conn->beginTransaction();
+        try {
+            foreach ($body['weights'] as $w) {
+                $id = (int) ($w['id'] ?? 0);
+                $value = (float) ($w['weight_value'] ?? 0);
+                if ($id > 0 && $value >= 0) {
+                    $conn->executeStatement(
+                        'UPDATE trust_score_weight SET weight_value = ? WHERE id = ?',
+                        [$value, $id]
+                    );
+                }
+            }
+            $conn->commit();
+        } catch (\Throwable $e) {
+            $conn->rollBack();
+
+            return $this->json(['error' => 'Update failed: ' . $e->getMessage()], 500);
+        }
+
+        $trustScoreService->clearWeightCache();
+
+        return $this->json(['status' => 'ok']);
+    }
+
+    #[Route('/trust-score/history', name: 'b2b_admin_get_trust_score_history', methods: ['GET'])]
+    public function getTrustScoreHistory(
+        Request $request,
+        AdminApiGuard $adminApiGuard,
+    ): JsonResponse {
+        if ($errorResponse = $adminApiGuard->assertAuthorized($request)) {
+            return $errorResponse;
+        }
+
+        $limit = max(1, min(500, $request->query->getInt('limit', 100)));
+
+        $conn = $this->entityManager->getConnection();
+        $rows = $conn->fetchAllAssociative('
+            SELECT h.id, h.listing_id, h.score, h.created_at,
+                   pl.product_id, p.name AS product_name
+            FROM trust_score_history h
+            LEFT JOIN product_listing pl ON pl.id = h.listing_id
+            LEFT JOIN product p ON p.id = pl.product_id
+            ORDER BY h.created_at DESC
+            LIMIT :limit
+        ', ['limit' => $limit]);
+
+        return $this->json(['items' => $rows]);
     }
 
     private function normalizeNullableFloat(mixed $value): ?float

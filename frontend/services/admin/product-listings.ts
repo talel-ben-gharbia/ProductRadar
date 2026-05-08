@@ -1,6 +1,10 @@
 import { BACKEND_URL } from "@/utils/admin/constants"
 import type { ProductListing } from "@/utils/types"
 
+async function parseJson(response: Response): Promise<unknown> {
+  return response.json().catch(() => ({}))
+}
+
 async function fetchProductListingsFromApi(
   productId?: number,
   sellerId?: number
@@ -68,4 +72,62 @@ export async function getProductListings(
       "Unable to load product listings from backend. Unknown product listings service error"
     )
   }
+}
+
+export async function updateProductListing(
+  id: number,
+  payload: {
+    ref?: string
+    price?: number
+    old_price?: number | null
+    product_url?: string
+    is_active?: boolean
+    availability?: boolean | null
+    productId?: number
+    sellerId?: number
+  }
+): Promise<{ id?: number }> {
+  const response = await fetch(`/api/product-listings/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  })
+
+  const data = (await parseJson(response)) as { error?: string }
+  if (!response.ok) {
+    throw new Error(data.error || "Failed to update product listing.")
+  }
+
+  return data as { id?: number }
+}
+
+export async function setProductListingActive(
+  id: number,
+  isActive: boolean,
+): Promise<{ id?: number; is_active?: boolean }> {
+  const response = await fetch(`/api/product-listings/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ is_active: isActive }),
+  })
+
+  const data = (await parseJson(response)) as { error?: string }
+  if (!response.ok) {
+    throw new Error(data.error || "Failed to update listing status.")
+  }
+
+  return data as { id?: number; is_active?: boolean }
+}
+
+export async function deleteProductListing(id: number): Promise<{ success?: boolean }> {
+  const response = await fetch(`/api/product-listings/${id}`, {
+    method: "DELETE",
+  })
+
+  const data = (await parseJson(response)) as { error?: string }
+  if (!response.ok) {
+    throw new Error(data.error || "Failed to delete product listing.")
+  }
+
+  return data as { success?: boolean }
 }

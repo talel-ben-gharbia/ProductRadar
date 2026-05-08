@@ -50,6 +50,9 @@ class ProductListing
     #[ORM\Column(type: 'json', nullable: true)]
     private ?array $trust_score_breakdown = null;
 
+    #[ORM\Column(nullable: true)]
+    private ?\DateTimeImmutable $trust_score_updated_at = null;
+
     #[ORM\Column(length: 255)]
     private ?string $ref = null;
 
@@ -319,6 +322,18 @@ class ProductListing
         return $this;
     }
 
+    public function getTrustScoreUpdatedAt(): ?\DateTimeImmutable
+    {
+        return $this->trust_score_updated_at;
+    }
+
+    public function setTrustScoreUpdatedAt(?\DateTimeImmutable $trustScoreUpdatedAt): static
+    {
+        $this->trust_score_updated_at = $trustScoreUpdatedAt;
+
+        return $this;
+    }
+
     /**
      * Get count of price changes in the last 90 days.
      * Used by TrustScoreExplainer to measure price stability.
@@ -339,13 +354,14 @@ class ProductListing
      */
     public function getSellerTrust(): ?float
     {
-        // Placeholder: could be extended with actual seller rating system
-        // For now, return neutral rating (3.5)
+        if ($this->trust_score !== null) {
+            return round(max(0.0, min(5.0, $this->trust_score / 20)), 1);
+        }
+
         if (!$this->seller) {
             return 3.5;
         }
-        
-        // In future: integrate with seller rating/review system
+
         return 3.5;
     }
 

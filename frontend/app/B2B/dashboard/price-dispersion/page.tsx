@@ -74,7 +74,11 @@ export default function PriceDispersionPage() {
               </BarChart>
             </ResponsiveContainer>
           ) : (
-            <div className="flex h-full items-center justify-center text-sm text-muted-foreground">No dispersion data</div>
+            <div className="flex h-full flex-col items-center justify-center text-sm text-muted-foreground">
+              <LineChartIcon className="mb-2 size-8 opacity-30" />
+              <span>No dispersion data</span>
+              <span className="text-xs text-muted-foreground/70 mt-1">Price spread analysis will appear once multiple sellers stock the same products.</span>
+            </div>
           )}
         </CardContent>
       </Card>
@@ -100,7 +104,11 @@ export default function PriceDispersionPage() {
               </thead>
               <tbody className="divide-y divide-border/50">
                 {data.length === 0 ? (
-                  <tr><td colSpan={8} className="px-4 py-12 text-center text-muted-foreground">No data</td></tr>
+                  <tr><td colSpan={8} className="px-4 py-16 text-center">
+                    <LineChartIcon className="mx-auto mb-3 size-10 text-muted-foreground/30" />
+                    <p className="text-sm font-medium text-muted-foreground">No price range data yet</p>
+                    <p className="text-xs text-muted-foreground/70 mt-1">Price range details will appear when products have multiple competing sellers.</p>
+                  </td></tr>
                 ) : (
                   data.map((item, i) => {
                     const dispersion = Number(item.dispersion_pct ?? 0)

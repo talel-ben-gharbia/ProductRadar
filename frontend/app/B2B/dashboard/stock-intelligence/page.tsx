@@ -94,7 +94,11 @@ export default function StockIntelligencePage() {
               </BarChart>
             </ResponsiveContainer>
           ) : (
-            <div className="flex h-full items-center justify-center text-sm text-muted-foreground">No stock intelligence data</div>
+            <div className="flex h-full flex-col items-center justify-center text-sm text-muted-foreground">
+              <AlertTriangle className="mb-2 size-8 opacity-30" />
+              <span>No stock intelligence data</span>
+              <span className="text-xs text-muted-foreground/70 mt-1">Stock data will populate as sellers are tracked.</span>
+            </div>
           )}
         </CardContent>
       </Card>
@@ -114,7 +118,11 @@ export default function StockIntelligencePage() {
               </thead>
               <tbody className="divide-y divide-border/50">
                 {data.length === 0 ? (
-                  <tr><td colSpan={4} className="px-4 py-12 text-center text-muted-foreground">No data</td></tr>
+                  <tr><td colSpan={4} className="px-4 py-16 text-center">
+                    <AlertTriangle className="mx-auto mb-3 size-10 text-muted-foreground/30" />
+                    <p className="text-sm font-medium text-muted-foreground">No stock data yet</p>
+                    <p className="text-xs text-muted-foreground/70 mt-1">Seller stock breakdown will appear once enough data is collected.</p>
+                  </td></tr>
                 ) : (
                   data.map((item, i) => {
                     const rate = Number(item.out_of_stock_rate ?? 0)

@@ -1,7 +1,10 @@
 "use client"
 
 import Link from "next/link"
-import { useCallback, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
+import { useRouter } from "next/navigation"
+
+import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -19,6 +22,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import {
+  deleteProductListing,
+  setProductListingActive,
+  updateProductListing,
+} from "@/services/admin/product-listings"
 
 type CollisionListing = {
   id: number
@@ -143,6 +151,7 @@ function toSafeAnchorId(key: string): string {
 }
 
 export default function SellerCollisionQualityPanel({ incidents }: SellerCollisionQualityPanelProps) {
+  const router = useRouter()
   const [classificationByKey, setClassificationByKey] = useState<Record<string, string>>(() =>
     readLocalStorageRecord(CLASSIFICATION_STORAGE_KEY),
   )
@@ -157,6 +166,9 @@ export default function SellerCollisionQualityPanel({ incidents }: SellerCollisi
   const [minListingCountRaw, setMinListingCountRaw] = useState("2")
   const [openByKey, setOpenByKey] = useState<Record<string, boolean>>({})
   const [reviewIncidentKey, setReviewIncidentKey] = useState<string | null>(null)
+  const [resolveSelectionById, setResolveSelectionById] = useState<Record<number, boolean>>({})
+  const [resolveTargetProductIdRaw, setResolveTargetProductIdRaw] = useState("")
+  const [resolveSubmitting, setResolveSubmitting] = useState(false)
 
   const resolvedClassifications = useMemo(() => {
     const next: Record<string, string> = {}
@@ -286,6 +298,36 @@ export default function SellerCollisionQualityPanel({ incidents }: SellerCollisi
     [incidents, reviewIncidentKey],
   )
 
+  const resolveSelectedListingIds = useMemo(() => {
+    if (!reviewIncident) {
+      return [] as number[]
+    }
+
+    return reviewIncident.listings
+      .filter((listing) => resolveSelectionById[listing.id] ?? false)
+      .map((listing) => listing.id)
+  }, [reviewIncident, resolveSelectionById])
+
+  useEffect(() => {
+    if (!reviewIncident) {
+      setResolveSelectionById({})
+      setResolveTargetProductIdRaw("")
+      return
+    }
+
+    const nextSelection: Record<number, boolean> = {}
+    for (const listing of reviewIncident.listings.slice(1)) {
+      nextSelection[listing.id] = true
+    }
+
+    setResolveSelectionById(nextSelection)
+    setResolveTargetProductIdRaw(
+      reviewIncident.suggestedTargetProductId !== null
+        ? String(reviewIncident.suggestedTargetProductId)
+        : String(reviewIncident.productId),
+    )
+  }, [reviewIncident])
+
   function setOpenState(incidentKey: string, isOpen: boolean) {
     setOpenByKey((current) => ({
       ...current,
@@ -319,6 +361,78 @@ export default function SellerCollisionQualityPanel({ incidents }: SellerCollisi
 
     const target = document.getElementById(toSafeAnchorId(nextIncident.key))
     target?.scrollIntoView({ behavior: "smooth", block: "start" })
+  }
+
+  function openResolveIncident(incidentKey: string) {
+    setReviewIncidentKey(incidentKey)
+  }
+
+  function closeResolveIncident() {
+    setReviewIncidentKey(null)
+  }
+
+  function setAllResolveSelections(isSelected: boolean) {
+    if (!reviewIncident) {
+      return
+    }
+
+    const next: Record<number, boolean> = {}
+    for (const listing of reviewIncident.listings) {
+      next[listing.id] = isSelected
+    }
+
+    setResolveSelectionById(next)
+  }
+
+  async function applyCollisionFix(action: "move" | "deactivate" | "delete") {
+    if (!reviewIncident) {
+      return
+    }
+
+    const selectedListings = reviewIncident.listings.filter((listing) => resolveSelectionById[listing.id] ?? false)
+    if (selectedListings.length === 0) {
+      toast.error("Select at least one listing to fix.")
+      return
+    }
+
+    setResolveSubmitting(true)
+    try {
+      if (action === "move") {
+        const targetProductId = Number(resolveTargetProductIdRaw)
+        if (!Number.isInteger(targetProductId) || targetProductId <= 0) {
+          toast.error("Target product ID must be a positive number.")
+          return
+        }
+
+        if (targetProductId === reviewIncident.productId) {
+          toast.error("Choose a different target product to resolve the collision.")
+          return
+        }
+
+        await Promise.all(
+          selectedListings.map((listing) =>
+            updateProductListing(listing.id, {
+              productId: targetProductId,
+            }),
+          ),
+        )
+
+        toast.success(`Moved ${selectedListings.length} listing(s) to product #${targetProductId}.`)
+      } else if (action === "deactivate") {
+        await Promise.all(selectedListings.map((listing) => setProductListingActive(listing.id, false)))
+        toast.success(`Deactivated ${selectedListings.length} listing(s).`)
+      } else {
+        await Promise.all(selectedListings.map((listing) => deleteProductListing(listing.id)))
+        toast.success(`Deleted ${selectedListings.length} listing(s).`)
+      }
+
+      closeResolveIncident()
+      router.refresh()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to apply collision fix.")
+    } finally {
+      setResolveSubmitting(false)
+    }
   }
 
   function applyBulkClassification(mode: "keep" | "manual" | "split" | "suggested") {
@@ -613,8 +727,8 @@ export default function SellerCollisionQualityPanel({ incidents }: SellerCollisi
                   </div>
 
                   <div className="flex flex-wrap items-end gap-2">
-                    <Button type="button" variant="outline" size="sm" onClick={() => setReviewIncidentKey(incident.key)}>
-                      Review Listings Popup
+                    <Button type="button" variant="outline" size="sm" onClick={() => openResolveIncident(incident.key)}>
+                      Resolve Collision
                     </Button>
                     <Button asChild type="button" variant="outline" size="sm">
                       <Link href={`/admin/product-listings?productId=${incident.productId}&sellerId=${incident.sellerId}`}>
@@ -695,16 +809,16 @@ export default function SellerCollisionQualityPanel({ incidents }: SellerCollisi
         ) : null}
       </div>
 
-      <Dialog open={reviewIncident !== null} onOpenChange={(open) => setReviewIncidentKey(open ? reviewIncidentKey : null)}>
+      <Dialog open={reviewIncident !== null} onOpenChange={(open) => (open ? null : closeResolveIncident())}>
         <DialogContent className="w-[96vw] max-w-[96vw] sm:max-w-4xl">
           {reviewIncident ? (
             <>
               <DialogHeader>
                 <DialogTitle>
-                  Listing Review: Product #{reviewIncident.productId} - {reviewIncident.productName}
+                  Resolve Collision: Product #{reviewIncident.productId} - {reviewIncident.productName}
                 </DialogTitle>
                 <DialogDescription>
-                  Seller #{reviewIncident.sellerId} - {reviewIncident.sellerName}. Compare listings and open each URL to identify which listing belongs where.
+                  Seller #{reviewIncident.sellerId} - {reviewIncident.sellerName}. Select the listings to move, deactivate, or delete so the collision is fixed in the backend.
                 </DialogDescription>
               </DialogHeader>
 
@@ -717,12 +831,66 @@ export default function SellerCollisionQualityPanel({ incidents }: SellerCollisi
                       Suggested target: #{reviewIncident.suggestedTargetProductId}
                     </span>
                   ) : null}
+                  <span className="rounded-full bg-muted px-2 py-1">
+                    Selected listings: {resolveSelectedListingIds.length}
+                  </span>
+                </div>
+
+                <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_220px]">
+                  <div className="space-y-2">
+                    <label className="text-xs font-medium text-muted-foreground">Target Product ID</label>
+                    <input
+                      className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+                      inputMode="numeric"
+                      value={resolveTargetProductIdRaw}
+                      onChange={(event) => setResolveTargetProductIdRaw(event.target.value)}
+                    />
+                  </div>
+
+                  <div className="flex flex-wrap items-end gap-2">
+                    <Button type="button" variant="outline" size="sm" onClick={() => setAllResolveSelections(true)}>
+                      Select All
+                    </Button>
+                    <Button type="button" variant="outline" size="sm" onClick={() => setAllResolveSelections(false)}>
+                      Clear
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => applyCollisionFix("move")}
+                    disabled={resolveSubmitting}
+                  >
+                    Move Selected
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => applyCollisionFix("deactivate")}
+                    disabled={resolveSubmitting}
+                  >
+                    Deactivate Selected
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => applyCollisionFix("delete")}
+                    disabled={resolveSubmitting}
+                  >
+                    Delete Selected
+                  </Button>
                 </div>
 
                 <div className="overflow-hidden rounded-md border">
                   <Table>
                     <TableHeader>
                       <TableRow>
+                        <TableHead className="w-12">Fix</TableHead>
                         <TableHead className="w-24">Listing</TableHead>
                         <TableHead className="w-48">Ref</TableHead>
                         <TableHead className="w-36">Price</TableHead>
@@ -733,6 +901,18 @@ export default function SellerCollisionQualityPanel({ incidents }: SellerCollisi
                     <TableBody>
                       {reviewIncident.listings.map((listing) => (
                         <TableRow key={`popup-${reviewIncident.key}-${listing.id}`}>
+                          <TableCell>
+                            <input
+                              type="checkbox"
+                              checked={resolveSelectionById[listing.id] ?? false}
+                              onChange={(event) =>
+                                setResolveSelectionById((current) => ({
+                                  ...current,
+                                  [listing.id]: event.target.checked,
+                                }))
+                              }
+                            />
+                          </TableCell>
                           <TableCell>#{listing.id}</TableCell>
                           <TableCell>{listing.ref ?? "-"}</TableCell>
                           <TableCell>{toMoney(listing.price)}</TableCell>
@@ -758,6 +938,10 @@ export default function SellerCollisionQualityPanel({ incidents }: SellerCollisi
                     </TableBody>
                   </Table>
                 </div>
+
+                <p className="text-xs text-muted-foreground">
+                  Tip: keep the correct listing selected, then move the wrong ones to the target product or deactivate/delete them.
+                </p>
               </div>
             </>
           ) : null}

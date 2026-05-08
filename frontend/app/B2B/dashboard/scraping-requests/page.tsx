@@ -13,8 +13,45 @@ import { Textarea } from "@/components/ui/textarea"
 
 type ScrapingRequest = { id?: number; owner_type?: string; target_type?: string; target_url?: string; status?: string; notes?: string; is_duplicate?: boolean; duplicate_reason?: string; created_at?: string }
 
+function getMonthlyLimit(planType: string | null, type: "ads" | "scraping" | "reports"): number {
+  const isGold = planType != null && planType.toUpperCase().includes("GOLD")
+  const isSilver = planType != null && planType.toUpperCase().includes("SILVER")
+  if (isGold) return type === "ads" ? 50 : type === "scraping" ? 200 : 20
+  if (isSilver) return type === "ads" ? 20 : type === "scraping" ? 50 : 5
+  return type === "ads" ? 5 : type === "scraping" ? 10 : 2
+}
+
+function getCurrentUsage(usageJson: Record<string, unknown> | null | undefined, type: string): number {
+  if (!usageJson) return 0
+  const currentMonth = new Date().toISOString().slice(0, 7)
+  const monthData = usageJson[currentMonth] as Record<string, unknown> | undefined
+  if (!monthData) return 0
+  return typeof monthData[type] === "number" ? monthData[type] : 0
+}
+
+function QuotaBar({ usage, limit, label }: { usage: number; limit: number; label: string }) {
+  const pct = limit > 0 ? Math.min(100, Math.round((usage / limit) * 100)) : 0
+  const color = pct >= 90 ? "bg-red-500" : pct >= 70 ? "bg-amber-500" : "bg-emerald-500"
+  return (
+    <div className="rounded-xl border border-border/50 bg-muted/20 p-4">
+      <div className="mb-1.5 flex items-center justify-between text-xs">
+        <span className="font-medium text-muted-foreground">{label}</span>
+        <span className={`font-bold ${pct >= 90 ? "text-red-600" : pct >= 70 ? "text-amber-600" : "text-emerald-600"}`}>
+          {usage} / {limit} used
+        </span>
+      </div>
+      <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+        <div className={`h-full rounded-full transition-all duration-500 ${color}`} style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  )
+}
+
 export default function ScrapingRequestsPage() {
-  const { mode } = useB2B()
+  const { mode, planType, summary } = useB2B()
+  const usageJson = summary?.user?.usage_json as Record<string, unknown> | null | undefined
+  const scrapingUsage = getCurrentUsage(usageJson, "scraping_requests")
+  const scrapingLimit = getMonthlyLimit(planType, "scraping")
   const [requests, setRequests] = useState<ScrapingRequest[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -94,6 +131,8 @@ export default function ScrapingRequestsPage() {
           </CardContent>
         </Card>
       )}
+
+      <QuotaBar usage={scrapingUsage} limit={scrapingLimit} label="Monthly Scraping Request Quota" />
 
       {showForm && (
         <Card className="border-border/50 border-l-4 border-l-emerald-500">

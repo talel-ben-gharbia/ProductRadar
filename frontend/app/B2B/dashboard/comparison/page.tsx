@@ -2,8 +2,8 @@
 
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
-import { useCallback, useEffect, useState } from "react"
-import { ArrowLeft, BarChart3, Eye, TrendingDown, TrendingUp } from "lucide-react"
+import React, { useCallback, useEffect, useState } from "react"
+import { ArrowLeft, BarChart3, CheckCircle2, Clock, Eye, TrendingDown, TrendingUp, XCircle } from "lucide-react"
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
 
 import { useB2B } from "@/components/B2B/b2b-context"
@@ -33,8 +33,22 @@ type ComparisonData = {
   stats: { total_sellers: number; cheapest_price: number | null; highest_price: number | null; vendor_rank: number | null }
 }
 
+function normalizeBreakdown(b: Record<string, unknown> | null): Record<string, Record<string, unknown>> | null {
+  if (b?.components) return b.components as Record<string, Record<string, unknown>>
+  const h = (b?.history ?? {}) as Record<string, unknown>
+  const l = (b?.listing ?? {}) as Record<string, unknown>
+  if (typeof h.price_stability !== 'number' && typeof l.freshness !== 'number' && typeof l.seller_score !== 'number') return null
+  const comps: Record<string, Record<string, unknown>> = {}
+  if (typeof h.price_stability === 'number') comps.price_stability = { score: Math.round(h.price_stability * 100) }
+  if (typeof h.stock_reliability === 'number') comps.stock_consistency = { score: Math.round(h.stock_reliability * 100) }
+  if (typeof h.anomaly_reliability === 'number') comps.anomaly_penalty = { score: Math.round(h.anomaly_reliability * 100) }
+  if (typeof l.freshness === 'number') comps.data_freshness = { score: Math.round(l.freshness * 100) }
+  if (typeof l.seller_score === 'number') comps.seller_reliability = { score: Math.round(l.seller_score * 100) }
+  return Object.keys(comps).length > 0 ? comps : null
+}
+
 function TrustBreakdown({ breakdown }: { breakdown: Record<string, unknown> | null }) {
-  const comps = breakdown?.components as Record<string, Record<string, unknown>> | undefined
+  const comps = normalizeBreakdown(breakdown)
   if (!comps) return <span className="text-xs text-muted-foreground">No data</span>
 
   const labels: Record<string, string> = {
@@ -70,6 +84,7 @@ export default function ComparisonPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [expandedChart, setExpandedChart] = useState<number | null>(null)
+  const [expandedTrust, setExpandedTrust] = useState<number | null>(null)
 
   const fetchComparison = useCallback(async () => {
     if (!listingId && !productId) return
@@ -161,7 +176,7 @@ export default function ComparisonPage() {
       </div>
 
       {/* Stats Bar */}
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-4">
         <Card className="border-border/50 bg-gradient-to-br from-emerald-50 to-white dark:from-emerald-950/20 dark:to-slate-900">
           <CardContent className="p-4 text-center">
             <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Cheapest</p>
@@ -184,6 +199,23 @@ export default function ComparisonPage() {
             </p>
           </CardContent>
         </Card>
+        {data.vendor_listing && (
+          <Card className="border-border/50 bg-gradient-to-br from-amber-50 to-white dark:from-amber-950/20 dark:to-slate-900">
+            <CardContent className="p-4 text-center">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">Your Price Position</p>
+              <p className="mt-1 text-xl font-black">{stats.vendor_rank ? `${stats.vendor_rank}${ordinalSuffix(stats.vendor_rank)}` : "-"}</p>
+              {stats.cheapest_price && data.vendor_listing.price && (
+                <p className="mt-0.5 text-[10px] text-muted-foreground">
+                  {data.vendor_listing.price > stats.cheapest_price
+                    ? `${((data.vendor_listing.price - stats.cheapest_price) / stats.cheapest_price * 100).toFixed(1)}% above cheapest`
+                    : data.vendor_listing.price < stats.cheapest_price
+                      ? "Below cheapest!"
+                      : "At cheapest price"}
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {/* Comparison Table */}
@@ -207,58 +239,93 @@ export default function ComparisonPage() {
                   const price = entry.price ?? 0
                   const oldPrice = entry.old_price
                   const change = oldPrice && oldPrice > 0 ? ((price - oldPrice) / oldPrice) * 100 : null
+                  const hasBreakdown = entry.trust_score_breakdown != null && !entry.is_vendor
+                  const isTrustExpanded = expandedTrust === entry.listing_id
                   return (
-                    <tr key={entry.listing_id} className={`transition-colors hover:bg-muted/20 ${entry.is_vendor ? "bg-indigo-50/50 dark:bg-indigo-950/20 ring-1 ring-inset ring-indigo-200 dark:ring-indigo-800" : ""}`}>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium">{entry.seller_name}</span>
-                          {entry.is_vendor && (
-                            <Badge variant="secondary" className="text-[9px] uppercase tracking-wider">You</Badge>
+                    <React.Fragment key={entry.listing_id}>
+                      <tr className={`transition-colors hover:bg-muted/20 ${entry.is_vendor ? "bg-indigo-50/50 dark:bg-indigo-950/20 ring-1 ring-inset ring-indigo-200 dark:ring-indigo-800" : ""}`}>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">{entry.seller_name}</span>
+                            {entry.is_vendor && (
+                              <Badge variant="secondary" className="text-[9px] uppercase tracking-wider">You</Badge>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-right font-mono font-bold">
+                          {price ? `${price.toFixed(2)} DT` : "-"}
+                          {entry.is_vendor && <span className="ml-1 text-[10px] text-indigo-500">&#10003;</span>}
+                        </td>
+                        <td className="px-4 py-3 text-right font-mono text-muted-foreground">
+                          {oldPrice ? `${oldPrice.toFixed(2)} DT` : "-"}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          {change !== null ? (
+                            <span className={`inline-flex items-center gap-0.5 text-xs font-bold ${change <= 0 ? "text-emerald-600" : "text-red-600"}`}>
+                              {change <= 0 ? <TrendingDown className="size-3" /> : <TrendingUp className="size-3" />}
+                              {Math.abs(change).toFixed(1)}%
+                            </span>
+                          ) : "-"}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          {entry.trust_score !== null ? (
+                            <button
+                              type="button"
+                              disabled={!hasBreakdown}
+                              onClick={() => setExpandedTrust(isTrustExpanded ? null : entry.listing_id)}
+                              className={`inline-block rounded-full px-2 py-0.5 text-xs font-bold transition-colors ${
+                                entry.trust_score >= 80 ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400" :
+                                entry.trust_score >= 50 ? "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400" :
+                                "bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400"
+                              } ${hasBreakdown ? "cursor-pointer hover:ring-2 hover:ring-inset hover:ring-indigo-400/50" : "cursor-default"}`}
+                              title={hasBreakdown ? "View trust score breakdown" : "No breakdown data"}
+                            >
+                              {entry.trust_score.toFixed(0)}
+                            </button>
+                          ) : "-"}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <div className="flex items-center justify-center gap-1">
+                            {entry.availability !== false ? (
+                              <CheckCircle2 className="size-3 text-emerald-500" />
+                            ) : (
+                              <XCircle className="size-3 text-red-500" />
+                            )}
+                            <Badge variant={entry.availability !== false ? "default" : "destructive"} className="text-[10px]">
+                              {entry.availability !== false ? "In Stock" : "OOS"}
+                            </Badge>
+                          </div>
+                          {entry.updated_at && (
+                            <p className="mt-0.5 text-[9px] text-muted-foreground/60">
+                              <Clock className="mr-0.5 inline size-2.5" />
+                              {new Date(entry.updated_at).toLocaleDateString()}
+                            </p>
                           )}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-right font-mono font-bold">
-                        {price ? `${price.toFixed(2)} DT` : "-"}
-                        {entry.is_vendor && <span className="ml-1 text-[10px] text-indigo-500">&#10003;</span>}
-                      </td>
-                      <td className="px-4 py-3 text-right font-mono text-muted-foreground">
-                        {oldPrice ? `${oldPrice.toFixed(2)} DT` : "-"}
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        {change !== null ? (
-                          <span className={`inline-flex items-center gap-0.5 text-xs font-bold ${change <= 0 ? "text-emerald-600" : "text-red-600"}`}>
-                            {change <= 0 ? <TrendingDown className="size-3" /> : <TrendingUp className="size-3" />}
-                            {Math.abs(change).toFixed(1)}%
-                          </span>
-                        ) : "-"}
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        {entry.trust_score !== null ? (
-                          <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-bold ${
-                            entry.trust_score >= 80 ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400" :
-                            entry.trust_score >= 50 ? "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400" :
-                            "bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400"
-                          }`}>
-                            {entry.trust_score.toFixed(0)}
-                          </span>
-                        ) : "-"}
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <Badge variant={entry.availability !== false ? "default" : "destructive"} className="text-[10px]">
-                          {entry.availability !== false ? "In Stock" : "OOS"}
-                        </Badge>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <button
-                          type="button"
-                          onClick={() => setExpandedChart(expandedChart === entry.listing_id ? null : entry.listing_id)}
-                          className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                          title="View price history"
-                        >
-                          <BarChart3 className="size-3.5" />
-                        </button>
-                      </td>
-                    </tr>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <button
+                            type="button"
+                            onClick={() => setExpandedChart(expandedChart === entry.listing_id ? null : entry.listing_id)}
+                            className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                            title="View price history"
+                          >
+                            <BarChart3 className="size-3.5" />
+                          </button>
+                        </td>
+                      </tr>
+                      {isTrustExpanded && hasBreakdown && (
+                        <tr className="bg-muted/20">
+                          <td colSpan={7} className="px-8 py-3">
+                            <div className="rounded-xl border border-border/50 bg-background p-4">
+                              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                                Trust Score Breakdown &mdash; {entry.seller_name}
+                              </p>
+                              <TrustBreakdown breakdown={entry.trust_score_breakdown as Record<string, unknown> | null} />
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
                   )
                 })}
               </tbody>
@@ -284,7 +351,7 @@ export default function ComparisonPage() {
       )}
 
       {/* Price History Charts */}
-      {expandedChart !== null && data.price_history[expandedChart] && data.price_history[expandedChart].length > 1 && (
+      {expandedChart !== null && data.price_history[expandedChart] && data.price_history[expandedChart].length > 0 && (
         <Card className="border-border/50 shadow-sm">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm">Price History</CardTitle>
