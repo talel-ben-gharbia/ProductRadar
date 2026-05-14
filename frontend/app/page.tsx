@@ -2,6 +2,7 @@ import Link from "next/link"
 import Image from "next/image"
 import { ArrowRight, BadgePercent, Flame, Gamepad2, Star, TicketPercent, TrendingUp } from "lucide-react"
 
+import BannerCarousel from "@/components/B2C/banner-carousel"
 import { B2CNavbar } from "@/components/B2C/b2c-navbar"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -16,6 +17,7 @@ import { Separator } from "@/components/ui/separator"
 import { getRawCategories } from "@/services/admin/categories"
 import { getProductListings } from "@/services/admin/product-listings"
 import { getProducts } from "@/services/admin/products"
+import type { B2BBannerCampaign } from "@/types/b2b"
 
 type RootCategory = {
   id: number
@@ -143,6 +145,7 @@ export default async function Page() {
   let rootCategories: RootCategory[] = []
   let productsForShowcase: ShowcaseProduct[] = []
   let sponsoredProducts: ShowcaseProduct[] = []
+  let banners: B2BBannerCampaign[] = []
 
   try {
     const categories = await getRawCategories()
@@ -166,6 +169,15 @@ export default async function Page() {
           discountPercent: 0,
         }))
       }
+    }
+  } catch { /* ignore */ }
+
+  // Fetch active banner campaigns
+  try {
+    const bannerRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/b2b/b2c/banners`, { cache: "no-store" })
+    if (bannerRes.ok) {
+      const bannerData = await bannerRes.json()
+      banners = bannerData?.items ?? []
     }
   } catch { /* ignore */ }
 
@@ -347,6 +359,12 @@ export default async function Page() {
             </div>
           </div>
         </section>
+
+        {banners.length > 0 && (
+          <section>
+            <BannerCarousel banners={banners} />
+          </section>
+        )}
 
         {sponsoredProducts.length > 0 && (
           <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-sm">

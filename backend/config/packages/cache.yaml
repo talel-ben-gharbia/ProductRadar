@@ -11,6 +11,7 @@ framework:
             listings.cache:
                 default_lifetime: 300
             general.cache:
+                adapter: cache.adapter.filesystem
                 default_lifetime: 300
             doctrine.result_cache_pool:
                 default_lifetime: 3600

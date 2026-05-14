@@ -228,23 +228,25 @@ final class B2BNotificationService
         $company = $adsRequest->getCompany();
         if (!$company) return;
 
-        $budget = $campaignDetails['agreed_price'] ?? $adsRequest->getBudgetProposal();
-        $targetType = $adsRequest->getTargetType() ?? 'TARGET';
-        $targetUrl = $adsRequest->getTargetUrl() ?? 'N/A';
-        $message = sprintf('Your ads request #%d has been approved with a budget of $%s.', $adsRequest->getId(), number_format((float) $budget, 2));
+        $linkUrl = $adsRequest->getLinkUrl() ?? 'N/A';
+        $dimensions = '';
+        if (isset($campaignDetails['width']) && isset($campaignDetails['height'])) {
+            $dimensions = sprintf('%dx%d px', $campaignDetails['width'], $campaignDetails['height']);
+        }
+        $duration = isset($campaignDetails['duration_days']) ? sprintf('%d days', $campaignDetails['duration_days']) : 'TBD';
+        $message = sprintf('Your banner ads request #%d has been approved!', $adsRequest->getId());
         $this->notifyCompany($company, 'ADS_REQUEST_APPROVED', $message);
 
         $this->sendEmail(
             $company,
             'Your Advertising Campaign is Live!',
             sprintf(
-                "Hello %s,\n\nYour ads request #%d has been approved! Your campaign is now active.\n\nTarget: %s\nLanding page: %s\nBudget: $%s\nDuration: %d days\n\nTrack your campaign performance from the dashboard.\n\nBest regards,\nProductRadar Team",
+                "Hello %s,\n\nYour ads request #%d has been approved! Your campaign is now active.\n\nLanding page: %s\nDimensions: %s\nDuration: %s\n\nTrack your campaign performance from the dashboard.\n\nBest regards,\nProductRadar Team",
                 $company->getCompanyName() ?? 'Valued Partner',
                 $adsRequest->getId(),
-                $targetType,
-                $targetUrl,
-                number_format((float) $budget, 2),
-                $adsRequest->getDurationDays() ?? 30,
+                $linkUrl,
+                $dimensions,
+                $duration,
             )
         );
     }

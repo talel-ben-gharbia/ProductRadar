@@ -24,7 +24,10 @@ class B2BAdsCampaign
     private ?string $status = null;
 
     #[ORM\Column(nullable: true)]
-    private ?float $agreed_price = null;
+    private ?int $width = null;
+
+    #[ORM\Column(nullable: true)]
+    private ?int $height = null;
 
     #[ORM\Column(nullable: true)]
     private ?\DateTimeImmutable $starts_at = null;
@@ -70,14 +73,26 @@ class B2BAdsCampaign
         return $this;
     }
 
-    public function getAgreedPrice(): ?float
+    public function getWidth(): ?int
     {
-        return $this->agreed_price;
+        return $this->width;
     }
 
-    public function setAgreedPrice(?float $agreedPrice): static
+    public function setWidth(?int $width): static
     {
-        $this->agreed_price = $agreedPrice;
+        $this->width = $width;
+
+        return $this;
+    }
+
+    public function getHeight(): ?int
+    {
+        return $this->height;
+    }
+
+    public function setHeight(?int $height): static
+    {
+        $this->height = $height;
 
         return $this;
     }

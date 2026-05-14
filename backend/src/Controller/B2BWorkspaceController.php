@@ -369,7 +369,8 @@ final class B2BWorkspaceController extends AbstractController
                                 $data['campaign'] = [
                                     'id' => $campaign->getId(),
                                     'status' => $campaign->getStatus(),
-                                    'agreed_price' => $campaign->getAgreedPrice(),
+                                    'width' => $campaign->getWidth(),
+                                    'height' => $campaign->getHeight(),
                                     'starts_at' => $campaign->getStartsAt()?->format(\DateTimeInterface::ATOM),
                                     'ends_at' => $campaign->getEndsAt()?->format(\DateTimeInterface::ATOM),
                                     'active' => $campaign->isActive(),
@@ -404,15 +405,244 @@ final class B2BWorkspaceController extends AbstractController
             return $this->json(['error' => $legacyQuotaCheck['message']], 429);
         }
 
-        $requestType = $this->normalizeString($body['requestType'] ?? 'BANNER');
-        $targetType = $this->normalizeString($body['targetType'] ?? 'PRODUCT');
-        $targetUrl = $this->normalizeNullableString($body['targetUrl'] ?? null);
-        $productId = $this->normalizeNullableInt($body['productId'] ?? null);
-        $categoryId = $this->normalizeNullableInt($body['categoryId'] ?? null);
-        $brandFilter = $this->normalizeNullableString($body['brandFilter'] ?? null);
+        $imageUrl = $this->normalizeNullableString($body['imageUrl'] ?? null);
+        $linkUrl = $this->normalizeNullableString($body['linkUrl'] ?? null);
 
-        if (!in_array($targetType, ['PRODUCT', 'BRAND_GROUP', 'CATEGORY'], true)) {
-            return $this->json(['error' => 'Invalid target type.'], 400);
+        if (empty($imageUrl)) {
+            return $this->json(['error' => 'Banner image URL is required.'], 400);
+        }
+        if (empty($linkUrl)) {
+            return $this->json(['error' => 'Link URL is required.'], 400);
+        }
+
+        // Check if imageUrl references a prior upload stored as DRAFT
+        if (preg_match('#^/banner/image/(\d+)$#', $imageUrl, $m)) {
+            $adsRequest = $entityManager->find(B2BAdsRequest::class, (int) $m[1]);
+            if (!$adsRequest || strtoupper((string) $adsRequest->getStatus()) !== 'DRAFT') {
+                return $this->json(['error' => 'Invalid or expired banner upload.'], 400);
+            }
+            $adsRequest->setImageUrl($imageUrl);
+            $adsRequest->setLinkUrl($linkUrl);
+            $adsRequest->setStatus('PENDING');
+            $adsRequest->setUpdatedAt(new \DateTimeImmutable());
+        } else {
+            $adsRequest = new B2BAdsRequest();
+            $adsRequest->setOwnerType($user instanceof B2BMarket ? 'B2B_MARKET' : 'B2B_COMPANY');
+            if ($user instanceof B2BCompany) {
+                $adsRequest->setCompany($user);
+            } elseif ($user instanceof B2BMarket) {
+                $adsRequest->setMarket($user);
+            }
+            $adsRequest->setRequestType('BANNER');
+            $adsRequest->setImageUrl($imageUrl);
+            $adsRequest->setLinkUrl($linkUrl);
+            $adsRequest->setStatus('PENDING');
+            $adsRequest->setCreatedAt(new \DateTimeImmutable());
+            $adsRequest->setUpdatedAt(new \DateTimeImmutable());
+            $entityManager->persist($adsRequest);
+        }
+
+        $entityManager->flush();
+
+        $this->subscriptionResolver->recordUsage($user, 'ads_requests');
+        $this->cacheVersionManager->bumpVersion($firebaseUid);
+
+        return $this->json($this->serializeAdsRequest($adsRequest), 201);
+    }
+
+    #[Route('/{firebaseUid}/ads-requests/{id}', name: 'b2b_workspace_ads_request_get', methods: ['GET'])]
+    public function getAdsRequest(
+        string $firebaseUid,
+        int $id,
+        Request $request,
+        UserRepository $userRepository,
+        EntityManagerInterface $entityManager,
+    ): JsonResponse {
+        $user = $this->resolveWorkspaceUser($firebaseUid, $userRepository);
+        if ($user instanceof JsonResponse) {
+            return $user;
+        }
+
+        $adsRequest = $entityManager->getRepository(B2BAdsRequest::class)->find($id);
+        if (!$adsRequest instanceof B2BAdsRequest) {
+            return $this->json(['error' => 'Ads request not found.'], 404);
+        }
+
+        if (!$this->isOwner($adsRequest, $user)) {
+            return $this->json(['error' => 'Forbidden.'], 403);
+        }
+
+        $data = $this->serializeAdsRequest($adsRequest);
+
+        if (strtoupper((string) $adsRequest->getStatus()) === 'APPROVED') {
+            $campaign = $entityManager->getRepository(B2BAdsCampaign::class)
+                ->findOneBy(['adsRequest' => $adsRequest]);
+            if ($campaign) {
+                $data['campaign'] = [
+                    'id' => $campaign->getId(),
+                    'status' => $campaign->getStatus(),
+                    'width' => $campaign->getWidth(),
+                    'height' => $campaign->getHeight(),
+                    'starts_at' => $campaign->getStartsAt()?->format(\DateTimeInterface::ATOM),
+                    'ends_at' => $campaign->getEndsAt()?->format(\DateTimeInterface::ATOM),
+                    'active' => $campaign->isActive(),
+                ];
+            }
+        }
+
+        return $this->json($data);
+    }
+
+    #[Route('/{firebaseUid}/ads-requests/{id}', name: 'b2b_workspace_ads_request_update', methods: ['PUT'])]
+    public function updateAdsRequest(
+        string $firebaseUid,
+        int $id,
+        Request $request,
+        UserRepository $userRepository,
+        EntityManagerInterface $entityManager,
+        B2BNotificationService $b2bNotificationService,
+    ): JsonResponse {
+        $user = $this->resolveWorkspaceUser($firebaseUid, $userRepository);
+        if ($user instanceof JsonResponse) {
+            return $user;
+        }
+
+        $adsRequest = $entityManager->getRepository(B2BAdsRequest::class)->find($id);
+        if (!$adsRequest instanceof B2BAdsRequest) {
+            return $this->json(['error' => 'Ads request not found.'], 404);
+        }
+
+        if (!$this->isOwner($adsRequest, $user)) {
+            return $this->json(['error' => 'Forbidden.'], 403);
+        }
+
+        $currentStatus = strtoupper((string) $adsRequest->getStatus());
+        if ($currentStatus === 'DRAFT') {
+            return $this->json(['error' => 'Cannot edit a draft upload.'], 400);
+        }
+
+        $body = json_decode((string) $request->getContent(), true);
+        if (!is_array($body)) {
+            return $this->json(['error' => 'Invalid request body.'], 400);
+        }
+
+        $imageUrl = $this->normalizeNullableString($body['imageUrl'] ?? null);
+        $linkUrl = $this->normalizeNullableString($body['linkUrl'] ?? null);
+
+        if (empty($imageUrl)) {
+            return $this->json(['error' => 'Banner image URL is required.'], 400);
+        }
+        if (empty($linkUrl)) {
+            return $this->json(['error' => 'Link URL is required.'], 400);
+        }
+
+        // If it's a new upload (DRAFT reference), update the reference
+        if (preg_match('#^/banner/image/(\d+)$#', $imageUrl, $m)) {
+            $upload = $entityManager->find(B2BAdsRequest::class, (int) $m[1]);
+            if ($upload && strtoupper((string) $upload->getStatus()) === 'DRAFT') {
+                $adsRequest->setImageData($upload->getImageData());
+                $adsRequest->setImageMimeType($upload->getImageMimeType());
+            }
+        }
+
+        $adsRequest->setImageUrl($imageUrl);
+        $adsRequest->setLinkUrl($linkUrl);
+        $adsRequest->setStatus('PENDING');
+        $adsRequest->setUpdatedAt(new \DateTimeImmutable());
+
+        $entityManager->flush();
+
+        $this->cacheVersionManager->bumpVersion($firebaseUid);
+
+        return $this->json($this->serializeAdsRequest($adsRequest));
+    }
+
+    #[Route('/{firebaseUid}/ads-requests/{id}', name: 'b2b_workspace_ads_request_delete', methods: ['DELETE'])]
+    public function deleteAdsRequest(
+        string $firebaseUid,
+        int $id,
+        Request $request,
+        UserRepository $userRepository,
+        EntityManagerInterface $entityManager,
+    ): JsonResponse {
+        $user = $this->resolveWorkspaceUser($firebaseUid, $userRepository);
+        if ($user instanceof JsonResponse) {
+            return $user;
+        }
+
+        $adsRequest = $entityManager->getRepository(B2BAdsRequest::class)->find($id);
+        if (!$adsRequest instanceof B2BAdsRequest) {
+            return $this->json(['error' => 'Ads request not found.'], 404);
+        }
+
+        if (!$this->isOwner($adsRequest, $user)) {
+            return $this->json(['error' => 'Forbidden.'], 403);
+        }
+
+        $currentStatus = strtoupper((string) $adsRequest->getStatus());
+        if ($currentStatus === 'DRAFT') {
+            return $this->json(['error' => 'Cannot delete a draft upload.'], 400);
+        }
+
+        // Deactivate or remove associated campaign
+        $campaign = $entityManager->getRepository(B2BAdsCampaign::class)
+            ->findOneBy(['adsRequest' => $adsRequest]);
+        if ($campaign) {
+            $campaign->setActive(false);
+            $campaign->setStatus('CANCELLED');
+            $campaign->setUpdatedAt(new \DateTimeImmutable());
+        }
+
+        $entityManager->remove($adsRequest);
+        $entityManager->flush();
+
+        $this->cacheVersionManager->bumpVersion($firebaseUid);
+
+        return $this->json(['status' => 'DELETED']);
+    }
+
+    private function isOwner(B2BAdsRequest $adsRequest, B2BCompany|B2BMarket $user): bool
+    {
+        if ($user instanceof B2BCompany) {
+            return $adsRequest->getCompany()?->getId() === $user->getId();
+        }
+        return $adsRequest->getMarket()?->getId() === $user->getId();
+    }
+
+    #[Route('/{firebaseUid}/upload-banner', name: 'b2b_workspace_upload_banner', methods: ['POST'])]
+    public function uploadBanner(
+        string $firebaseUid,
+        Request $request,
+        UserRepository $userRepository,
+        EntityManagerInterface $entityManager,
+    ): JsonResponse {
+        $user = $this->resolveWorkspaceUser($firebaseUid, $userRepository);
+        if ($user instanceof JsonResponse) {
+            return $user;
+        }
+
+        $file = $request->files->get('image');
+        if (!$file instanceof \Symfony\Component\HttpFoundation\File\UploadedFile) {
+            return $this->json(['error' => 'No image file uploaded.'], 400);
+        }
+
+        if (!$file->isValid()) {
+            return $this->json(['error' => 'Uploaded file is not valid.'], 400);
+        }
+
+        $allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+        $mimeType = $file->getMimeType();
+        if (!in_array($mimeType, $allowedMimeTypes, true)) {
+            return $this->json(['error' => 'Invalid file type. Allowed: JPG, PNG, WebP, GIF.'], 400);
+        }
+
+        if ($file->getSize() > 5 * 1024 * 1024) {
+            return $this->json(['error' => 'File size exceeds 5MB limit.'], 400);
+        }
+
+        $compressed = $this->compressImage($file->getPathname(), $mimeType);
+        if ($compressed === null) {
+            return $this->json(['error' => 'Failed to process image.'], 500);
         }
 
         $adsRequest = new B2BAdsRequest();
@@ -422,67 +652,57 @@ final class B2BWorkspaceController extends AbstractController
         } elseif ($user instanceof B2BMarket) {
             $adsRequest->setMarket($user);
         }
-        $adsRequest->setRequestType($requestType);
-        $adsRequest->setTargetType($targetType);
-        $adsRequest->setDurationDays($this->normalizeNullableInt($body['durationDays'] ?? null));
-        $adsRequest->setBudgetProposal($this->normalizeNullableFloat($body['budgetProposal'] ?? null));
-        $adsRequest->setNotes($this->normalizeNullableString($body['notes'] ?? null));
-        $adsRequest->setStatus('PENDING');
+        $adsRequest->setRequestType('BANNER');
+        $adsRequest->setStatus('DRAFT');
+        $adsRequest->setImageData($compressed);
+        $adsRequest->setImageMimeType($mimeType);
         $adsRequest->setCreatedAt(new \DateTimeImmutable());
         $adsRequest->setUpdatedAt(new \DateTimeImmutable());
-
-        if ($targetType === 'PRODUCT') {
-            if ($productId === null) {
-                return $this->json(['error' => 'A product is required for product-targeted ads.'], 400);
-            }
-
-            $product = $entityManager->find(\App\Entity\Product::class, $productId);
-            if (!$product instanceof \App\Entity\Product) {
-                return $this->json(['error' => 'Product not found.'], 404);
-            }
-
-            $adsRequest->setProduct($product);
-            $targetUrl = $targetUrl ?? sprintf('/ads/redirect/product/%d', $productId);
-        } elseif ($targetType === 'BRAND_GROUP') {
-            if ($categoryId === null || $brandFilter === null) {
-                return $this->json(['error' => 'A category and brand are required for brand group ads.'], 400);
-            }
-
-            $category = $entityManager->find(\App\Entity\Category::class, $categoryId);
-            if (!$category instanceof \App\Entity\Category) {
-                return $this->json(['error' => 'Category not found.'], 404);
-            }
-
-            $adsRequest->setCategory($category);
-            $adsRequest->setBrandFilter($brandFilter);
-            $targetUrl = $targetUrl ?? sprintf('/ads/redirect/brand/%d/%s', $categoryId, urlencode($brandFilter));
-        } else {
-            // CATEGORY
-            if ($categoryId === null) {
-                return $this->json(['error' => 'A category is required for category ads.'], 400);
-            }
-
-            $category = $entityManager->find(\App\Entity\Category::class, $categoryId);
-            if (!$category instanceof \App\Entity\Category) {
-                return $this->json(['error' => 'Category not found.'], 404);
-            }
-
-            $adsRequest->setCategory($category);
-            $targetUrl = $targetUrl ?? sprintf('/ads/redirect/category/%d', $categoryId);
-        }
-
-        $adsRequest->setTargetUrl($targetUrl ?? '');
-        if ($adsRequest->getTargetUrl() === '') {
-            return $this->json(['error' => 'Target URL is required.'], 400);
-        }
 
         $entityManager->persist($adsRequest);
         $entityManager->flush();
 
-        $this->subscriptionResolver->recordUsage($user, 'ads_requests');
-        $this->cacheVersionManager->bumpVersion($firebaseUid);
+        $imageUrl = '/banner/image/' . $adsRequest->getId();
+        $adsRequest->setImageUrl($imageUrl);
+        $entityManager->flush();
 
-        return $this->json($this->serializeAdsRequest($adsRequest), 201);
+        return $this->json(['url' => $imageUrl], 201);
+    }
+
+    private function compressImage(string $filePath, string $mimeType): ?string
+    {
+        $image = match ($mimeType) {
+            'image/jpeg' => @imagecreatefromjpeg($filePath),
+            'image/png' => @imagecreatefrompng($filePath),
+            'image/webp' => @imagecreatefromwebp($filePath),
+            'image/gif' => @imagecreatefromgif($filePath),
+            default => null,
+        };
+
+        if (!$image) {
+            return null;
+        }
+
+        $maxWidth = 1920;
+        $width = imagesx($image);
+        $height = imagesy($image);
+        $quality = 75;
+
+        if ($width > $maxWidth) {
+            $newWidth = $maxWidth;
+            $newHeight = (int) ($height * ($maxWidth / $width));
+            $newImage = imagecreatetruecolor($newWidth, $newHeight);
+            imagecopyresampled($newImage, $image, 0, 0, 0, 0, $newWidth, $newHeight, $width, $height);
+            imagedestroy($image);
+            $image = $newImage;
+        }
+
+        ob_start();
+        imagejpeg($image, null, $quality);
+        $data = ob_get_clean();
+        imagedestroy($image);
+
+        return $data !== false && $data !== '' ? $data : null;
     }
 
     #[Route('/{firebaseUid}/reports', name: 'b2b_workspace_reports', methods: ['GET', 'POST'])]
@@ -2477,19 +2697,11 @@ final class B2BWorkspaceController extends AbstractController
             'id' => $request->getId(),
             'owner_type' => $request->getOwnerType(),
             'request_type' => $request->getRequestType(),
-            'target_type' => $request->getTargetType(),
-            'target_url' => $request->getTargetUrl(),
+            'image_url' => $request->getImageUrl(),
+            'link_url' => $request->getLinkUrl(),
             'status' => $request->getStatus(),
-            'duration_days' => $request->getDurationDays(),
-            'budget_proposal' => $request->getBudgetProposal(),
-            'notes' => $request->getNotes(),
             'created_at' => $request->getCreatedAt()?->format(\DateTimeInterface::ATOM),
             'updated_at' => $request->getUpdatedAt()?->format(\DateTimeInterface::ATOM),
-            'product_id' => $request->getProduct()?->getId(),
-            'product_name' => $request->getProduct()?->getName(),
-            'category_id' => $request->getCategory()?->getId(),
-            'category_name' => $request->getCategory()?->getName(),
-            'brand_filter' => $request->getBrandFilter(),
         ];
     }
 

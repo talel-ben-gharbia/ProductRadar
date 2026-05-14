@@ -3,6 +3,8 @@
 namespace App\Controller;
 
 use App\Entity\Admin;
+use App\Entity\B2BAdsCampaign;
+use App\Entity\B2BAdsRequest;
 use App\Entity\B2BCompany;
 use App\Entity\B2BMarket;
 use App\Entity\B2BSponsoredArticle;
@@ -417,6 +419,49 @@ final class B2BSponsoredController extends AbstractController
         }
 
         return $this->json(['items' => $results]);
+    }
+
+    #[Route('/b2c/banners', name: 'b2c_banners', methods: ['GET'])]
+    public function publicBanners(
+        EntityManagerInterface $entityManager,
+    ): JsonResponse {
+        $now = new \DateTimeImmutable();
+
+        $campaigns = $entityManager->createQueryBuilder()
+            ->select('c, ar, comp')
+            ->from(B2BAdsCampaign::class, 'c')
+            ->join('c.adsRequest', 'ar')
+            ->leftJoin('ar.company', 'comp')
+            ->where('c.active = :active')
+            ->andWhere('c.status = :status')
+            ->andWhere('c.ends_at IS NOT NULL AND c.ends_at > :now')
+            ->setParameter('active', true)
+            ->setParameter('status', 'ACTIVE')
+            ->setParameter('now', $now)
+            ->orderBy('c.created_at', 'DESC')
+            ->getQuery()
+            ->getResult();
+
+        $items = [];
+        foreach ($campaigns as $campaign) {
+            if (!$campaign instanceof B2BAdsCampaign) continue;
+
+            $adsRequest = $campaign->getAdsRequest();
+            if (!$adsRequest) continue;
+
+            $items[] = [
+                'id' => $campaign->getId(),
+                'image_url' => $adsRequest->getImageUrl(),
+                'link_url' => $adsRequest->getLinkUrl(),
+                'width' => $campaign->getWidth(),
+                'height' => $campaign->getHeight(),
+                'starts_at' => $campaign->getStartsAt()?->format(\DateTimeInterface::ATOM),
+                'ends_at' => $campaign->getEndsAt()?->format(\DateTimeInterface::ATOM),
+                'company_name' => $adsRequest->getCompany()?->getCompanyName(),
+            ];
+        }
+
+        return $this->json(['items' => $items]);
     }
 
     // ─────────────────────────────────────────────

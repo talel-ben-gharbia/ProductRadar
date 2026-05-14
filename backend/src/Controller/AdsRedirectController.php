@@ -2,6 +2,7 @@
 
 namespace App\Controller;
 
+use App\Entity\B2BAdsCampaign;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Response;
@@ -50,6 +51,32 @@ final class AdsRedirectController extends AbstractController
     {
         $this->logClick('category', (string) $categoryId);
         return $this->redirect(sprintf('/B2C/products?categoryId=%d', $categoryId), Response::HTTP_MOVED_PERMANENTLY);
+    }
+
+    /**
+     * Redirect to a banner ad's destination URL.
+     */
+    #[Route('/redirect/banner/{campaignId}', name: 'redirect_banner', requirements: ['campaignId' => '\d+'])]
+    public function redirectBanner(int $campaignId): Response
+    {
+        $campaign = $this->entityManager->find(B2BAdsCampaign::class, $campaignId);
+        if (!$campaign instanceof B2BAdsCampaign) {
+            return $this->redirect('/', Response::HTTP_FOUND);
+        }
+
+        $adsRequest = $campaign->getAdsRequest();
+        if (!$adsRequest) {
+            return $this->redirect('/', Response::HTTP_FOUND);
+        }
+
+        $linkUrl = $adsRequest->getLinkUrl();
+        if (empty($linkUrl)) {
+            return $this->redirect('/', Response::HTTP_FOUND);
+        }
+
+        $this->logClick('banner', (string) $campaignId);
+
+        return $this->redirect($linkUrl, Response::HTTP_FOUND);
     }
 
     private function logClick(string $targetType, string $targetRef): void

@@ -140,11 +140,12 @@ final class B2BAdminController extends AbstractController
         $campaign = new B2BAdsCampaign();
         $campaign->setAdsRequest($adsRequest);
         $campaign->setStatus('ACTIVE');
-        $campaign->setAgreedPrice($this->normalizeNullableFloat($body['agreed_price'] ?? null));
+        $campaign->setWidth($this->normalizeNullableInt($body['width'] ?? null));
+        $campaign->setHeight($this->normalizeNullableInt($body['height'] ?? null));
         $startsAt = new \DateTimeImmutable($body['starts_at'] ?? 'now');
         $campaign->setStartsAt($startsAt);
 
-        $durationDays = $adsRequest->getDurationDays();
+        $durationDays = $this->normalizeNullableInt($body['duration_days'] ?? null);
         if ($durationDays !== null && $durationDays > 0) {
             $campaign->setEndsAt(
                 $startsAt->add(new \DateInterval("P{$durationDays}D"))
@@ -164,8 +165,9 @@ final class B2BAdminController extends AbstractController
         $this->invalidateCache($this->cache);
 
         $campaignDetails = [
-            'agreed_price' => $campaign->getAgreedPrice(),
             'duration_days' => $durationDays,
+            'width' => $campaign->getWidth(),
+            'height' => $campaign->getHeight(),
         ];
         if ($admin instanceof Admin) {
             $b2bNotificationService->notifyAdsRequestApproved($adsRequest, $admin, $campaignDetails);
@@ -550,20 +552,14 @@ final class B2BAdminController extends AbstractController
                     'id' => $ar->getId(),
                     'owner_type' => $ar->getOwnerType(),
                     'request_type' => $ar->getRequestType(),
-                    'target_type' => $ar->getTargetType(),
-                    'target_url' => $ar->getTargetUrl(),
-                    'product_id' => $ar->getProduct()?->getId(),
-                    'product_name' => $ar->getProduct()?->getName(),
-                    'category_id' => $ar->getCategory()?->getId(),
-                    'category_name' => $ar->getCategory()?->getName(),
-                    'brand_filter' => $ar->getBrandFilter(),
+                    'image_url' => $ar->getImageUrl(),
+                    'link_url' => $ar->getLinkUrl(),
+                    'image_mime_type' => $ar->getImageMimeType(),
                     'status' => $ar->getStatus(),
-                    'budget_proposal' => $ar->getBudgetProposal(),
-                    'duration_days' => $ar->getDurationDays(),
-                    'notes' => $ar->getNotes(),
                     'company_id' => $ar->getCompany()?->getId(),
                     'company_name' => $ar->getCompany()?->getCompanyName(),
                     'created_at' => $ar->getCreatedAt()?->format(\DateTimeInterface::ATOM),
+                    'updated_at' => $ar->getUpdatedAt()?->format(\DateTimeInterface::ATOM),
                 ], $items),
                 'pagination' => [
                     'limit' => $limit,
@@ -924,5 +920,10 @@ final class B2BAdminController extends AbstractController
     private function normalizeNullableFloat(mixed $value): ?float
     {
         return is_numeric($value) ? (float) $value : null;
+    }
+
+    private function normalizeNullableInt(mixed $value): ?int
+    {
+        return is_numeric($value) ? (int) $value : null;
     }
 }

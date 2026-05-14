@@ -74,18 +74,36 @@ export type B2BAdsRequest = {
   id?: number
   owner_type?: string
   request_type?: string
-  target_type?: string
+  image_url?: string
+  link_url?: string
   target_url?: string
   status?: string
   duration_days?: number
   budget_proposal?: number
   notes?: string
   created_at?: string
-  product_id?: number
-  category_id?: number
-  brand_filter?: string
-  product_name?: string
-  category_name?: string
+  updated_at?: string
+  campaign?: {
+    id: number
+    status?: string
+
+    width?: number
+    height?: number
+    starts_at?: string
+    ends_at?: string
+    active?: boolean
+  }
+}
+
+export type B2BBannerCampaign = {
+  id: number
+  image_url: string
+  link_url: string
+  width: number | null
+  height: number | null
+  starts_at?: string
+  ends_at?: string
+  company_name: string | null
 }
 
 export type B2BSearchResult = {

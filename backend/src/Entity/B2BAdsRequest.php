@@ -32,31 +32,17 @@ class B2BAdsRequest
     #[ORM\Column(length: 20)]
     private ?string $request_type = null;
 
-    #[ORM\Column(length: 20)]
-    private ?string $target_type = null;
+    #[ORM\Column(type: Types::TEXT, nullable: true)]
+    private ?string $image_url = null;
 
-    #[ORM\Column(type: Types::TEXT)]
-    private ?string $target_url = null;
+    #[ORM\Column(type: Types::TEXT, nullable: true)]
+    private ?string $link_url = null;
 
-    #[ORM\Column(length: 255, nullable: true)]
-    private ?string $brand_filter = null;
+    #[ORM\Column(type: Types::BLOB, nullable: true)]
+    private mixed $image_data = null;
 
-    #[ORM\ManyToOne(targetEntity: Product::class)]
-    #[ORM\JoinColumn(name: 'product_id', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
-    private ?Product $product = null;
-
-    #[ORM\ManyToOne(targetEntity: Category::class)]
-    #[ORM\JoinColumn(name: 'category_id', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
-    private ?Category $category = null;
-
-    #[ORM\Column(nullable: true)]
-    private ?int $duration_days = null;
-
-    #[ORM\Column(nullable: true)]
-    private ?float $budget_proposal = null;
-
-    #[ORM\Column(type: 'text', nullable: true)]
-    private ?string $notes = null;
+    #[ORM\Column(length: 50, nullable: true)]
+    private ?string $image_mime_type = null;
 
     #[ORM\Column(length: 20)]
     private ?string $status = null;
@@ -120,98 +106,53 @@ class B2BAdsRequest
         return $this;
     }
 
-    public function getTargetType(): ?string
+    public function getImageUrl(): ?string
     {
-        return $this->target_type;
+        return $this->image_url;
     }
 
-    public function setTargetType(string $targetType): static
+    public function setImageUrl(?string $imageUrl): static
     {
-        $this->target_type = strtoupper($targetType);
+        $this->image_url = $imageUrl;
 
         return $this;
     }
 
-    public function getTargetUrl(): ?string
+    public function getLinkUrl(): ?string
     {
-        return $this->target_url;
+        return $this->link_url;
     }
 
-    public function setTargetUrl(string $targetUrl): static
+    public function setLinkUrl(?string $linkUrl): static
     {
-        $this->target_url = $targetUrl;
+        $this->link_url = $linkUrl;
 
         return $this;
     }
 
-    public function getBrandFilter(): ?string
+    public function getImageData(): mixed
     {
-        return $this->brand_filter;
+        return $this->image_data;
     }
 
-    public function setBrandFilter(?string $brandFilter): static
+    public function setImageData(mixed $imageData): static
     {
-        $this->brand_filter = $brandFilter;
+        if (is_resource($imageData)) {
+            $imageData = stream_get_contents($imageData);
+        }
+        $this->image_data = $imageData;
 
         return $this;
     }
 
-    public function getProduct(): ?Product
+    public function getImageMimeType(): ?string
     {
-        return $this->product;
+        return $this->image_mime_type;
     }
 
-    public function setProduct(?Product $product): static
+    public function setImageMimeType(?string $imageMimeType): static
     {
-        $this->product = $product;
-
-        return $this;
-    }
-
-    public function getCategory(): ?Category
-    {
-        return $this->category;
-    }
-
-    public function setCategory(?Category $category): static
-    {
-        $this->category = $category;
-
-        return $this;
-    }
-
-    public function getDurationDays(): ?int
-    {
-        return $this->duration_days;
-    }
-
-    public function setDurationDays(?int $durationDays): static
-    {
-        $this->duration_days = $durationDays;
-
-        return $this;
-    }
-
-    public function getBudgetProposal(): ?float
-    {
-        return $this->budget_proposal;
-    }
-
-    public function setBudgetProposal(?float $budgetProposal): static
-    {
-        $this->budget_proposal = $budgetProposal;
-
-        return $this;
-    }
-
-    public function getNotes(): ?string
-    {
-        return $this->notes;
-    }
-
-    public function setNotes(?string $notes): static
-    {
-        $this->notes = $notes;
+        $this->image_mime_type = $imageMimeType;
 
         return $this;
     }
