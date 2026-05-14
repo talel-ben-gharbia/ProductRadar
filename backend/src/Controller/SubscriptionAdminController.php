@@ -4,15 +4,16 @@ namespace App\Controller;
 
 use App\Entity\B2BCompany;
 use App\Entity\B2BMarket;
-use App\Entity\Customer;
-use App\Entity\SubscriptionB2C;
+use App\Entity\Subscription;
 use App\Entity\User;
 use App\Repository\UserRepository;
 use App\Service\SubscriptionLifecycleService;
 use Doctrine\ORM\EntityManagerInterface;
 use App\Repository\SubscriptionRepository;
 use App\Security\AdminApiGuard;
+use Psr\Cache\CacheItemPoolInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Attribute\Route;
@@ -20,6 +21,18 @@ use Symfony\Component\Routing\Attribute\Route;
 #[Route('/admin/api/subscriptions')]
 final class SubscriptionAdminController extends AbstractController
 {
+    use CachedResponseTrait;
+
+    private const CACHE_KEY_LIST = 'subscriptions.list';
+    private const CACHE_KEY_DETAIL = 'subscriptions.detail.';
+
+    public function __construct(
+        #[Autowire(service: 'general.cache')]
+        private readonly CacheItemPoolInterface $cache,
+        private readonly EntityManagerInterface $entityManager,
+    ) {
+    }
+
     #[Route('/resync', name: 'admin_subscriptions_resync', methods: ['POST'])]
     public function resync(
         Request $request,
@@ -45,7 +58,7 @@ final class SubscriptionAdminController extends AbstractController
             }
 
             $subscription = $user->getSubscription();
-            if (!$subscription instanceof SubscriptionB2C) {
+            if (!$subscription instanceof Subscription) {
                 $subscription = $subscriptionLifecycleService->ensureDefaultFreePlan($user);
                 $entityManager->persist($subscription);
                 $created++;
@@ -61,6 +74,8 @@ final class SubscriptionAdminController extends AbstractController
         }
 
         $entityManager->flush();
+
+        $this->invalidateCache($this->cache);
 
         return $this->json([
             'message' => 'Subscription resync completed.',
@@ -93,18 +108,22 @@ final class SubscriptionAdminController extends AbstractController
             'accountType' => $request->query->get('accountType') ?? $request->query->get('scope'),
         ];
 
-        $result = $subscriptionRepository->paginateForAdmin($filters, $limit, $offset);
-        $stats = $subscriptionRepository->getAdminStats();
+        $cacheKey = self::CACHE_KEY_LIST . ".l{$limit}.o{$offset}." . md5(serialize($filters));
 
-        return $this->json([
-            'items' => array_map(fn(SubscriptionB2C $subscription) => $this->serializeSubscription($subscription), $result['items']),
-            'pagination' => [
-                'limit' => $limit,
-                'offset' => $offset,
-                'total' => $result['total'],
-            ],
-            'stats' => $stats,
-        ]);
+        return $this->cachedGet($this->cache, $cacheKey, function () use ($subscriptionRepository, $filters, $limit, $offset): array {
+            $result = $subscriptionRepository->paginateForAdmin($filters, $limit, $offset);
+            $stats = $subscriptionRepository->getAdminStats();
+
+            return [
+                'items' => array_map(fn(Subscription $subscription) => $this->serializeSubscription($subscription), $result['items']),
+                'pagination' => [
+                    'limit' => $limit,
+                    'offset' => $offset,
+                    'total' => $result['total'],
+                ],
+                'stats' => $stats,
+            ];
+        });
     }
 
     #[Route('/{id}', name: 'admin_subscriptions_detail', methods: ['GET'])]
@@ -119,22 +138,27 @@ final class SubscriptionAdminController extends AbstractController
             return $authError;
         }
 
-        $subscription = $subscriptionRepository->find($id);
-        if (!$subscription instanceof SubscriptionB2C) {
-            return $this->json(['error' => 'Subscription not found.'], 404);
-        }
+        return $this->cachedGet($this->cache, self::CACHE_KEY_DETAIL . $id, function () use ($id, $subscriptionRepository): array {
+            $subscription = $subscriptionRepository->find($id);
+            if (!$subscription instanceof Subscription) {
+                throw new \RuntimeException('Subscription not found.');
+            }
 
-        return $this->json($this->serializeSubscription($subscription));
+            return $this->serializeSubscription($subscription);
+        });
     }
 
-    private function serializeSubscription(SubscriptionB2C $subscription): array
+    private function serializeSubscription(Subscription $subscription): array
     {
-        $client = $subscription->getClient();
-        $customer = $client instanceof Customer ? $client : null;
-        $b2bClient = $client instanceof B2BCompany || $client instanceof B2BMarket ? $client : null;
+        $ownerType = $subscription->getOwnerType();
+        $ownerId = $subscription->getOwnerId();
+        $ownerName = $this->resolveOwnerName($ownerType, $ownerId);
 
         return [
             'id' => $subscription->getId(),
+            'owner_type' => $ownerType,
+            'owner_id' => $ownerId,
+            'owner_name' => $ownerName,
             'plan_type' => $subscription->getPlanType(),
             'active' => $subscription->isActive(),
             'start_date' => $subscription->getStartDate()?->format(\DateTimeInterface::ATOM),
@@ -142,23 +166,50 @@ final class SubscriptionAdminController extends AbstractController
             'alerts_limit' => $subscription->getAlertsLimit(),
             'favorites_limit' => $subscription->getFavoritesLimit(),
             'price_history_access' => $subscription->getPriceHistoryAccess(),
-            'client' => $client !== null ? [
-                'id' => $client->getId(),
-                'email' => $client->getEmail(),
-                'is_active' => $client->isActive(),
-                'account_type' => $this->getAccountType($client),
-                'account_status' => $client->getAccountStatus(),
-                'company_name' => $b2bClient?->getCompanyName(),
-            ] : null,
+            'duration_months' => $subscription->getDurationMonths(),
+            'activated_at' => $subscription->getActivatedAt()?->format(\DateTimeInterface::ATOM),
         ];
     }
 
-    private function getAccountType(User $user): string
+    private function resolveOwnerName(?string $ownerType, ?int $ownerId): string
     {
-        return match (true) {
-            $user instanceof B2BCompany => 'B2B_COMPANY',
-            $user instanceof B2BMarket => 'B2B_MARKET',
-            default => 'B2C',
+        if ($ownerType === null || $ownerId === null || $ownerId <= 0) {
+            return 'Unknown';
+        }
+
+        return match (strtoupper($ownerType)) {
+            'USER' => $this->resolveUserName($ownerId),
+            'COMPANY', 'B2B_COMPANY' => $this->resolveCompanyName($ownerId),
+            'MARKET', 'B2B_MARKET' => $this->resolveMarketName($ownerId),
+            default => 'Unknown (' . $ownerType . ')',
         };
     }
+
+    private function resolveUserName(int $userId): string
+    {
+        $user = $this->entityManager->find(User::class, $userId);
+        if (!$user instanceof User) {
+            return "User #{$userId}";
+        }
+        return (string) ($user->getEmail() ?? $user->getFirebaseUid() ?? "User #{$userId}");
+    }
+
+    private function resolveCompanyName(int $companyId): string
+    {
+        $company = $this->entityManager->find(B2BCompany::class, $companyId);
+        if (!$company instanceof B2BCompany) {
+            return "Company #{$companyId}";
+        }
+        return (string) ($company->getCompanyName() ?? $company->getFullName() ?? $company->getEmail() ?? "Company #{$companyId}");
+    }
+
+    private function resolveMarketName(int $marketId): string
+    {
+        $market = $this->entityManager->find(B2BMarket::class, $marketId);
+        if (!$market instanceof B2BMarket) {
+            return "Market #{$marketId}";
+        }
+        return (string) ($market->getCompanyName() ?? $market->getCompanyMarket() ?? $market->getEmail() ?? "Market #{$marketId}");
+    }
+
 }

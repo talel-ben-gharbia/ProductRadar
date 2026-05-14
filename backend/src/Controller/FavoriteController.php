@@ -8,15 +8,27 @@ use App\Entity\Favorite;
 use App\Repository\FavoriteRepository;
 use App\Repository\ProductListingRepository;
 use App\Repository\UserRepository;
+use Doctrine\DBAL\ArrayParameterType;
 use Doctrine\ORM\EntityManagerInterface;
+use Psr\Cache\CacheItemPoolInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Attribute\Route;
 
 final class FavoriteController extends AbstractController
 {
+    use CachedResponseTrait;
+
     private const DEFAULT_FREEMIUM_FAVORITES_LIMIT = 5;
+    private const CACHE_KEY_FAVORITES = 'favorites.all';
+
+    public function __construct(
+        #[Autowire(service: 'general.cache')]
+        private readonly CacheItemPoolInterface $cache,
+    ) {
+    }
 
     #[Route('/favorites', name: 'get_favorites', methods: ['GET'])]
     public function getFavorites(Request $request, FavoriteRepository $favoriteRepository): JsonResponse
@@ -24,70 +36,91 @@ final class FavoriteController extends AbstractController
         $clientId = $request->query->getInt('clientId', 0);
         $productListingId = $request->query->getInt('productListingId', 0);
 
-        $qb = $favoriteRepository
-            ->createQueryBuilder('f')
-            ->leftJoin('f.product_listing', 'pl')
-            ->leftJoin('pl.product', 'p')
-            ->leftJoin('pl.seller', 's')
-            ->leftJoin('f.client', 'u')
-            ->select(
-                'f.id AS id',
-                'f.created_at AS created_at',
-                'u.id AS clientId',
-                'pl.id AS productListingId',
-                'pl.ref AS ref',
-                'pl.price AS price',
-                'pl.old_price AS old_price',
-                'pl.product_url AS product_url',
-                'pl.availability AS availability',
-                'pl.trust_score AS trust_score',
-                'pl.is_active AS is_active',
-                'p.id AS productId',
-                'p.name AS productName',
-                'p.image_url AS productImageUrl',
-                's.id AS sellerId',
-                's.name AS sellerName'
-            )
-            ->orderBy('f.created_at', 'DESC');
+        $cacheKey = self::CACHE_KEY_FAVORITES . ".c{$clientId}.pl{$productListingId}";
 
-        if ($clientId > 0) {
-            $qb
-                ->andWhere('u.id = :clientId')
-                ->setParameter('clientId', $clientId);
-        }
+        return $this->cachedGet($this->cache, $cacheKey, function () use ($clientId, $productListingId, $favoriteRepository): array {
+            $qb = $favoriteRepository
+                ->createQueryBuilder('f')
+                ->leftJoin('f.product_listing', 'pl')
+                ->leftJoin('pl.product', 'p')
+                ->leftJoin('pl.seller', 's')
+                ->leftJoin('f.client', 'u')
+                ->select(
+                    'f.id AS id',
+                    'f.created_at AS created_at',
+                    'u.id AS clientId',
+                    'pl.id AS productListingId',
+                    'pl.ref AS ref',
+                    'pl.price AS price',
+                    'pl.old_price AS old_price',
+                    'pl.product_url AS product_url',
+                    'pl.availability AS availability',
+                    'pl.is_active AS is_active',
+                    'p.id AS productId',
+                    'p.name AS productName',
+                    'p.image_url AS productImageUrl',
+                    's.id AS sellerId',
+                    's.name AS sellerName'
+                )
+                ->orderBy('f.created_at', 'DESC');
 
-        if ($productListingId > 0) {
-            $qb
-                ->andWhere('pl.id = :productListingId')
-                ->setParameter('productListingId', $productListingId);
-        }
+            if ($clientId > 0) {
+                $qb
+                    ->andWhere('u.id = :clientId')
+                    ->setParameter('clientId', $clientId);
+            }
 
-        $rows = $qb->getQuery()->getArrayResult();
+            if ($productListingId > 0) {
+                $qb
+                    ->andWhere('pl.id = :productListingId')
+                    ->setParameter('productListingId', $productListingId);
+            }
 
-        $data = array_map(static function (array $row): array {
-            $createdAt = $row['created_at'] ?? null;
+            $rows = $qb->getQuery()->getArrayResult();
 
-            return [
-                'id' => isset($row['id']) ? (int) $row['id'] : null,
-                'created_at' => $createdAt instanceof \DateTimeInterface ? $createdAt->format(DATE_ATOM) : $createdAt,
-                'clientId' => isset($row['clientId']) ? (int) $row['clientId'] : null,
-                'productListingId' => isset($row['productListingId']) ? (int) $row['productListingId'] : null,
-                'ref' => $row['ref'] ?? null,
-                'price' => isset($row['price']) ? (float) $row['price'] : null,
-                'old_price' => isset($row['old_price']) ? (float) $row['old_price'] : null,
-                'product_url' => $row['product_url'] ?? null,
-                'availability' => array_key_exists('availability', $row) && $row['availability'] !== null ? (bool) $row['availability'] : null,
-                'trust_score' => isset($row['trust_score']) ? (float) $row['trust_score'] : null,
-                'is_active' => array_key_exists('is_active', $row) && $row['is_active'] !== null ? (bool) $row['is_active'] : null,
-                'productId' => isset($row['productId']) ? (int) $row['productId'] : null,
-                'productName' => $row['productName'] ?? null,
-                'productImageUrl' => $row['productImageUrl'] ?? null,
-                'sellerId' => isset($row['sellerId']) ? (int) $row['sellerId'] : null,
-                'sellerName' => $row['sellerName'] ?? null,
-            ];
-        }, $rows);
+            $listingIds = array_values(array_unique(array_filter(
+                array_map(fn(array $r) => isset($r['productListingId']) ? (int) $r['productListingId'] : null, $rows)
+            )));
+            $scoreMap = [];
+            if (!empty($listingIds)) {
+                $conn = $favoriteRepository->getEntityManager()->getConnection();
+                $scoreRows = $conn->fetchAllAssociative(
+                    'SELECT DISTINCT ON (listing_id) listing_id, score
+                     FROM trust_score_history
+                     WHERE listing_id IN (:ids)
+                     ORDER BY listing_id, created_at DESC',
+                    ['ids' => $listingIds],
+                    ['ids' => ArrayParameterType::INTEGER]
+                );
+                foreach ($scoreRows as $sr) {
+                    $scoreMap[(int) $sr['listing_id']] = $sr['score'] !== null ? (float) $sr['score'] : null;
+                }
+            }
 
-        return $this->json($data);
+            return array_map(function (array $row) use ($scoreMap): array {
+                $createdAt = $row['created_at'] ?? null;
+                $plId = isset($row['productListingId']) ? (int) $row['productListingId'] : null;
+
+                return [
+                    'id' => isset($row['id']) ? (int) $row['id'] : null,
+                    'created_at' => $createdAt instanceof \DateTimeInterface ? $createdAt->format(DATE_ATOM) : $createdAt,
+                    'clientId' => isset($row['clientId']) ? (int) $row['clientId'] : null,
+                    'productListingId' => $plId,
+                    'ref' => $row['ref'] ?? null,
+                    'price' => isset($row['price']) ? (float) $row['price'] : null,
+                    'old_price' => isset($row['old_price']) ? (float) $row['old_price'] : null,
+                    'product_url' => $row['product_url'] ?? null,
+                    'availability' => array_key_exists('availability', $row) && $row['availability'] !== null ? (bool) $row['availability'] : null,
+                    'trust_score' => $plId !== null && isset($scoreMap[$plId]) ? $scoreMap[$plId] : null,
+                    'is_active' => array_key_exists('is_active', $row) && $row['is_active'] !== null ? (bool) $row['is_active'] : null,
+                    'productId' => isset($row['productId']) ? (int) $row['productId'] : null,
+                    'productName' => $row['productName'] ?? null,
+                    'productImageUrl' => $row['productImageUrl'] ?? null,
+                    'sellerId' => isset($row['sellerId']) ? (int) $row['sellerId'] : null,
+                    'sellerName' => $row['sellerName'] ?? null,
+                ];
+            }, $rows);
+        });
     }
 
     #[Route('/favorites', name: 'create_favorite', methods: ['POST'])]
@@ -159,6 +192,8 @@ final class FavoriteController extends AbstractController
 
         $entityManager->flush();
 
+        $this->invalidateCache($this->cache);
+
         return $this->json([
             'id' => $favorite->getId(),
             'created_at' => $favorite->getCreatedAt()?->format(DATE_ATOM),
@@ -191,6 +226,8 @@ final class FavoriteController extends AbstractController
 
         $entityManager->remove($favorite);
         $entityManager->flush();
+
+        $this->invalidateCache($this->cache);
 
         return $this->json(['success' => true]);
     }

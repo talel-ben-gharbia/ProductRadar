@@ -114,6 +114,13 @@ export default function DemoWatchlistPage() {
                   <div>
                     <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Cheapest</p>
                     <p className="text-xl font-black">{item.cheapest_price !== null ? `${item.cheapest_price.toFixed(2)} DT` : "-"}</p>
+                    {item.price_delta !== null && item.baseline_price !== null && (
+                      <p className={`mt-0.5 text-[11px] font-semibold flex items-center gap-0.5 ${item.price_delta < 0 ? 'text-emerald-600' : item.price_delta > 0 ? 'text-red-500' : 'text-muted-foreground'}`}>
+                        {item.price_delta < 0 ? '↓' : item.price_delta > 0 ? '↑' : '→'}
+                        {' '}{Math.abs(item.price_delta).toFixed(2)} DT
+                        {' '}({((item.price_delta / item.baseline_price) * 100).toFixed(1)}%)
+                      </p>
+                    )}
                   </div>
                   <div className="text-right">
                     <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Highest</p>

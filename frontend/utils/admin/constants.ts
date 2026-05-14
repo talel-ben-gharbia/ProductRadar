@@ -138,6 +138,10 @@ const SIDEBAR_CONSTANTS: SidebarItem[] = [
         url: "/admin/b2b-workflows/subscriptions",
       },
       {
+        title: "Renewal Requests",
+        url: "/admin/b2b-workflows/renewals",
+      },
+      {
         title: "Ads Requests",
         url: "/admin/b2b-workflows/ads-requests",
       },
@@ -217,6 +221,10 @@ const SUPER_ADMIN_SIDEBAR_CONSTANTS: SidebarItem[] = [
       {
         title: "Data Quality",
         url: "/admin/quality-control",
+      },
+      {
+        title: "Product Issues",
+        url: "/admin/quality-control/product-issues",
       },
       {
         title: "Seller Listing Collisions",

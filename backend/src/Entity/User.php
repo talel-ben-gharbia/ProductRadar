@@ -34,7 +34,7 @@ class User
     private ?bool $is_active = null;
 
     #[ORM\Column(type: Types::TEXT, nullable: true)]
-    private ?string $adress = null;
+    private ?string $address = null;
 
     /**
      * @var Collection<int, Alert>
@@ -57,8 +57,7 @@ class User
     #[ORM\OneToMany(targetEntity: Favorite::class, mappedBy: 'client', orphanRemoval: true)]
     private Collection $favorite;
 
-    #[ORM\OneToOne(mappedBy: 'client', cascade: ['persist', 'remove'])]
-    private ?SubscriptionB2C $subscription = null;
+    private ?Subscription $subscription = null;
 
     /**
      * @var Collection<int, Notification>
@@ -102,14 +101,14 @@ class User
         return $this;
     }
 
-    public function getAdress(): ?string
+    public function getAddress(): ?string
     {
-        return $this->adress;
+        return $this->address;
     }
 
-    public function setAdress(?string $adress): static
+    public function setAddress(?string $address): static
     {
-        $this->adress = $adress;
+        $this->address = $address;
 
         return $this;
     }
@@ -210,23 +209,13 @@ class User
         return $this;
     }
 
-    public function getSubscription(): ?SubscriptionB2C
+    public function getSubscription(): ?Subscription
     {
         return $this->subscription;
     }
 
-    public function setSubscription(?SubscriptionB2C $subscription): static
+    public function setSubscription(?Subscription $subscription): static
     {
-        // unset the owning side of the relation if necessary
-        if ($subscription === null && $this->subscription !== null) {
-            $this->subscription->setClient(null);
-        }
-
-        // set the owning side of the relation if necessary
-        if ($subscription !== null && $subscription->getClient() !== $this) {
-            $subscription->setClient($this);
-        }
-
         $this->subscription = $subscription;
 
         return $this;

@@ -15,7 +15,7 @@ type B2CProfile = {
   firebase_uid: string
   type: "customer" | "b2b_company" | "b2b_market"
   full_name: string | null
-  adress: string | null
+  address: string | null
 }
 
 export function B2CNavAuth() {
@@ -37,7 +37,7 @@ export function B2CNavAuth() {
             setCustomer({
               ...sessionCustomer,
               full_name: sessionCustomer.full_name ?? null,
-              adress: sessionCustomer.adress ?? null,
+              address: sessionCustomer.address ?? null,
             })
           } else {
             setCustomer(null)

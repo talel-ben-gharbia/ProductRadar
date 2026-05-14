@@ -10,57 +10,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-
-function normalizeBreakdown(b: any): Record<string, any> | null {
-  if (b?.components) return b.components
-  const h = b?.history ?? {}
-  const l = b?.listing ?? {}
-  if (typeof h.price_stability !== 'number' && typeof l.freshness !== 'number' && typeof l.seller_score !== 'number') return null
-  const comps: Record<string, any> = {}
-  if (typeof h.price_stability === 'number') comps.price_stability = { score: Math.round(h.price_stability * 100) }
-  if (typeof h.stock_reliability === 'number') comps.stock_consistency = { score: Math.round(h.stock_reliability * 100) }
-  if (typeof h.anomaly_reliability === 'number') comps.anomaly_penalty = { score: Math.round(h.anomaly_reliability * 100) }
-  if (typeof l.freshness === 'number') comps.data_freshness = { score: Math.round(l.freshness * 100) }
-  if (typeof l.seller_score === 'number') comps.seller_reliability = { score: Math.round(l.seller_score * 100) }
-  return Object.keys(comps).length > 0 ? comps : null
-}
-
-function TrustBreakdown({ breakdown }: { breakdown: any }) {
-  const comps = normalizeBreakdown(breakdown)
-  if (!comps) return <span className="text-xs text-muted-foreground">No breakdown data</span>
-  const labels: Record<string, string> = {
-    price_stability: "Price Stability", seller_reliability: "Seller Reliability",
-    stock_consistency: "Stock Consistency", data_freshness: "Data Freshness", anomaly_penalty: "Anomaly Penalty",
-  }
-  return (
-    <div className="space-y-2 py-2">
-      {Object.entries(comps).map(([key, val]: [string, any]) => {
-        const pct = Math.min(100, Math.max(0, typeof val?.score === "number" ? val.score : 0))
-        const color = pct >= 80 ? "bg-emerald-500" : pct >= 50 ? "bg-amber-500" : "bg-red-500"
-        return (
-          <div key={key} className="grid grid-cols-[140px_1fr_40px] items-center gap-2 text-xs">
-            <span className="text-right font-medium text-muted-foreground">{labels[key] ?? key}</span>
-            <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-              <div className={`h-full rounded-full transition-all duration-500 ${color}`} style={{ width: `${pct}%` }} />
-            </div>
-            <span className="font-mono text-right text-xs font-bold">{pct.toFixed(0)}</span>
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
-function RankBadge({ rank, total }: { rank?: any; total?: any }) {
-  const r = typeof rank === "number" ? rank : null
-  const t = typeof total === "number" ? total : null
-  if (r === null || t === null || t === 0) return <span className="text-xs text-muted-foreground">&mdash;</span>
-  const suffix = (n: number) => { const s = ["th", "st", "nd", "rd"]; const v = n % 100; return s[(v - 20) % 10] ?? s[v] ?? s[0] }
-  const color = r === 1 ? "text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 dark:text-emerald-400"
-    : r === t ? "text-red-600 bg-red-50 dark:bg-red-950/40 dark:text-red-400"
-    : "text-amber-600 bg-amber-50 dark:bg-amber-950/40 dark:text-amber-400"
-  return <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-bold ${color}`}>{r}{suffix(r)} / {t}</span>
-}
+import { normalizeBreakdown, TrustBreakdown, RankBadge } from "@/components/B2B/b2b-utils"
 
 export default function DemoListingsPage() {
   const [listings] = useState(DEMO_LISTINGS)

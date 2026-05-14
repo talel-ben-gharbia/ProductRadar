@@ -1,4 +1,5 @@
 import { BACKEND_URL } from "@/utils/admin/constants"
+import { cachedFetch } from "@/lib/fetch-with-cache"
 import type { CategoryWithParent } from "@/utils/types"
 
 export type CategoryRaw = {
@@ -16,15 +17,10 @@ async function fetchCategoriesFromApi(): Promise<CategoryApiItem[]> {
 				? `${BACKEND_URL}/categories`
 				: "/api/categories"
 
-		const response = await fetch(endpoint, {
-			cache: "no-store",
+		const categories = await cachedFetch<CategoryApiItem[]>(endpoint, {
+			cacheKey: "categories:all",
+			cacheTtl: 300,
 		})
-
-		if (!response.ok) {
-			throw new Error(`Failed to fetch categories: ${response.status}`)
-		}
-
-		const categories = (await response.json()) as CategoryApiItem[]
 		return categories
 	} catch (error) {
 		const message =

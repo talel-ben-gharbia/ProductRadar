@@ -9,14 +9,25 @@ use App\Repository\AlertRepository;
 use App\Repository\ProductRepository;
 use App\Repository\UserRepository;
 use Doctrine\ORM\EntityManagerInterface;
+use Psr\Cache\CacheItemPoolInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Attribute\Route;
 
 final class AlertController extends AbstractController
 {
+    use CachedResponseTrait;
+
     private const DEFAULT_FREEMIUM_ALERTS_LIMIT = 3;
+    private const CACHE_KEY_ALERTS = 'alerts.all';
+
+    public function __construct(
+        #[Autowire(service: 'general.cache')]
+        private readonly CacheItemPoolInterface $cache,
+    ) {
+    }
 
     #[Route('/alerts', name: 'get_alerts', methods: ['GET'])]
     public function getAlerts(Request $request, AlertRepository $alertRepository): JsonResponse
@@ -24,51 +35,53 @@ final class AlertController extends AbstractController
         $alerterId = $request->query->getInt('alerterId', 0);
         $productId = $request->query->getInt('productId', 0);
 
-        $qb = $alertRepository
-            ->createQueryBuilder('a')
-            ->leftJoin('a.product', 'p')
-            ->leftJoin('a.alerter', 'u')
-            ->select(
-                'a.id AS id',
-                'a.is_price_notif AS is_price_notif',
-                'a.is_stock_notif AS is_stock_notif',
-                'a.cancelled AS cancelled',
-                'p.id AS productId',
-                'p.name AS productName',
-                'p.image_url AS productImageUrl',
-                'u.id AS alerterId'
-            )
-            ->where('a.cancelled = false')
-            ->orderBy('a.id', 'DESC');
+        $cacheKey = self::CACHE_KEY_ALERTS . ".a{$alerterId}.p{$productId}";
 
-        if ($alerterId > 0) {
-            $qb
-                ->andWhere('u.id = :alerterId')
-                ->setParameter('alerterId', $alerterId);
-        }
+        return $this->cachedGet($this->cache, $cacheKey, static function () use ($alerterId, $productId, $alertRepository): array {
+            $qb = $alertRepository
+                ->createQueryBuilder('a')
+                ->leftJoin('a.product', 'p')
+                ->leftJoin('a.alerter', 'u')
+                ->select(
+                    'a.id AS id',
+                    'a.is_price_notif AS is_price_notif',
+                    'a.is_stock_notif AS is_stock_notif',
+                    'a.cancelled AS cancelled',
+                    'p.id AS productId',
+                    'p.name AS productName',
+                    'p.image_url AS productImageUrl',
+                    'u.id AS alerterId'
+                )
+                ->where('a.cancelled = false')
+                ->orderBy('a.id', 'DESC');
 
-        if ($productId > 0) {
-            $qb
-                ->andWhere('p.id = :productId')
-                ->setParameter('productId', $productId);
-        }
+            if ($alerterId > 0) {
+                $qb
+                    ->andWhere('u.id = :alerterId')
+                    ->setParameter('alerterId', $alerterId);
+            }
 
-        $rows = $qb->getQuery()->getArrayResult();
+            if ($productId > 0) {
+                $qb
+                    ->andWhere('p.id = :productId')
+                    ->setParameter('productId', $productId);
+            }
 
-        $data = array_map(static function (array $row): array {
-            return [
-                'id' => isset($row['id']) ? (int) $row['id'] : null,
-                'is_price_notif' => isset($row['is_price_notif']) ? (bool) $row['is_price_notif'] : false,
-                'is_stock_notif' => isset($row['is_stock_notif']) ? (bool) $row['is_stock_notif'] : false,
-                'cancelled' => isset($row['cancelled']) ? (bool) $row['cancelled'] : false,
-                'productId' => isset($row['productId']) ? (int) $row['productId'] : null,
-                'productName' => $row['productName'] ?? null,
-                'productImageUrl' => $row['productImageUrl'] ?? null,
-                'alerterId' => isset($row['alerterId']) ? (int) $row['alerterId'] : null,
-            ];
-        }, $rows);
+            $rows = $qb->getQuery()->getArrayResult();
 
-        return $this->json($data);
+            return array_map(static function (array $row): array {
+                return [
+                    'id' => isset($row['id']) ? (int) $row['id'] : null,
+                    'is_price_notif' => isset($row['is_price_notif']) ? (bool) $row['is_price_notif'] : false,
+                    'is_stock_notif' => isset($row['is_stock_notif']) ? (bool) $row['is_stock_notif'] : false,
+                    'cancelled' => isset($row['cancelled']) ? (bool) $row['cancelled'] : false,
+                    'productId' => isset($row['productId']) ? (int) $row['productId'] : null,
+                    'productName' => $row['productName'] ?? null,
+                    'productImageUrl' => $row['productImageUrl'] ?? null,
+                    'alerterId' => isset($row['alerterId']) ? (int) $row['alerterId'] : null,
+                ];
+            }, $rows);
+        });
     }
 
     #[Route('/alerts', name: 'create_alert', methods: ['POST'])]
@@ -149,6 +162,8 @@ final class AlertController extends AbstractController
 
         $entityManager->flush();
 
+        $this->invalidateCache($this->cache);
+
         return $this->json([
             'id' => $alert->getId(),
             'is_price_notif' => $alert->isPriceNotif(),
@@ -195,6 +210,8 @@ final class AlertController extends AbstractController
 
         $entityManager->flush();
 
+        $this->invalidateCache($this->cache);
+
         return $this->json([
             'id' => $alert->getId(),
             'is_price_notif' => $alert->isPriceNotif(),
@@ -226,6 +243,8 @@ final class AlertController extends AbstractController
         // Keep history and do not free quota: mark alert as cancelled.
         $alert->setCancelled(true);
         $entityManager->flush();
+
+        $this->invalidateCache($this->cache);
 
         return $this->json(['success' => true, 'message' => 'Alert cancelled successfully']);
     }

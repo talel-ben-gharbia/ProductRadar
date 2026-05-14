@@ -1,12 +1,14 @@
 "use client"
 
-import { useState } from "react"
+import { useCallback, useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { CheckCircle2, Home } from "lucide-react"
 
 type PartnerForm = {
   email: string
@@ -33,16 +35,31 @@ const INITIAL_FORM: PartnerForm = {
 }
 
 export default function BecomePartnerPage() {
+  const router = useRouter()
   const [form, setForm] = useState<PartnerForm>(INITIAL_FORM)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState<string | null>(null)
+  const [success, setSuccess] = useState(false)
+  const [countdown, setCountdown] = useState(5)
+
+  const goHome = useCallback(() => {
+    router.push("/")
+  }, [router])
+
+  useEffect(() => {
+    if (!success) return
+    if (countdown <= 0) {
+      goHome()
+      return
+    }
+    const timer = setTimeout(() => setCountdown((prev) => prev - 1), 1000)
+    return () => clearTimeout(timer)
+  }, [success, countdown, goHome])
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setSubmitting(true)
     setError(null)
-    setSuccess(null)
 
     if (form.password !== form.confirmPassword) {
       setError("Password confirmation does not match.")
@@ -63,13 +80,41 @@ export default function BecomePartnerPage() {
         throw new Error(data.error || "Failed to submit your request.")
       }
 
-      setSuccess(data.message || "Request submitted. Our team will contact you after verification.")
+      setSuccess(true)
       setForm(INITIAL_FORM)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to submit your request.")
     } finally {
       setSubmitting(false)
     }
+  }
+
+  if (success) {
+    return (
+      <main className="mx-auto flex min-h-[70vh] w-full max-w-lg items-center justify-center px-4 py-10">
+        <Card className="w-full border-emerald-200/50 text-center shadow-sm dark:border-emerald-900/30">
+          <CardContent className="flex flex-col items-center gap-4 py-12">
+            <div className="flex size-16 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/30">
+              <CheckCircle2 className="size-8 text-emerald-600 dark:text-emerald-400" />
+            </div>
+            <div>
+              <CardTitle className="text-xl">Thank You for Applying!</CardTitle>
+              <CardDescription className="mt-2 max-w-sm text-sm">
+                Your partner application has been received. Our admin team will review your company details and
+                activate your account shortly. We&apos;ll notify you by email once approved.
+              </CardDescription>
+            </div>
+            <Button onClick={goHome} className="mt-2 gap-2">
+              <Home className="size-4" />
+              Back to Home
+            </Button>
+            <p className="text-xs text-muted-foreground">
+              Redirecting in {countdown} second{countdown !== 1 ? "s" : ""}...
+            </p>
+          </CardContent>
+        </Card>
+      </main>
+    )
   }
 
   return (
@@ -203,7 +248,6 @@ export default function BecomePartnerPage() {
               </div>
 
               {error ? <p className="text-sm text-destructive">{error}</p> : null}
-              {success ? <p className="text-sm text-emerald-600">{success}</p> : null}
 
               <Button type="submit" disabled={submitting}>
                 {submitting ? "Submitting..." : "Submit Partner Request"}

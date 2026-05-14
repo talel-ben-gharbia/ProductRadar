@@ -5,17 +5,29 @@ namespace App\Controller;
 use App\Entity\B2BCompany;
 use App\Entity\B2BMarket;
 use App\Entity\Customer;
-use App\Entity\SubscriptionB2C;
+use App\Entity\Subscription;
 use App\Repository\UserRepository;
 use App\Service\SubscriptionLifecycleService;
 use Doctrine\ORM\EntityManagerInterface;
+use Psr\Cache\CacheItemPoolInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Attribute\Route;
 
 final class B2CSubscriptionController extends AbstractController
 {
+    use CachedResponseTrait;
+
+    private const CACHE_KEY_SUBSCRIPTION_PREFIX = 'subscription.b2c.';
+
+    public function __construct(
+        #[Autowire(service: 'general.cache')]
+        private readonly CacheItemPoolInterface $cache,
+    ) {
+    }
+
     #[Route('/api/b2c/subscription/{firebaseUid}', name: 'b2c_subscription_get', methods: ['GET'])]
     public function getSubscription(
         string $firebaseUid,
@@ -28,13 +40,15 @@ final class B2CSubscriptionController extends AbstractController
             return $this->json(['error' => 'User not found.'], 404);
         }
 
-        $subscription = $subscriptionLifecycleService->ensureDefaultFreePlan($user);
-        $entityManager->persist($subscription);
-        $entityManager->flush();
+        return $this->cachedGet($this->cache, self::CACHE_KEY_SUBSCRIPTION_PREFIX . $firebaseUid, function () use ($user, $entityManager, $subscriptionLifecycleService): array {
+            $subscription = $subscriptionLifecycleService->ensureDefaultFreePlan($user);
+            $entityManager->persist($subscription);
+            $entityManager->flush();
 
-        return $this->json([
-            'subscription' => $this->serializeSubscription($subscription),
-        ]);
+            return [
+                'subscription' => $this->serializeSubscription($subscription),
+            ];
+        });
     }
 
     #[Route('/api/b2c/subscription/{firebaseUid}', name: 'b2c_subscription_update', methods: ['PATCH'])]
@@ -65,12 +79,14 @@ final class B2CSubscriptionController extends AbstractController
         $entityManager->persist($subscription);
         $entityManager->flush();
 
+        $this->invalidateCache($this->cache);
+
         return $this->json([
             'subscription' => $this->serializeSubscription($subscription),
         ]);
     }
 
-    private function serializeSubscription(SubscriptionB2C $subscription): array
+    private function serializeSubscription(Subscription $subscription): array
     {
         return [
             'id' => $subscription->getId(),

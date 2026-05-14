@@ -33,11 +33,18 @@ final class TrustScoreCalculationService
             SELECT pl.id FROM product_listing pl
             WHERE pl.is_active = true
             AND (
-                pl.trust_score_updated_at IS NULL
+                NOT EXISTS (
+                    SELECT 1 FROM trust_score_history tsh
+                    WHERE tsh.listing_id = pl.id
+                )
                 OR EXISTS (
                     SELECT 1 FROM price_history ph
                     WHERE ph.product_listing_id = pl.id
-                    AND ph.recorded_at > pl.trust_score_updated_at
+                    AND ph.recorded_at > (
+                        SELECT COALESCE(MAX(tsh2.created_at), \'1970-01-01\')
+                        FROM trust_score_history tsh2
+                        WHERE tsh2.listing_id = pl.id
+                    )
                 )
             )
         ');
@@ -60,18 +67,44 @@ final class TrustScoreCalculationService
         return $this->batchRecalculateRaw(array_map('intval', $ids));
     }
 
-    public function calculateAndUpdateListing(ProductListing $listing): bool
+    public function calculateAndUpdateListing(ProductListing $listing): array
     {
         $weights = $this->loadWeights();
+        $oldScore = $this->loadLatestScore($listing->getId());
         $score = $this->calculateTrustScore($listing, $weights);
         $breakdown = $this->calculateBreakdown($listing, $weights);
+        $now = new \DateTimeImmutable();
 
-        $listing->setTrustScore($score);
-        $listing->setTrustScoreBreakdown($breakdown);
-        $listing->setTrustScoreUpdatedAt(new \DateTimeImmutable());
-        $this->entityManager->persist($listing);
+        $conn = $this->entityManager->getConnection();
+        $conn->executeStatement(
+            'INSERT INTO trust_score_history (listing_id, score, breakdown, created_at) VALUES (?, ?, ?::jsonb, ?)',
+            [$listing->getId(), $score, json_encode($breakdown), $now->format('Y-m-d H:i:s')]
+        );
 
-        return true;
+        $breakdownChanges = [];
+        if ($oldScore !== null) {
+            $delta = $score - $oldScore;
+        } else {
+            $delta = 0.0;
+        }
+
+        return [
+            'old_score' => $oldScore,
+            'new_score' => $score,
+            'delta' => $delta,
+            'breakdown_changes' => $breakdownChanges,
+            'listing' => $listing,
+        ];
+    }
+
+    private function loadLatestScore(int $listingId): ?float
+    {
+        $conn = $this->entityManager->getConnection();
+        $row = $conn->fetchOne(
+            'SELECT score FROM trust_score_history WHERE listing_id = ? ORDER BY created_at DESC LIMIT 1',
+            [$listingId]
+        );
+        return $row !== false ? (float) $row : null;
     }
 
     public function loadWeights(): array
@@ -126,11 +159,6 @@ final class TrustScoreCalculationService
 
                 $score = $this->computeScoreRaw($listing, $rows, $sellerScore, $bounds, $weights);
                 $breakdown = $this->computeBreakdownRaw($listing, $rows, $sellerScore, $bounds, $weights);
-
-                $conn->executeStatement(
-                    'UPDATE product_listing SET trust_score = ?, trust_score_breakdown = ?::jsonb, trust_score_updated_at = ? WHERE id = ?',
-                    [$score, json_encode($breakdown), $now, $lid]
-                );
 
                 $insertHistory[] = sprintf(
                     '(%d, %s, %s, \'%s\')',

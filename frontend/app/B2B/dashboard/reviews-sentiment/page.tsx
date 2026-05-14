@@ -14,9 +14,23 @@ const COLORS = ["#6366f1", "#8b5cf6", "#a78bfa", "#c4b5fd", "#818cf8"]
 type ReviewItem = { product_id?: number; product_name?: string; avg_rating?: number; review_count?: number; sentiment_score?: number; rating_gap_vs_competitors?: number; top_keywords?: string[] }
 
 export default function ReviewsSentimentPage() {
-  const { summary, isGold } = useB2B()
+  const { summary, isGold, loading } = useB2B()
   const metrics = summary?.metrics as Record<string, unknown> | undefined
   const data = ((metrics?.reviews_sentiment ?? metrics?.reviews ?? []) as ReviewItem[])
+
+  if (loading && !summary) {
+    return (
+      <div className="space-y-6">
+        <div className="h-8 w-48 animate-pulse rounded-lg bg-muted/50" />
+        <div className="h-4 w-72 animate-pulse rounded bg-muted/30" />
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="h-32 animate-pulse rounded-xl bg-muted/40" />
+          ))}
+        </div>
+      </div>
+    )
+  }
 
   if (!isGold) {
     return <B2BPlanGate featureName="Reviews & Sentiment" />

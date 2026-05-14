@@ -1,3 +1,4 @@
+import { cookies } from "next/headers"
 import { NextRequest, NextResponse } from "next/server"
 
 import { BACKEND_URL } from "@/utils/admin/constants"
@@ -80,10 +81,20 @@ async function getDatasetRows(dataset: Dataset): Promise<Array<Record<string, un
   return Array.from(sellers.values()).sort((a, b) => a.sellerName.localeCompare(b.sellerName))
 }
 
+async function checkAdmin() {
+  const cookieStore = await cookies()
+  const token = cookieStore.get("admin_session")?.value
+  return token !== null && token !== undefined
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ dataset: string }> },
 ) {
+  if (!await checkAdmin()) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
   const { dataset: rawDataset } = await params
   const dataset = rawDataset as Dataset
 

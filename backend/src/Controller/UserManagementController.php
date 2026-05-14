@@ -5,7 +5,7 @@ namespace App\Controller;
 use App\Entity\B2BCompany;
 use App\Entity\B2BMarket;
 use App\Entity\Customer;
-use App\Entity\SubscriptionB2C;
+use App\Entity\Subscription;
 use App\Entity\User;
 use App\Repository\AlertRepository;
 use App\Repository\FavoriteRepository;
@@ -13,7 +13,9 @@ use App\Repository\PartnerRequestRepository;
 use App\Repository\SubscriptionRepository;
 use App\Repository\UserRepository;
 use App\Security\AdminApiGuard;
+use Psr\Cache\CacheItemPoolInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Attribute\Route;
@@ -22,6 +24,17 @@ use Doctrine\ORM\EntityManagerInterface;
 #[Route('/admin/api/users')]
 final class UserManagementController extends AbstractController
 {
+    use CachedResponseTrait;
+
+    private const CACHE_KEY_STATS = 'users.stats';
+    private const CACHE_KEY_LIST = 'users.list';
+
+    public function __construct(
+        #[Autowire(service: 'general.cache')]
+        private readonly CacheItemPoolInterface $cache,
+    ) {
+    }
+
     #[Route('/stats', name: 'admin_users_stats', methods: ['GET'])]
     public function stats(
         Request $request,
@@ -35,11 +48,13 @@ final class UserManagementController extends AbstractController
             return $authError;
         }
 
-        return $this->json([
-            'users' => $userRepository->getAdminStats(),
-            'subscriptions' => $subscriptionRepository->getAdminStats(),
-            'pending_b2b_requests' => $partnerRequestRepository->count([]),
-        ]);
+        return $this->cachedGet($this->cache, self::CACHE_KEY_STATS, static function () use ($userRepository, $subscriptionRepository, $partnerRequestRepository): array {
+            return [
+                'users' => $userRepository->getAdminStats(),
+                'subscriptions' => $subscriptionRepository->getAdminStats(),
+                'pending_b2b_requests' => $partnerRequestRepository->count([]),
+            ];
+        });
     }
 
     #[Route('', name: 'admin_users_list', methods: ['GET'])]
@@ -65,29 +80,33 @@ final class UserManagementController extends AbstractController
             'b2bStatus' => trim((string) $request->query->get('b2bStatus', '')),
         ];
 
-        $result = $userRepository->paginateForAdmin($filters, $limit, $offset);
-        $userIds = array_values(array_filter(array_map(
-            static fn (User $user): ?int => $user->getId(),
-            $result['items'],
-        )));
-        $alertsCountMap = $alertRepository->getCountMapByUserIds($userIds);
-        $favoritesCountMap = $favoriteRepository->getCountMapByUserIds($userIds);
+        $cacheKey = self::CACHE_KEY_LIST . ".l{$limit}.o{$offset}." . md5(serialize($filters));
 
-        return $this->json([
-            'items' => array_map(
-                fn (User $user) => $this->serializeUser(
-                    $user,
-                    $alertsCountMap[$user->getId() ?? 0] ?? 0,
-                    $favoritesCountMap[$user->getId() ?? 0] ?? 0,
-                ),
+        return $this->cachedGet($this->cache, $cacheKey, function () use ($userRepository, $alertRepository, $favoriteRepository, $limit, $offset, $filters): array {
+            $result = $userRepository->paginateForAdmin($filters, $limit, $offset);
+            $userIds = array_values(array_filter(array_map(
+                static fn (User $user): ?int => $user->getId(),
                 $result['items'],
-            ),
-            'pagination' => [
-                'limit' => $limit,
-                'offset' => $offset,
-                'total' => $result['total'],
-            ],
-        ]);
+            )));
+            $alertsCountMap = $alertRepository->getCountMapByUserIds($userIds);
+            $favoritesCountMap = $favoriteRepository->getCountMapByUserIds($userIds);
+
+            return [
+                'items' => array_map(
+                    fn (User $user) => $this->serializeUser(
+                        $user,
+                        $alertsCountMap[$user->getId() ?? 0] ?? 0,
+                        $favoritesCountMap[$user->getId() ?? 0] ?? 0,
+                    ),
+                    $result['items'],
+                ),
+                'pagination' => [
+                    'limit' => $limit,
+                    'offset' => $offset,
+                    'total' => $result['total'],
+                ],
+            ];
+        });
     }
 
     #[Route('/{id}/status', name: 'admin_users_status_update', methods: ['PATCH'])]
@@ -121,6 +140,8 @@ final class UserManagementController extends AbstractController
         $user->setIsActive($status === 'ACTIVE');
 
         $entityManager->flush();
+
+        $this->invalidateCache($this->cache);
 
         return $this->json($this->serializeUser(
             $user,
@@ -157,9 +178,9 @@ final class UserManagementController extends AbstractController
         ];
     }
 
-    private function serializeSubscription(?SubscriptionB2C $subscription): ?array
+    private function serializeSubscription(?Subscription $subscription): ?array
     {
-        if (!$subscription instanceof SubscriptionB2C) {
+        if (!$subscription instanceof Subscription) {
             return null;
         }
 

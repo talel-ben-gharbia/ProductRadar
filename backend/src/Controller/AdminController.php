@@ -7,7 +7,9 @@ use App\Repository\AdminRepository;
 use App\Security\AdminApiGuard;
 use App\Service\AuditService;
 use Doctrine\ORM\EntityManagerInterface;
+use Psr\Cache\CacheItemPoolInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
@@ -16,7 +18,16 @@ use Symfony\Component\Routing\Attribute\Route;
 #[Route('/admin/api/admins')]
 final class AdminController extends AbstractController
 {
+    use CachedResponseTrait;
+
     private const ALLOWED_ROLES = ['ROLE_SUPER_ADMIN', 'ROLE_SUB_ADMIN'];
+    private const CACHE_KEY_ADMINS = 'admins.all';
+
+    public function __construct(
+        #[Autowire(service: 'general.cache')]
+        private readonly CacheItemPoolInterface $cache,
+    ) {
+    }
 
     #[Route('', name: 'admin_list', methods: ['GET'])]
     public function list(
@@ -30,17 +41,17 @@ final class AdminController extends AbstractController
             return $authError;
         }
 
-        $admins = $adminRepository->findBy([], ['created_at' => 'DESC']);
+        return $this->cachedGet($this->cache, self::CACHE_KEY_ADMINS, static function () use ($adminRepository): array {
+            $admins = $adminRepository->findBy([], ['created_at' => 'DESC']);
 
-        $data = array_map(static fn(Admin $admin) => [
-            'id'         => $admin->getId(),
-            'email'      => $admin->getEmail(),
-            'role'       => $admin->getRole(),
-            'created_at' => $admin->getCreatedAt()->format(\DateTimeInterface::ATOM),
-            'updated_at' => $admin->getUpdatedAt()->format(\DateTimeInterface::ATOM),
-        ], $admins);
-
-        return $this->json($data);
+            return array_map(static fn(Admin $admin) => [
+                'id'         => $admin->getId(),
+                'email'      => $admin->getEmail(),
+                'role'       => $admin->getRole(),
+                'created_at' => $admin->getCreatedAt()->format(\DateTimeInterface::ATOM),
+                'updated_at' => $admin->getUpdatedAt()->format(\DateTimeInterface::ATOM),
+            ], $admins);
+        });
     }
 
     #[Route('', name: 'admin_create', methods: ['POST'])]
@@ -94,6 +105,8 @@ final class AdminController extends AbstractController
 
         $em->persist($admin);
         $em->flush();
+
+        $this->invalidateCache($this->cache);
 
         $currentAdmin = $this->resolveCurrentAdmin($request, $adminApiGuard, $adminRepository);
         $auditService->logModeration(
@@ -174,6 +187,8 @@ final class AdminController extends AbstractController
         $admin->setRole($role);
         $em->flush();
 
+        $this->invalidateCache($this->cache);
+
         $currentAdmin = $this->resolveCurrentAdmin($request, $adminApiGuard, $adminRepository);
         $auditService->logModeration(
             $currentAdmin,
@@ -234,6 +249,8 @@ final class AdminController extends AbstractController
 
         $em->remove($admin);
         $em->flush();
+
+        $this->invalidateCache($this->cache);
 
         $auditService->logModeration(
             $currentAdmin,

@@ -1,6 +1,7 @@
 import { cookies } from "next/headers"
 import { NextRequest, NextResponse } from "next/server"
 
+import { cachedFetch } from "@/lib/fetch-with-cache"
 import { BACKEND_URL } from "@/utils/admin/constants"
 import { COOKIE_NAME, verifyB2CSessionToken } from "@/lib/b2c-session"
 
@@ -22,19 +23,13 @@ export async function GET() {
   }
 
   try {
-    const backendResponse = await fetch(
+    const data = await cachedFetch<unknown>(
       `${BACKEND_URL}/api/b2c/subscription/${encodeURIComponent(session.firebase_uid)}`,
-      { cache: "no-store" },
+      {
+        cacheKey: `b2c:sub:${session.firebase_uid}`,
+        cacheTtl: 300,
+      },
     )
-
-    const data = await backendResponse.json().catch(() => ({}))
-
-    if (!backendResponse.ok) {
-      return NextResponse.json(
-        { error: (data as { error?: string }).error || "Failed to load subscription." },
-        { status: backendResponse.status },
-      )
-    }
 
     return NextResponse.json(data, { status: 200 })
   } catch {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { cookies } from "next/headers"
 
 import { verifySessionToken, COOKIE_NAME } from "@/lib/admin-session"
+import { cachedFetch } from "@/lib/fetch-with-cache"
 import { BACKEND_URL } from "@/utils/admin/constants"
 
 type Params = { params: Promise<{ id: string }> }
@@ -63,20 +64,11 @@ export async function GET(_request: NextRequest, { params }: Params) {
   const { id } = await params
 
   try {
-    const response = await fetch(`${BACKEND_URL}/products/${encodeURIComponent(id)}`, {
-      method: "GET",
-      cache: "no-store",
+    const data = await cachedFetch<unknown>(`${BACKEND_URL}/products/${encodeURIComponent(id)}`, {
+      cacheKey: `product:${id}`,
+      cacheTtl: 60,
     })
-
-    if (!response.ok) {
-      const data = await response.json().catch(() => ({}))
-      return NextResponse.json(
-        { error: (data as { error?: string }).error || "Failed to fetch product." },
-        { status: response.status }
-      )
-    }
-
-    return NextResponse.json(await response.json())
+    return NextResponse.json(data)
   } catch {
     return NextResponse.json({ error: "Unable to connect to the backend." }, { status: 502 })
   }

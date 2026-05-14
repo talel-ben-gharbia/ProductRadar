@@ -2,38 +2,52 @@
 
 namespace App\Repository;
 
-use App\Entity\B2BCompany;
-use App\Entity\B2BMarket;
-use App\Entity\Customer;
-use App\Entity\SubscriptionB2C;
+use App\Entity\Subscription;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
 
 /**
- * @extends ServiceEntityRepository<SubscriptionB2C>
+ * @extends ServiceEntityRepository<Subscription>
  */
 class SubscriptionRepository extends ServiceEntityRepository
 {
     public function __construct(ManagerRegistry $registry)
     {
-        parent::__construct($registry, SubscriptionB2C::class);
+        parent::__construct($registry, Subscription::class);
+    }
+
+    public function findActiveByOwner(string $ownerType, int $ownerId): ?Subscription
+    {
+        return $this->findOneBy([
+            'owner_type' => $ownerType,
+            'owner_id' => $ownerId,
+            'active' => true,
+        ]);
     }
 
     /**
-     * @return array{items: SubscriptionB2C[], total: int}
+     * @return Subscription[]
+     */
+    public function findByOwner(string $ownerType, int $ownerId): array
+    {
+        return $this->findBy([
+            'owner_type' => $ownerType,
+            'owner_id' => $ownerId,
+        ]);
+    }
+
+    /**
+     * @return array{items: Subscription[], total: int}
      */
     public function paginateForAdmin(array $filters, int $limit, int $offset): array
     {
         $qb = $this->createQueryBuilder('s')
-            ->leftJoin('s.client', 'u')
-            ->addSelect('u')
             ->orderBy('s.start_date', 'DESC')
             ->addOrderBy('s.id', 'DESC')
             ->setFirstResult($offset)
             ->setMaxResults($limit);
 
         $countQb = $this->createQueryBuilder('s')
-            ->leftJoin('s.client', 'u')
             ->select('COUNT(s.id)');
 
         if (!empty($filters['planType'])) {
@@ -55,10 +69,7 @@ class SubscriptionRepository extends ServiceEntityRepository
             }
         }
 
-        $this->applyAccountTypeFilter($qb, 'u', (string) ($filters['accountType'] ?? ''));
-        $this->applyAccountTypeFilter($countQb, 'u', (string) ($filters['accountType'] ?? ''));
-
-        /** @var SubscriptionB2C[] $items */
+        /** @var Subscription[] $items */
         $items = $qb->getQuery()->getResult();
 
         $total = (int) $countQb->getQuery()->getSingleScalarResult();
@@ -95,56 +106,4 @@ class SubscriptionRepository extends ServiceEntityRepository
             'free' => max(0, $total - $premium),
         ];
     }
-
-    private function applyAccountTypeFilter(\Doctrine\ORM\QueryBuilder $qb, string $userAlias, string $accountTypeRaw): void
-    {
-        $accountType = strtoupper(trim($accountTypeRaw));
-        if ($accountType === '') {
-            return;
-        }
-
-        if ($accountType === 'B2B') {
-            $qb->andWhere(sprintf('(%1$s INSTANCE OF %2$s OR %1$s INSTANCE OF %3$s)', $userAlias, B2BCompany::class, B2BMarket::class));
-            return;
-        }
-
-        if ($accountType === 'B2C' || $accountType === 'CUSTOMER') {
-            $qb->andWhere(sprintf('%s INSTANCE OF %s', $userAlias, Customer::class));
-            return;
-        }
-
-        if ($accountType === 'B2B_COMPANY') {
-            $qb->andWhere(sprintf('%s INSTANCE OF %s', $userAlias, B2BCompany::class));
-            return;
-        }
-
-        if ($accountType === 'B2B_MARKET') {
-            $qb->andWhere(sprintf('%s INSTANCE OF %s', $userAlias, B2BMarket::class));
-        }
-    }
-
-    //    /**
-    //     * @return Subscription[] Returns an array of Subscription objects
-    //     */
-    //    public function findByExampleField($value): array
-    //    {
-    //        return $this->createQueryBuilder('s')
-    //            ->andWhere('s.exampleField = :val')
-    //            ->setParameter('val', $value)
-    //            ->orderBy('s.id', 'ASC')
-    //            ->setMaxResults(10)
-    //            ->getQuery()
-    //            ->getResult()
-    //        ;
-    //    }
-
-    //    public function findOneBySomeField($value): ?Subscription
-    //    {
-    //        return $this->createQueryBuilder('s')
-    //            ->andWhere('s.exampleField = :val')
-    //            ->setParameter('val', $value)
-    //            ->getQuery()
-    //            ->getOneOrNullResult()
-    //        ;
-    //    }
 }

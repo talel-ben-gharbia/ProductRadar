@@ -130,6 +130,10 @@ function getBestPrice(listings: ProductListing[]): number | null {
       continue
     }
 
+    if (listing.price === 0) {
+      continue
+    }
+
     if (bestPrice === null || listing.price < bestPrice) {
       bestPrice = listing.price
     }
@@ -350,12 +354,18 @@ export default async function B2CProductDetailsPage({ params }: ProductDetailsPa
     sellerById.set(seller.id, seller)
   }
 
-  const activeListings = [...listings].sort((a, b) => {
-    if (a.price === null && b.price === null) return a.id - b.id
-    if (a.price === null) return 1
-    if (b.price === null) return -1
-    return a.price - b.price
-  })
+  const activeListings = [...listings]
+    .filter((listing) => {
+      if (listing.is_active === false) return false
+      if (listing.price !== null && listing.price === 0) return false
+      return true
+    })
+    .sort((a, b) => {
+      if (a.price === null && b.price === null) return a.id - b.id
+      if (a.price === null) return 1
+      if (b.price === null) return -1
+      return a.price - b.price
+    })
 
   const bestPrice = getBestPrice(activeListings)
   const specs = product ? getSpecsRows(product) : []

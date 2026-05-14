@@ -12,6 +12,7 @@ parameters:
     app.best_time_to_buy_api_timeout: '%env(float:default:app.best_time_to_buy_api_timeout_default:BEST_TIME_TO_BUY_API_TIMEOUT)%'
     app.best_time_to_buy_api_timeout_default: 3
     app.b2b_notifications_from: '%env(B2B_NOTIFICATIONS_FROM)%'
+    app.b2b_auth_secret: '%env(B2B_AUTH_SECRET)%'
 
 services:
     # default configuration for services in *this* file
@@ -32,6 +33,10 @@ services:
     App\Service\B2BNotificationService:
         arguments:
             $fromEmail: '%app.b2b_notifications_from%'
+
+    App\EventSubscriber\B2BAuthSubscriber:
+        arguments:
+            $authSecret: '%app.b2b_auth_secret%'
 
     # add more service definitions when explicit configuration is needed
     # please note that last definitions always *replace* previous ones

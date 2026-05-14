@@ -1,7 +1,7 @@
 "use client"
 
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
-import { AlertTriangle, CheckCircle2, XCircle } from "lucide-react"
+import { AlertTriangle, CheckCircle2, Clock, XCircle } from "lucide-react"
 
 import { useB2B } from "@/components/B2B/b2b-context"
 import { Badge } from "@/components/ui/badge"
@@ -10,11 +10,39 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import B2BPlanGate from "@/components/B2B/b2b-plan-gate"
 
 type StockItem = { seller_name?: string; seller_id?: number; total_listings?: number; out_of_stock?: number; out_of_stock_rate?: number }
+type ReliabilityItem = { seller_id?: number; seller_name?: string; total_records?: number; out_of_stock_count?: number; oos_rate_30d?: number }
+
+function ReliabilityBar({ rate }: { rate: number }) {
+  const color = rate <= 10 ? "bg-emerald-500" : rate <= 30 ? "bg-amber-500" : "bg-red-500"
+  return (
+    <div className="flex items-center gap-2">
+      <div className="h-1.5 w-16 overflow-hidden rounded-full bg-muted">
+        <div className={`h-full rounded-full transition-all ${color}`} style={{ width: `${Math.min(100, rate)}%` }} />
+      </div>
+      <span className={`font-mono text-xs font-bold ${color.replace("bg-", "text-")}`}>{rate}%</span>
+    </div>
+  )
+}
 
 export default function StockIntelligencePage() {
-  const { summary, isGold } = useB2B()
+  const { summary, isGold, loading } = useB2B()
   const metrics = summary?.metrics as Record<string, unknown> | undefined
   const data = ((metrics?.stock_intelligence ?? metrics?.stock_by_seller ?? []) as StockItem[])
+  const reliabilityData = ((metrics?.competitor_reliability ?? []) as ReliabilityItem[])
+
+  if (loading && !summary) {
+    return (
+      <div className="space-y-6">
+        <div className="h-8 w-48 animate-pulse rounded-lg bg-muted/50" />
+        <div className="h-4 w-72 animate-pulse rounded bg-muted/30" />
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="h-32 animate-pulse rounded-xl bg-muted/40" />
+          ))}
+        </div>
+      </div>
+    )
+  }
 
   if (!isGold) {
     return <B2BPlanGate featureName="Stock Intelligence" />
@@ -29,7 +57,7 @@ export default function StockIntelligencePage() {
     rate: Number(item.out_of_stock_rate ?? 0),
   }))
 
-  const worstSeller = data.sort((a, b) => Number(b.out_of_stock_rate ?? 0) - Number(a.out_of_stock_rate ?? 0))[0]
+  const worstSeller = [...data].sort((a, b) => Number(b.out_of_stock_rate ?? 0) - Number(a.out_of_stock_rate ?? 0))[0]
 
   return (
     <div className="space-y-6">
@@ -133,6 +161,50 @@ export default function StockIntelligencePage() {
                         <td className="px-4 py-3 text-right font-mono">{item.out_of_stock ?? 0}</td>
                         <td className="px-4 py-3 text-right">
                           <span className={`font-mono font-bold ${rate > 50 ? "text-red-600" : rate > 20 ? "text-amber-600" : "text-emerald-600"}`}>{rate.toFixed(1)}%</span>
+                        </td>
+                      </tr>
+                    )
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="border-border/50 shadow-sm">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><Clock className="size-4 text-indigo-500" />30-Day OOS Reliability</CardTitle>
+          <CardDescription>Out-of-stock rate over the last 30 days per seller (min 5 records required). Lower is better.</CardDescription>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-border text-sm">
+              <thead className="bg-muted/40 text-left text-xs uppercase tracking-wider text-muted-foreground">
+                <tr>
+                  <th className="px-4 py-3 font-medium">Seller</th>
+                  <th className="px-4 py-3 font-medium text-right">Records</th>
+                  <th className="px-4 py-3 font-medium text-right">OOS Count</th>
+                  <th className="px-4 py-3 font-medium text-right">30-Day OOS Rate</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/50">
+                {reliabilityData.length === 0 ? (
+                  <tr><td colSpan={4} className="px-4 py-16 text-center">
+                    <Clock className="mx-auto mb-3 size-10 text-muted-foreground/30" />
+                    <p className="text-sm font-medium text-muted-foreground">No 30-day data yet</p>
+                    <p className="text-xs text-muted-foreground/70 mt-1">Reliability data requires at least 5 price history records per seller over 30 days.</p>
+                  </td></tr>
+                ) : (
+                  reliabilityData.map((item, i) => {
+                    const rate = Number(item.oos_rate_30d ?? 0)
+                    return (
+                      <tr key={item.seller_id ?? i} className="transition-colors hover:bg-muted/20">
+                        <td className="px-4 py-3 font-medium">{item.seller_name ?? "-"}</td>
+                        <td className="px-4 py-3 text-right font-mono">{item.total_records ?? 0}</td>
+                        <td className="px-4 py-3 text-right font-mono">{item.out_of_stock_count ?? 0}</td>
+                        <td className="px-4 py-3 text-right">
+                          <ReliabilityBar rate={rate} />
                         </td>
                       </tr>
                     )

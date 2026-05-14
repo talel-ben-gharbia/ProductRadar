@@ -15,7 +15,7 @@ type DispersionItem = {
 }
 
 export default function PriceDispersionPage() {
-  const { summary } = useB2B()
+  const { summary, loading } = useB2B()
   const metrics = summary?.metrics as Record<string, unknown> | undefined
   const data = ((metrics?.price_dispersion ?? []) as DispersionItem[])
 
@@ -26,6 +26,20 @@ export default function PriceDispersionPage() {
 
   const avgDispersion = data.length > 0 ? data.reduce((s, d) => s + Number(d.dispersion_pct ?? 0), 0) / data.length : 0
   const highDispersion = data.filter((d) => Number(d.dispersion_pct ?? 0) > 30).length
+
+  if (loading && !summary) {
+    return (
+      <div className="space-y-6">
+        <div className="h-8 w-48 animate-pulse rounded-lg bg-muted/50" />
+        <div className="h-4 w-72 animate-pulse rounded bg-muted/30" />
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="h-32 animate-pulse rounded-xl bg-muted/40" />
+          ))}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">

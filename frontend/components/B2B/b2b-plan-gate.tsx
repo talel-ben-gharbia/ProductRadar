@@ -1,4 +1,5 @@
-import { Lock, Crown } from "lucide-react"
+import Link from "next/link"
+import { ArrowUp, Crown, Lock } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 
@@ -21,10 +22,14 @@ export default function B2BPlanGate({ featureName }: { featureName: string }) {
           </p>
           <p>
             Gold members get access to advanced analytics, competitor tracking, API exports, priority support, and much more. 
-            Contact your account manager to upgrade your subscription.
+            Request an upgrade from your workspace settings.
           </p>
         </div>
-        <Button className="w-full sm:w-auto px-8 font-medium">Contact Sales</Button>
+        <Button asChild className="w-full sm:w-auto px-8 font-medium">
+          <Link href="/B2B/dashboard/settings">
+            <ArrowUp className="size-4 mr-2" /> Upgrade to Gold
+          </Link>
+        </Button>
       </CardContent>
     </Card>
   )

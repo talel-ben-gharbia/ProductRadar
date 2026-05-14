@@ -16,31 +16,14 @@ import { DEMO_HEALTH_SCORE, DEMO_TRUST_SCORE_HISTORY } from "@/lib/demo-data"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { timeAgo, ordinalSuffix } from "@/components/B2B/b2b-utils"
+
 
 const CHART_COLORS = ["#6366f1", "#8b5cf6", "#a78bfa", "#c4b5fd", "#818cf8", "#7c3aed"]
 
 function fmt(value: unknown): string {
   if (typeof value === "number") return new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(value)
   return "-"
-}
-
-function timeAgo(dateStr: string | undefined | null): string {
-  if (!dateStr) return ""
-  const now = Date.now()
-  const diff = now - new Date(dateStr).getTime()
-  const minutes = Math.floor(diff / 60000)
-  if (minutes < 60) return `${minutes}m ago`
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours}h ago`
-  const days = Math.floor(hours / 24)
-  if (days < 7) return `${days}d ago`
-  return new Date(dateStr).toLocaleDateString()
-}
-
-function ordinalSuffix(n: number): string {
-  const s = ["th", "st", "nd", "rd"]
-  const v = n % 100
-  return s[(v - 20) % 10] ?? s[v] ?? s[0]
 }
 
 export default function DemoOverviewPage() {

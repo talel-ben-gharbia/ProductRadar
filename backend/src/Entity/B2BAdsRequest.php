@@ -25,6 +25,10 @@ class B2BAdsRequest
     #[ORM\JoinColumn(name: 'company_id', referencedColumnName: 'id', nullable: true, onDelete: 'CASCADE')]
     private ?B2BCompany $company = null;
 
+    #[ORM\ManyToOne(targetEntity: B2BMarket::class)]
+    #[ORM\JoinColumn(name: 'market_id', referencedColumnName: 'id', nullable: true, onDelete: 'CASCADE')]
+    private ?B2BMarket $market = null;
+
     #[ORM\Column(length: 20)]
     private ?string $request_type = null;
 
@@ -88,6 +92,18 @@ class B2BAdsRequest
     public function setCompany(?B2BCompany $company): static
     {
         $this->company = $company;
+
+        return $this;
+    }
+
+    public function getMarket(): ?B2BMarket
+    {
+        return $this->market;
+    }
+
+    public function setMarket(?B2BMarket $market): static
+    {
+        $this->market = $market;
 
         return $this;
     }

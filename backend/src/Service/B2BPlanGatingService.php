@@ -4,7 +4,7 @@ namespace App\Service;
 
 use App\Entity\B2BCompany;
 use App\Entity\B2BMarket;
-use App\Entity\B2BSubscription;
+use App\Entity\Subscription;
 use Doctrine\ORM\EntityManagerInterface;
 
 class B2BPlanGatingService
@@ -14,6 +14,7 @@ class B2BPlanGatingService
     public const FEATURE_REVIEWS_SENTIMENT = 'reviews_sentiment';
     public const FEATURE_DEMAND_INTELLIGENCE = 'demand_intelligence';
     public const FEATURE_EXPORT_CSV = 'export_csv';
+    public const FEATURE_SPONSORED_PRODUCTS = 'sponsored_products';
 
     // Features that require GOLD plan
     private const GOLD_FEATURES = [
@@ -39,14 +40,14 @@ class B2BPlanGatingService
 
     public function isGoldPlan(B2BCompany|B2BMarket $user): bool
     {
-        $criteria = $user instanceof B2BCompany ? ['company' => $user] : ['market' => $user];
-        /** @var B2BSubscription|null $sub */
-        $sub = $this->entityManager->getRepository(B2BSubscription::class)->findOneBy(
-            $criteria,
+        $ownerType = $user instanceof B2BCompany ? 'COMPANY' : 'MARKET';
+        /** @var Subscription|null $sub */
+        $sub = $this->entityManager->getRepository(Subscription::class)->findOneBy(
+            ['owner_type' => $ownerType, 'owner_id' => $user->getId()],
             ['created_at' => 'DESC', 'id' => 'DESC']
         );
 
-        if (!$sub instanceof B2BSubscription || !$sub->isActive()) {
+        if (!$sub instanceof Subscription || !$sub->isActive()) {
             return false;
         }
 

@@ -10,6 +10,7 @@ use Doctrine\ORM\Mapping as ORM;
     new ORM\Index(name: 'idx_b2b_watchlist_owner_type', columns: ['owner_type']),
     new ORM\Index(name: 'idx_b2b_watchlist_item_type', columns: ['item_type']),
 ])]
+#[ORM\UniqueConstraint(name: 'UNIQ_B2B_WATCHLIST_COMPANY_PRODUCT', columns: ['company_id', 'product_id'])]
 class B2BWatchlist
 {
     #[ORM\Id]
@@ -51,6 +52,9 @@ class B2BWatchlist
 
     #[ORM\Column(nullable: true)]
     private ?\DateTimeImmutable $updated_at = null;
+
+    #[ORM\Column(type: 'float', nullable: true)]
+    private ?float $baseline_price = null;
 
     public function getId(): ?int
     {
@@ -173,6 +177,18 @@ class B2BWatchlist
     public function setUpdatedAt(?\DateTimeImmutable $updatedAt): static
     {
         $this->updated_at = $updatedAt;
+
+        return $this;
+    }
+
+    public function getBaselinePrice(): ?float
+    {
+        return $this->baseline_price;
+    }
+
+    public function setBaselinePrice(?float $baselinePrice): static
+    {
+        $this->baseline_price = $baselinePrice;
 
         return $this;
     }

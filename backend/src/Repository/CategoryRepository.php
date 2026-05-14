@@ -27,6 +27,8 @@ class CategoryRepository extends ServiceEntityRepository
             ->setParameter('parentId', $parentId)
             ->orderBy('c.name', 'ASC')
             ->getQuery()
+            ->setCacheable(true)
+            ->setLifetime(600)
             ->getResult();
     }
 

@@ -9,29 +9,68 @@ use App\Repository\ProductListingRepository;
 use App\Repository\SellerRepository;
 use App\Service\B2BNotificationService;
 use Doctrine\ORM\EntityManagerInterface;
+use Psr\Cache\CacheItemPoolInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Attribute\Route;
 
 final class ProductListingController extends AbstractController
 {
+    private const CACHE_KEY_LISTINGS = 'listings.all';
+    private const CACHE_KEY_LISTINGS_PREFIX = 'listings.';
+    private const CACHE_TTL = 300;
+
     public function __construct(
         private readonly B2BNotificationService $b2bNotificationService,
+        #[Autowire(service: 'listings.cache')]
+        private readonly CacheItemPoolInterface $listingsCache,
     ) {
     }
+
+    private function buildListingsCacheKey(?int $productId, ?int $sellerId): string
+    {
+        $key = self::CACHE_KEY_LISTINGS;
+        if ($productId !== null) {
+            $key .= ".p{$productId}";
+        }
+        if ($sellerId !== null) {
+            $key .= ".s{$sellerId}";
+        }
+        return $key ?: self::CACHE_KEY_LISTINGS;
+    }
+
     #[Route('/product-listings', name: 'get_product_listings', methods: ['GET'])]
     public function getProductListings(Request $request, ProductListingRepository $productListingRepository): JsonResponse
     {
         $productId = $request->query->getInt('productId', 0);
         $sellerId = $request->query->getInt('sellerId', 0);
 
+        $normalizedProductId = $productId > 0 ? $productId : null;
+        $normalizedSellerId = $sellerId > 0 ? $sellerId : null;
+
+        $cacheKey = $this->buildListingsCacheKey($normalizedProductId, $normalizedSellerId);
+
+        $cacheItem = $this->listingsCache->getItem($cacheKey);
+        if ($cacheItem->isHit()) {
+            return $this->json($cacheItem->get());
+        }
+
         $rows = $productListingRepository->findListingRows(
-            $productId > 0 ? $productId : null,
-            $sellerId > 0 ? $sellerId : null,
+            $normalizedProductId,
+            $normalizedSellerId,
         );
 
-        $data = array_map(static function (array $row): array {
+        $decodeBreakdown = function (mixed $value): mixed {
+            if (is_string($value)) {
+                $decoded = json_decode($value, true);
+                return is_array($decoded) ? $decoded : null;
+            }
+            return $value;
+        };
+
+        $data = array_map(function (array $row) use ($decodeBreakdown): array {
             $createdAt = $row['created_at'] ?? null;
             $updatedAt = $row['updated_at'] ?? null;
 
@@ -43,7 +82,7 @@ final class ProductListingController extends AbstractController
                 'product_url' => $row['product_url'] ?? null,
                 'availability' => $row['availability'] ?? null,
                 'trust_score' => $row['trust_score'] ?? null,
-                'trust_score_breakdown' => $row['trust_score_breakdown'] ?? null,
+                'trust_score_breakdown' => $decodeBreakdown($row['trust_score_breakdown'] ?? null),
                 'created_at' => $createdAt instanceof \DateTimeInterface ? $createdAt->format(DATE_ATOM) : $createdAt,
                 'updated_at' => $updatedAt instanceof \DateTimeInterface ? $updatedAt->format(DATE_ATOM) : $updatedAt,
 
@@ -58,6 +97,10 @@ final class ProductListingController extends AbstractController
                 'sellerName' => $row['sellerName'] ?? null,
             ];
         }, $rows);
+
+        $cacheItem->set($data);
+        $cacheItem->expiresAfter(self::CACHE_TTL);
+        $this->listingsCache->save($cacheItem);
 
         return $this->json($data);
     }
@@ -105,6 +148,10 @@ final class ProductListingController extends AbstractController
         $entityManager->persist($listing);
         $entityManager->flush();
 
+        $this->clearListingsCache();
+        $this->detectNewCompetitor($listing, $entityManager);
+        $this->detectCompetitorAlerts($listing, $entityManager);
+
         return $this->json([
             'id' => $listing->getId(),
             'productId' => $listing->getProduct()?->getId(),
@@ -140,6 +187,9 @@ final class ProductListingController extends AbstractController
         $listing->setUpdatedAt(new \DateTimeImmutable());
         $entityManager->flush();
 
+        $this->clearListingsCache();
+        $this->detectCompetitorAlerts($listing, $entityManager);
+
         return $this->json(['id' => $listing->getId(), 'is_active' => $listing->isActive()]);
     }
 
@@ -162,6 +212,7 @@ final class ProductListingController extends AbstractController
         $listing->setUpdatedAt(new \DateTimeImmutable());
         $entityManager->flush();
 
+        $this->clearListingsCache();
         $this->detectCompetitorAlerts($listing, $entityManager);
 
         return $this->json(['id' => $listing->getId(), 'availability' => $listing->isAvailability()]);
@@ -219,6 +270,8 @@ final class ProductListingController extends AbstractController
 
         $entityManager->flush();
 
+        $this->clearListingsCache();
+
         // Detect competitive alerts after price/availability changes
         $this->detectCompetitorAlerts($listing, $entityManager);
 
@@ -236,7 +289,74 @@ final class ProductListingController extends AbstractController
         $entityManager->remove($listing);
         $entityManager->flush();
 
+        $this->clearListingsCache();
+
         return $this->json(['success' => true]);
+    }
+
+    private function clearListingsCache(): void
+    {
+        $this->listingsCache->clear();
+    }
+
+    private function decodeTrustBreakdown(mixed $value): mixed
+    {
+        if (is_string($value)) {
+            $decoded = json_decode($value, true);
+            return is_array($decoded) ? $decoded : null;
+        }
+        return $value;
+    }
+
+    private function detectNewCompetitor(ProductListing $listing, EntityManagerInterface $entityManager): void
+    {
+        $product = $listing->getProduct();
+        $seller = $listing->getSeller();
+        if (!$product || !$seller) return;
+
+        $listingSellerId = $seller->getId();
+
+        // Check if there are existing companies that sell this same product
+        $existingListings = $entityManager->getRepository(ProductListing::class)->findBy([
+            'product' => $product,
+            'is_active' => true,
+        ]);
+
+        $existingSellerIds = [];
+        foreach ($existingListings as $existing) {
+            $s = $existing->getSeller();
+            if ($s && $s->getId() !== $listingSellerId) {
+                $existingSellerIds[] = $s->getId();
+            }
+        }
+
+        if (empty($existingSellerIds)) return;
+
+        // Notify companies that sell this product about the new competitor
+        $b2bCompanies = $entityManager->getRepository(B2BCompany::class)->findBy(['b2b_status' => 'ACTIVE', 'is_verified' => true]);
+        foreach ($b2bCompanies as $company) {
+            $companySeller = $company->getSeller();
+            if (!$companySeller || !in_array($companySeller->getId(), $existingSellerIds, true)) continue;
+
+            $this->b2bNotificationService->notifyCompany(
+                $company,
+                'NEW_COMPETITOR',
+                sprintf('New competitor "%s" is now selling "%s" on the marketplace.', $seller->getName() ?? 'Unknown', $product->getName()),
+                'MEDIUM',
+                $listing
+            );
+
+            $this->b2bNotificationService->sendEmail(
+                $company,
+                sprintf('New Competitor Alert: "%s" is now selling "%s"', $seller->getName() ?? 'Unknown', $product->getName()),
+                sprintf(
+                    "Hello %s,\n\nA new competitor \"%s\" is now selling \"%s\" on the marketplace.\n\nLog in to your dashboard to monitor the competition.\n\nBest regards,\nProductRadar Team",
+                    $company->getCompanyName() ?? 'Valued Partner',
+                    $seller->getName() ?? 'Unknown',
+                    $product->getName()
+                )
+            );
+        }
     }
 
     private function detectCompetitorAlerts(ProductListing $listing, EntityManagerInterface $entityManager): void
@@ -250,7 +370,7 @@ final class ProductListingController extends AbstractController
         $listingAvailable = $listing->isAvailability();
 
         // Find all B2B companies whose seller matches the product's competitors
-        $b2bCompanies = $entityManager->getRepository(B2BCompany::class)->findBy(['b2b_status' => 'APPROVED', 'is_verified' => true]);
+        $b2bCompanies = $entityManager->getRepository(B2BCompany::class)->findBy(['b2b_status' => 'ACTIVE', 'is_verified' => true]);
 
         foreach ($b2bCompanies as $company) {
             $companySeller = $company->getSeller();
@@ -273,6 +393,18 @@ final class ProductListingController extends AbstractController
                             $seller->getName() ?? 'Unknown',
                             $listingPrice
                         );
+
+                        $this->b2bNotificationService->sendEmail(
+                            $company,
+                            sprintf('Price Alert: Competitor "%s" is now cheaper for "%s"', $seller->getName() ?? 'Unknown', $product->getName()),
+                            sprintf(
+                                "Hello %s,\n\nCompetitor \"%s\" has lowered their price for \"%s\" to %s DT.\n\nReview your pricing strategy in your dashboard.\n\nBest regards,\nProductRadar Team",
+                                $company->getCompanyName() ?? 'Valued Partner',
+                                $seller->getName() ?? 'Unknown',
+                                $product->getName(),
+                                number_format($listingPrice, 2)
+                            )
+                        );
                     }
                 }
 
@@ -284,6 +416,39 @@ final class ProductListingController extends AbstractController
                         sprintf('"%s" just went out of stock on "%s". You are in stock — consider promoting this product.', $seller->getName() ?? 'A competitor', $product->getName()),
                         'HIGH',
                         $companyListing
+                    );
+
+                    $this->b2bNotificationService->sendEmail(
+                        $company,
+                        sprintf('Stock Opportunity: "%s" is out of stock, you are in stock!', $product->getName()),
+                        sprintf(
+                            "Hello %s,\n\nCompetitor \"%s\" just went out of stock for \"%s\" but you are still in stock.\n\nThis is a great opportunity to promote this product and capture market share.\n\nBest regards,\nProductRadar Team",
+                            $company->getCompanyName() ?? 'Valued Partner',
+                            $seller->getName() ?? 'A competitor',
+                            $product->getName()
+                        )
+                    );
+                }
+
+                // Alert 3: Pure competitor OOS — vendor is also OOS, no opportunity, but good to know
+                if ($listingAvailable === false && $companyListing->isAvailability() === false) {
+                    $this->b2bNotificationService->notifyCompany(
+                        $company,
+                        'COMPETITOR_OOS',
+                        sprintf('Competitor "%s" is also out of stock for "%s".', $seller->getName() ?? 'Unknown', $product->getName()),
+                        'LOW',
+                        $companyListing
+                    );
+
+                    $this->b2bNotificationService->sendEmail(
+                        $company,
+                        sprintf('Market Update: "%s" also out of stock for "%s"', $seller->getName() ?? 'Unknown', $product->getName()),
+                        sprintf(
+                            "Hello %s,\n\nCompetitor \"%s\" is also out of stock for \"%s\".\n\nRestocking soon could give you a competitive advantage.\n\nBest regards,\nProductRadar Team",
+                            $company->getCompanyName() ?? 'Valued Partner',
+                            $seller->getName() ?? 'Unknown',
+                            $product->getName()
+                        )
                     );
                 }
             }

@@ -21,7 +21,7 @@ type B2CProfile = {
   firebase_uid: string
   type: "customer"
   full_name: string | null
-  adress: string | null
+  address: string | null
 }
 
 export function ProfileInformationPage() {
@@ -30,7 +30,7 @@ export function ProfileInformationPage() {
   const [saving, setSaving] = useState(false)
   const [profile, setProfile] = useState<B2CProfile | null>(null)
   const [fullName, setFullName] = useState("")
-  const [adress, setAdress] = useState("")
+  const [address, setAddress] = useState("")
   const [changingPassword, setChangingPassword] = useState(false)
   const [currentPassword, setCurrentPassword] = useState("")
   const [newPassword, setNewPassword] = useState("")
@@ -48,7 +48,7 @@ export function ProfileInformationPage() {
 
         setProfile(data.customer)
         setFullName(data.customer?.full_name ?? "")
-        setAdress(data.customer?.adress ?? "")
+        setAddress(data.customer?.address ?? "")
         setLoading(false)
       })
       .catch(() => {
@@ -71,7 +71,7 @@ export function ProfileInformationPage() {
       const response = await fetch("/api/b2c/profile", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fullName, adress }),
+        body: JSON.stringify({ fullName, address }),
       })
 
       const data = await response.json()
@@ -83,7 +83,7 @@ export function ProfileInformationPage() {
       const customer = data.customer as B2CProfile
       setProfile(customer)
       setFullName(customer.full_name ?? "")
-      setAdress(customer.adress ?? "")
+      setAddress(customer.address ?? "")
       toast.success("Profile updated successfully.")
       router.refresh()
     } catch (error) {
@@ -197,11 +197,11 @@ export function ProfileInformationPage() {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="adress">Address</Label>
+            <Label htmlFor="address">Address</Label>
             <Input
-              id="adress"
-              value={adress}
-              onChange={(event) => setAdress(event.target.value)}
+              id="address"
+              value={address}
+              onChange={(event) => setAddress(event.target.value)}
               placeholder="Your address"
             />
           </div>

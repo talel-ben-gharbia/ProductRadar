@@ -50,6 +50,7 @@ type ProductWithBestPrice = {
   bestListingId?: number
   bestTrustScore?: number | null
   offersCount: number
+  isSponsored?: boolean
 }
 
 type RootCategoryMenu = {
@@ -118,6 +119,10 @@ function computeBestListingByProduct(listings: ProductListing[]) {
     }
 
     if (listing.is_active === false || listing.availability === false) {
+      continue
+    }
+
+    if (listing.price === 0) {
       continue
     }
 
@@ -302,6 +307,12 @@ export default async function B2CProductsPage({ searchParams }: ProductsPageProp
         if (listing.productId === null) {
           return acc
         }
+        if (listing.is_active === false) {
+          return acc
+        }
+        if (listing.price !== null && listing.price === 0) {
+          return acc
+        }
         acc.set(listing.productId, (acc.get(listing.productId) ?? 0) + 1)
         return acc
       }, new Map<number, number>())
@@ -323,12 +334,29 @@ export default async function B2CProductsPage({ searchParams }: ProductsPageProp
       refsByProduct = new Map<number, string[]>()
     }
 
+    // Fetch sponsored products
+    let sponsoredProductIds = new Set<number>()
+    try {
+      const sponsoredRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/b2b/b2c/sponsored-products`, {
+        cache: "no-store",
+      })
+      if (sponsoredRes.ok) {
+        const sponsoredData = await sponsoredRes.json()
+        if (sponsoredData?.items) {
+          for (const sp of sponsoredData.items) {
+            if (sp.product_id) sponsoredProductIds.add(sp.product_id)
+          }
+        }
+      }
+    } catch { /* ignore */ }
+
     products = [...deduped.values()].map((product) => ({
       product,
       bestPrice: bestPriceByProduct.get(product.id),
       bestListingId: bestListingIdByProduct.get(product.id),
       bestTrustScore: bestTrustScoreByProduct.get(product.id) ?? null,
       offersCount: offersCountByProduct.get(product.id) ?? 0,
+      isSponsored: sponsoredProductIds.has(product.id),
     }))
 
     if (selectedBrand) {
@@ -374,6 +402,10 @@ export default async function B2CProductsPage({ searchParams }: ProductsPageProp
     }
 
     products.sort((a, b) => {
+      // Sponsored products always come first
+      if (a.isSponsored && !b.isSponsored) return -1
+      if (!a.isSponsored && b.isSponsored) return 1
+
       if (selectedSort === "name-asc") {
         return a.product.name.localeCompare(b.product.name)
       }
@@ -780,7 +812,7 @@ export default async function B2CProductsPage({ searchParams }: ProductsPageProp
               </Card>
             ) : (
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                {paginatedProducts.map(({ product, bestPrice, bestListingId, bestTrustScore, offersCount }) => (
+                {paginatedProducts.map(({ product, bestPrice, bestListingId, bestTrustScore, offersCount, isSponsored }) => (
                   <ProductCard
                     key={product.id}
                     product={product}
@@ -788,6 +820,7 @@ export default async function B2CProductsPage({ searchParams }: ProductsPageProp
                     offersCount={offersCount}
                     bestTrustScore={bestTrustScore}
                     favoriteListingId={bestListingId}
+                    isSponsored={isSponsored}
                   />
                 ))}
               </div>

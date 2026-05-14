@@ -27,6 +27,8 @@ export type SourceHealthResponse = {
   [key: string]: unknown
 }
 
+import { cachedFetch } from "@/lib/fetch-with-cache"
+
 function buildQuery(params: Record<string, string | number | undefined>): string {
   const searchParams = new URLSearchParams()
   for (const [key, value] of Object.entries(params)) {
@@ -36,10 +38,6 @@ function buildQuery(params: Record<string, string | number | undefined>): string
 
   const query = searchParams.toString()
   return query ? `?${query}` : ""
-}
-
-async function parseJson(response: Response): Promise<unknown> {
-  return response.json().catch(() => ({}))
 }
 
 export async function getDataSources(filters: {
@@ -55,14 +53,16 @@ export async function getDataSources(filters: {
     active: filters.active,
   })
 
-  const response = await fetch(`/api/admin/data-sources${query}`, { cache: 'no-store' })
+  const cacheKey = `data_sources:list:${JSON.stringify(filters)}`
 
-  const data = (await parseJson(response)) as { error?: string }
-  if (!response.ok) {
-    throw new Error(data.error || 'Failed to fetch data sources.')
-  }
+  return cachedFetch<DataSourcesResponse>(`/api/admin/data-sources${query}`, {
+    cacheKey,
+    cacheTtl: 300,
+  })
+}
 
-  return data as DataSourcesResponse
+async function parseJson(response: Response): Promise<unknown> {
+  return response.json().catch(() => ({}))
 }
 
 export async function createDataSource(payload: {
@@ -104,15 +104,8 @@ export async function updateDataSource(
 }
 
 export async function testDataSourceHealth(sourceName: string): Promise<SourceHealthResponse> {
-  const response = await fetch(`/api/admin/scraping-logs/source/${encodeURIComponent(sourceName)}/health`, {
-    method: "GET",
-    cache: "no-store",
-  })
-
-  const data = (await parseJson(response)) as { error?: string }
-  if (!response.ok) {
-    throw new Error(data.error || "Failed to test data source health.")
-  }
-
-  return data as SourceHealthResponse
+  return cachedFetch<SourceHealthResponse>(
+    `/api/admin/scraping-logs/source/${encodeURIComponent(sourceName)}/health`,
+    { cacheKey: `data_sources:health:${sourceName}`, cacheTtl: 300 },
+  )
 }

@@ -3,23 +3,15 @@
 import { useCallback, useEffect, useState } from "react"
 import { Bookmark, BookmarkPlus, Eye, Heart, Search, Star, Trash2 } from "lucide-react"
 
+import B2BErrorState from "@/components/B2B/b2b-error-state"
 import { useB2B } from "@/components/B2B/b2b-context"
+import { QuotaBar } from "@/components/B2B/b2b-quota-bar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 
-type WatchlistItem = {
-  id: number
-  product_id: number | null
-  product_name: string
-  product_image: string | null
-  product_brand: string | null
-  followed_at: string | null
-  cheapest_price: number | null
-  highest_price: number | null
-  total_sellers: number
-}
+import type { B2BWatchlistItem as WatchlistItem } from "@/types/b2b"
 
 function formatFollowedAt(value: string | null): string {
   if (!value) {
@@ -35,25 +27,31 @@ function formatFollowedAt(value: string | null): string {
 }
 
 export default function WatchlistPage() {
-  const { isGold, isSilver } = useB2B()
+  const { isGold } = useB2B()
   const [items, setItems] = useState<WatchlistItem[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
   const [searchResults, setSearchResults] = useState<Array<{ id: number; name: string; brand: string | null }>>([])
   const [searching, setSearching] = useState(false)
   const [adding, setAdding] = useState(false)
+  const [fetchError, setFetchError] = useState<string | null>(null)
+  const [searchError, setSearchError] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
 
   const maxItems = isGold ? 15 : 5
 
   const fetchWatchlist = useCallback(async () => {
     setLoading(true)
+    setFetchError(null)
     try {
       const res = await fetch(`/api/b2b/workspace?endpoint=watchlist`)
       if (res.ok) {
         const data = await res.json()
         setItems(data.items ?? [])
       }
-    } catch { /* ignore */ }
+    } catch {
+      setFetchError("Failed to load watchlist")
+    }
     setLoading(false)
   }, [])
 
@@ -66,18 +64,22 @@ export default function WatchlistPage() {
       return
     }
     setSearching(true)
+    setSearchError(null)
     try {
       const res = await fetch(`/api/b2b/workspace?endpoint=watchlist/search&q=${encodeURIComponent(q)}`)
       if (res.ok) {
         const data = await res.json()
         setSearchResults(data.items ?? [])
       }
-    } catch { /* ignore */ }
+    } catch {
+      setSearchError("Failed to search products")
+    }
     setSearching(false)
   }, [])
 
   const handleAdd = useCallback(async (productId: number) => {
     setAdding(true)
+    setActionError(null)
     try {
       const res = await fetch(`/api/b2b/workspace?endpoint=watchlist`, {
         method: "POST",
@@ -90,17 +92,22 @@ export default function WatchlistPage() {
         fetchWatchlist()
       } else {
         const data = await res.json()
-        alert(data.error ?? "Failed to add")
+        setActionError(data.error ?? "Failed to add")
       }
-    } catch { /* ignore */ }
+    } catch {
+      setActionError("Failed to add product to watchlist")
+    }
     setAdding(false)
   }, [fetchWatchlist])
 
   const handleRemove = useCallback(async (id: number) => {
     try {
+      setActionError(null)
       await fetch(`/api/b2b/workspace?endpoint=watchlist/${id}`, { method: "DELETE" })
       setItems((prev) => prev.filter((i) => i.id !== id))
-    } catch { /* ignore */ }
+    } catch {
+      setActionError("Failed to remove product from watchlist")
+    }
   }, [])
 
   const filtered = items.filter((i) =>
@@ -113,9 +120,7 @@ export default function WatchlistPage() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Watchlist</h1>
-          <p className="text-sm text-muted-foreground">
-            {items.length} of {maxItems} products tracked
-          </p>
+          <QuotaBar usage={items.length} limit={maxItems} label="Tracked Products" />
         </div>
       </div>
 
@@ -133,6 +138,9 @@ export default function WatchlistPage() {
           </div>
           {search.length >= 2 && (
             <div className="mt-3 space-y-1">
+              {searchError && (
+                <B2BErrorState message={searchError} onRetry={() => setSearchError(null)} />
+              )}
               {searching ? (
                 <p className="py-2 text-center text-xs text-muted-foreground">Searching...</p>
               ) : searchResults.length === 0 ? (
@@ -163,6 +171,12 @@ export default function WatchlistPage() {
       </Card>
 
       {/* Watchlist items */}
+      {fetchError && (
+        <B2BErrorState message={fetchError} onRetry={() => { setFetchError(null); fetchWatchlist() }} />
+      )}
+      {actionError && (
+        <B2BErrorState message={actionError} onRetry={() => setActionError(null)} />
+      )}
       {loading ? (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {Array.from({ length: 3 }).map((_, i) => (
@@ -210,6 +224,13 @@ export default function WatchlistPage() {
                     <p className="text-xl font-black">
                       {item.cheapest_price !== null ? `${item.cheapest_price.toFixed(2)} DT` : "-"}
                     </p>
+                    {item.price_delta !== null && item.baseline_price !== null && (
+                      <p className={`mt-0.5 text-[11px] font-semibold flex items-center gap-0.5 ${item.price_delta < 0 ? 'text-emerald-600' : item.price_delta > 0 ? 'text-red-500' : 'text-muted-foreground'}`}>
+                        {item.price_delta < 0 ? '↓' : item.price_delta > 0 ? '↑' : '→'}
+                        {' '}{Math.abs(item.price_delta).toFixed(2)} DT
+                        {' '}({((item.price_delta / item.baseline_price) * 100).toFixed(1)}%)
+                      </p>
+                    )}
                   </div>
                   <div className="text-right">
                     <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Highest</p>

@@ -9,12 +9,14 @@ use App\Entity\B2BCompany;
 use App\Entity\B2BMarket;
 use App\Entity\B2BReport;
 use App\Entity\B2BScrapingRequest;
-use App\Entity\B2BSubscription;
+use App\Entity\Subscription;
 use App\Entity\TrustScoreWeight;
 use App\Service\B2BNotificationService;
 use App\Service\TrustScoreCalculationService;
 use Doctrine\ORM\EntityManagerInterface;
+use Psr\Cache\CacheItemPoolInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use App\Security\AdminApiGuard;
@@ -23,6 +25,23 @@ use Symfony\Component\Routing\Attribute\Route;
 #[Route('/api/b2b/admin')]
 final class B2BAdminController extends AbstractController
 {
+    use CachedResponseTrait;
+
+    private const CACHE_KEY_REPORTS = 'b2b_admin.reports';
+    private const CACHE_KEY_SUBSCRIPTIONS = 'b2b_admin.subscriptions';
+    private const CACHE_KEY_ADS = 'b2b_admin.ads_requests';
+    private const CACHE_KEY_SCRAPING = 'b2b_admin.scraping_requests';
+    private const CACHE_KEY_COMPANIES = 'b2b_admin.companies';
+    private const CACHE_KEY_MARKETS = 'b2b_admin.markets';
+    private const CACHE_KEY_WEIGHTS = 'b2b_admin.trust_score_weights';
+    private const CACHE_KEY_HISTORY = 'b2b_admin.trust_score_history';
+
+    public function __construct(
+        #[Autowire(service: 'general.cache')]
+        private readonly CacheItemPoolInterface $cache,
+        private readonly EntityManagerInterface $entityManager,
+    ) {
+    }
     #[Route('/subscriptions/{subscriptionId}/approve', name: 'b2b_admin_approve_subscription', methods: ['POST'])]
     public function approveSubscription(
         int $subscriptionId,
@@ -35,8 +54,8 @@ final class B2BAdminController extends AbstractController
             return $errorResponse;
         }
 
-        $subscription = $entityManager->find(B2BSubscription::class, $subscriptionId);
-        if (!$subscription instanceof B2BSubscription) {
+        $subscription = $entityManager->find(Subscription::class, $subscriptionId);
+        if (!$subscription instanceof Subscription) {
             return $this->json(['error' => 'Subscription not found.'], 404);
         }
 
@@ -48,11 +67,12 @@ final class B2BAdminController extends AbstractController
 
         $subscription->setActive(true);
         $subscription->setActivatedAt(new \DateTimeImmutable());
-        $subscription->setActivatedByAdmin($admin);
+        $subscription->setActivatedByAdminId($admin?->getId());
         $subscription->setUpdatedAt(new \DateTimeImmutable());
 
         $entityManager->flush();
 
+        $this->invalidateCache($this->cache);
         $b2bNotificationService->notifySubscriptionApproved($subscription, $admin);
 
         return $this->json([
@@ -74,8 +94,8 @@ final class B2BAdminController extends AbstractController
             return $errorResponse;
         }
 
-        $subscription = $entityManager->find(B2BSubscription::class, $subscriptionId);
-        if (!$subscription instanceof B2BSubscription) {
+        $subscription = $entityManager->find(Subscription::class, $subscriptionId);
+        if (!$subscription instanceof Subscription) {
             return $this->json(['error' => 'Subscription not found.'], 404);
         }
 
@@ -86,6 +106,8 @@ final class B2BAdminController extends AbstractController
 
         $entityManager->remove($subscription);
         $entityManager->flush();
+
+        $this->invalidateCache($this->cache);
 
         return $this->json(['status' => 'REJECTED']);
     }
@@ -139,6 +161,8 @@ final class B2BAdminController extends AbstractController
         $entityManager->persist($campaign);
         $entityManager->flush();
 
+        $this->invalidateCache($this->cache);
+
         $campaignDetails = [
             'agreed_price' => $campaign->getAgreedPrice(),
             'duration_days' => $durationDays,
@@ -176,6 +200,7 @@ final class B2BAdminController extends AbstractController
 
         $entityManager->flush();
 
+        $this->invalidateCache($this->cache);
         $b2bNotificationService->notifyAdsRequestRejected($adsRequest);
 
         return $this->json(['status' => 'REJECTED']);
@@ -256,20 +281,19 @@ final class B2BAdminController extends AbstractController
             return $errorResponse;
         }
 
-        $renewalRequest = $entityManager->find(B2BSubscription::class, $subscriptionId);
-        if (!$renewalRequest instanceof B2BSubscription) {
+        $renewalRequest = $entityManager->find(Subscription::class, $subscriptionId);
+        if (!$renewalRequest instanceof Subscription) {
             return $this->json(['error' => 'Renewal request not found.'], 404);
         }
 
         $adminId = $adminApiGuard->getAdminId($request);
         $admin = $adminId !== null ? $entityManager->find(Admin::class, $adminId) : null;
 
-        $criteria = $renewalRequest->getCompany() !== null
-            ? ['company' => $renewalRequest->getCompany()]
-            : ['market' => $renewalRequest->getMarket()];
+        $ownerType = $renewalRequest->getOwnerType();
+        $ownerId = $renewalRequest->getOwnerId();
 
-        $currentSub = $entityManager->getRepository(B2BSubscription::class)->findOneBy(
-            $criteria + ['active' => true],
+        $currentSub = $entityManager->getRepository(Subscription::class)->findOneBy(
+            ['owner_type' => $ownerType, 'owner_id' => $ownerId, 'active' => true],
             ['created_at' => 'DESC', 'id' => 'DESC']
         );
 
@@ -288,8 +312,7 @@ final class B2BAdminController extends AbstractController
             $renewalRequest->setUpdatedAt(new \DateTimeImmutable());
         }
 
-        // Remove the pending request if separate from current
-        if ($currentSub instanceof B2BSubscription && $currentSub->getId() !== $renewalRequest->getId()) {
+        if ($currentSub instanceof Subscription && $currentSub->getId() !== $renewalRequest->getId()) {
             $entityManager->remove($renewalRequest);
         }
 
@@ -301,6 +324,74 @@ final class B2BAdminController extends AbstractController
             'status' => 'RENEWED',
             'id' => $targetSub->getId(),
             'new_end_date' => $newEnd->format(\DateTimeInterface::ATOM),
+        ]);
+    }
+
+    #[Route('/subscriptions/{subscriptionId}/reject-renewal', name: 'b2b_admin_reject_renewal', methods: ['POST'])]
+    public function rejectRenewal(
+        int $subscriptionId,
+        Request $request,
+        AdminApiGuard $adminApiGuard,
+        EntityManagerInterface $entityManager,
+        B2BNotificationService $b2bNotificationService,
+    ): JsonResponse {
+        if ($errorResponse = $adminApiGuard->assertAuthorized($request)) {
+            return $errorResponse;
+        }
+
+        $renewalRequest = $entityManager->find(Subscription::class, $subscriptionId);
+        if (!$renewalRequest instanceof Subscription) {
+            return $this->json(['error' => 'Renewal request not found.'], 404);
+        }
+
+        $entityManager->remove($renewalRequest);
+        $entityManager->flush();
+
+        $b2bNotificationService->notifySubscriptionRejected($renewalRequest);
+
+        return $this->json(['status' => 'REJECTED']);
+    }
+
+    #[Route('/subscriptions/pending-renewals', name: 'b2b_admin_list_pending_renewals', methods: ['GET'])]
+    public function listPendingRenewals(
+        Request $request,
+        AdminApiGuard $adminApiGuard,
+        EntityManagerInterface $entityManager,
+    ): JsonResponse {
+        if ($errorResponse = $adminApiGuard->assertAuthorized($request)) {
+            return $errorResponse;
+        }
+
+        $items = $entityManager->createQueryBuilder()
+            ->select('sub')
+            ->from(Subscription::class, 'sub')
+            ->where('sub.active = false')
+            ->orderBy('sub.created_at', 'DESC')
+            ->getQuery()
+            ->getResult();
+
+        return $this->json([
+                'items' => array_map(function (Subscription $sub): array {
+                    $company = $sub->getOwnerType() === 'COMPANY' && $sub->getOwnerId() !== null
+                        ? $this->entityManager->find(B2BCompany::class, $sub->getOwnerId()) : null;
+                    $market = $sub->getOwnerType() === 'MARKET' && $sub->getOwnerId() !== null
+                        ? $this->entityManager->find(B2BMarket::class, $sub->getOwnerId()) : null;
+
+                    return [
+                        'id' => $sub->getId(),
+                        'owner_type' => $sub->getOwnerType(),
+                        'plan_type' => $sub->getPlanType(),
+                        'active' => $sub->isActive(),
+                        'duration_months' => $sub->getDurationMonths(),
+                        'start_date' => $sub->getStartDate()?->format(\DateTimeInterface::ATOM),
+                        'end_date' => $sub->getEndDate()?->format(\DateTimeInterface::ATOM),
+                        'created_at' => $sub->getCreatedAt()?->format(\DateTimeInterface::ATOM),
+                        'company_id' => $company?->getId(),
+                        'market_id' => $market?->getId(),
+                        'company_name' => $company?->getCompanyName(),
+                        'market_name' => $market?->getCompanyName(),
+                    ];
+                }, $items),
         ]);
     }
 
@@ -317,34 +408,38 @@ final class B2BAdminController extends AbstractController
         $limit = max(1, min(100, $request->query->getInt('limit', 25)));
         $offset = max(0, $request->query->getInt('offset', 0));
 
-        $qb = $entityManager->createQueryBuilder()
-            ->select('r')
-            ->from(B2BReport::class, 'r')
-            ->orderBy('r.created_at', 'DESC')
-            ->setMaxResults($limit)
-            ->setFirstResult($offset);
+        $cacheKey = self::CACHE_KEY_REPORTS . ".l{$limit}o{$offset}";
 
-        $items = $qb->getQuery()->getResult();
-        $total = $entityManager->createQueryBuilder()
-            ->select('COUNT(r.id)')
-            ->from(B2BReport::class, 'r')
-            ->getQuery()
-            ->getSingleScalarResult();
+        return $this->cachedGet($this->cache, $cacheKey, static function () use ($entityManager, $limit, $offset): array {
+            $qb = $entityManager->createQueryBuilder()
+                ->select('r')
+                ->from(B2BReport::class, 'r')
+                ->orderBy('r.created_at', 'DESC')
+                ->setMaxResults($limit)
+                ->setFirstResult($offset);
 
-        return $this->json([
-            'items' => array_map(fn (B2BReport $r) => [
-                'id' => $r->getId(),
-                'type' => $r->getReportType(),
-                'status' => $r->getStatus(),
-                'period_start' => $r->getPeriodStart()?->format(\DateTimeInterface::ATOM),
-                'period_end' => $r->getPeriodEnd()?->format(\DateTimeInterface::ATOM),
-                'company_name' => $r->getCompany()?->getCompanyName(),
-                'market_name' => $r->getMarket()?->getCompanyName(),
-                'created_at' => $r->getCreatedAt()?->format(\DateTimeInterface::ATOM),
-                'file_url' => $r->getFilePath(),
-            ], $items),
-            'pagination' => ['limit' => $limit, 'offset' => $offset, 'total' => $total],
-        ]);
+            $items = $qb->getQuery()->getResult();
+            $total = $entityManager->createQueryBuilder()
+                ->select('COUNT(r.id)')
+                ->from(B2BReport::class, 'r')
+                ->getQuery()
+                ->getSingleScalarResult();
+
+            return [
+                'items' => array_map(fn (B2BReport $r) => [
+                    'id' => $r->getId(),
+                    'type' => $r->getReportType(),
+                    'status' => $r->getStatus(),
+                    'period_start' => $r->getPeriodStart()?->format(\DateTimeInterface::ATOM),
+                    'period_end' => $r->getPeriodEnd()?->format(\DateTimeInterface::ATOM),
+                    'company_name' => $r->getCompany()?->getCompanyName(),
+                    'market_name' => $r->getMarket()?->getCompanyName(),
+                    'created_at' => $r->getCreatedAt()?->format(\DateTimeInterface::ATOM),
+                    'file_url' => $r->getFilePath(),
+                ], $items),
+                'pagination' => ['limit' => $limit, 'offset' => $offset, 'total' => $total],
+            ];
+        });
     }
 
     #[Route('/subscriptions', name: 'b2b_admin_list_subscriptions', methods: ['GET'])]
@@ -361,46 +456,57 @@ final class B2BAdminController extends AbstractController
         $offset = max(0, $request->query->getInt('offset', 0));
         $activeOnly = filter_var((string) $request->query->get('active_only', 'false'), FILTER_VALIDATE_BOOLEAN);
 
-        $qb = $entityManager->createQueryBuilder()
-            ->select('sub')
-            ->from(B2BSubscription::class, 'sub')
-            ->orderBy('sub.created_at', 'DESC')
-            ->setMaxResults($limit)
-            ->setFirstResult($offset);
+        $cacheKey = self::CACHE_KEY_SUBSCRIPTIONS . ".l{$limit}o{$offset}a" . ($activeOnly ? '1' : '0');
 
-        if ($activeOnly) {
-            $qb->andWhere('sub.active = true');
-        }
+        return $this->cachedGet($this->cache, $cacheKey, static function () use ($entityManager, $limit, $offset, $activeOnly): array {
+            $qb = $entityManager->createQueryBuilder()
+                ->select('sub')
+                ->from(Subscription::class, 'sub')
+                ->orderBy('sub.created_at', 'DESC')
+                ->setMaxResults($limit)
+                ->setFirstResult($offset);
 
-        $items = $qb->getQuery()->getResult();
-        $total = $entityManager->createQueryBuilder()
-            ->select('COUNT(sub.id)')
-            ->from(B2BSubscription::class, 'sub')
-            ->getQuery()
-            ->getSingleScalarResult();
+            if ($activeOnly) {
+                $qb->andWhere('sub.active = true');
+            }
 
-        return $this->json([
-            'items' => array_map(fn (B2BSubscription $sub) => [
-                'id' => $sub->getId(),
-                'owner_type' => $sub->getOwnerType(),
-                'plan_type' => $sub->getPlanType(),
-                'active' => $sub->isActive(),
-                'duration_months' => $sub->getDurationMonths(),
-                'start_date' => $sub->getStartDate()?->format(\DateTimeInterface::ATOM),
-                'end_date' => $sub->getEndDate()?->format(\DateTimeInterface::ATOM),
-                'created_at' => $sub->getCreatedAt()?->format(\DateTimeInterface::ATOM),
-                'activated_at' => $sub->getActivatedAt()?->format(\DateTimeInterface::ATOM),
-                'company_id' => $sub->getCompany()?->getId(),
-                'market_id' => $sub->getMarket()?->getId(),
-                'company_name' => $sub->getCompany()?->getCompanyName(),
-                'market_name' => $sub->getMarket()?->getCompanyName(),
-            ], $items),
-            'pagination' => [
-                'limit' => $limit,
-                'offset' => $offset,
-                'total' => $total,
-            ],
-        ]);
+            $items = $qb->getQuery()->getResult();
+            $total = $entityManager->createQueryBuilder()
+                ->select('COUNT(sub.id)')
+                ->from(Subscription::class, 'sub')
+                ->getQuery()
+                ->getSingleScalarResult();
+
+            return [
+                'items' => array_map(function (Subscription $sub): array {
+                    $company = $sub->getOwnerType() === 'COMPANY' && $sub->getOwnerId() !== null
+                        ? $this->entityManager->find(B2BCompany::class, $sub->getOwnerId()) : null;
+                    $market = $sub->getOwnerType() === 'MARKET' && $sub->getOwnerId() !== null
+                        ? $this->entityManager->find(B2BMarket::class, $sub->getOwnerId()) : null;
+
+                    return [
+                        'id' => $sub->getId(),
+                        'owner_type' => $sub->getOwnerType(),
+                        'plan_type' => $sub->getPlanType(),
+                        'active' => $sub->isActive(),
+                        'duration_months' => $sub->getDurationMonths(),
+                        'start_date' => $sub->getStartDate()?->format(\DateTimeInterface::ATOM),
+                        'end_date' => $sub->getEndDate()?->format(\DateTimeInterface::ATOM),
+                        'created_at' => $sub->getCreatedAt()?->format(\DateTimeInterface::ATOM),
+                        'activated_at' => $sub->getActivatedAt()?->format(\DateTimeInterface::ATOM),
+                        'company_id' => $company?->getId(),
+                        'market_id' => $market?->getId(),
+                        'company_name' => $company?->getCompanyName(),
+                        'market_name' => $market?->getCompanyName(),
+                    ];
+                }, $items),
+                'pagination' => [
+                    'limit' => $limit,
+                    'offset' => $offset,
+                    'total' => $total,
+                ],
+            ];
+        });
     }
 
     #[Route('/ads-requests', name: 'b2b_admin_list_ads_requests', methods: ['GET'])]
@@ -417,51 +523,55 @@ final class B2BAdminController extends AbstractController
         $offset = max(0, $request->query->getInt('offset', 0));
         $status = trim((string) $request->query->get('status', ''));
 
-        $qb = $entityManager->createQueryBuilder()
-            ->select('ar')
-            ->from(B2BAdsRequest::class, 'ar')
-            ->orderBy('ar.created_at', 'DESC')
-            ->setMaxResults($limit)
-            ->setFirstResult($offset);
+        $cacheKey = self::CACHE_KEY_ADS . ".l{$limit}o{$offset}s{$status}";
 
-        if ($status !== '') {
-            $qb->andWhere('ar.status = :status')
-                ->setParameter('status', strtoupper($status));
-        }
+        return $this->cachedGet($this->cache, $cacheKey, static function () use ($entityManager, $limit, $offset, $status): array {
+            $qb = $entityManager->createQueryBuilder()
+                ->select('ar')
+                ->from(B2BAdsRequest::class, 'ar')
+                ->orderBy('ar.created_at', 'DESC')
+                ->setMaxResults($limit)
+                ->setFirstResult($offset);
 
-        $items = $qb->getQuery()->getResult();
-        $total = $entityManager->createQueryBuilder()
-            ->select('COUNT(ar.id)')
-            ->from(B2BAdsRequest::class, 'ar')
-            ->getQuery()
-            ->getSingleScalarResult();
+            if ($status !== '') {
+                $qb->andWhere('ar.status = :status')
+                    ->setParameter('status', strtoupper($status));
+            }
 
-        return $this->json([
-            'items' => array_map(fn (B2BAdsRequest $ar) => [
-                'id' => $ar->getId(),
-                'owner_type' => $ar->getOwnerType(),
-                'request_type' => $ar->getRequestType(),
-                'target_type' => $ar->getTargetType(),
-                'target_url' => $ar->getTargetUrl(),
-                'product_id' => $ar->getProduct()?->getId(),
-                'product_name' => $ar->getProduct()?->getName(),
-                'category_id' => $ar->getCategory()?->getId(),
-                'category_name' => $ar->getCategory()?->getName(),
-                'brand_filter' => $ar->getBrandFilter(),
-                'status' => $ar->getStatus(),
-                'budget_proposal' => $ar->getBudgetProposal(),
-                'duration_days' => $ar->getDurationDays(),
-                'notes' => $ar->getNotes(),
-                'company_id' => $ar->getCompany()?->getId(),
-                'company_name' => $ar->getCompany()?->getCompanyName(),
-                'created_at' => $ar->getCreatedAt()?->format(\DateTimeInterface::ATOM),
-            ], $items),
-            'pagination' => [
-                'limit' => $limit,
-                'offset' => $offset,
-                'total' => $total,
-            ],
-        ]);
+            $items = $qb->getQuery()->getResult();
+            $total = $entityManager->createQueryBuilder()
+                ->select('COUNT(ar.id)')
+                ->from(B2BAdsRequest::class, 'ar')
+                ->getQuery()
+                ->getSingleScalarResult();
+
+            return [
+                'items' => array_map(fn (B2BAdsRequest $ar) => [
+                    'id' => $ar->getId(),
+                    'owner_type' => $ar->getOwnerType(),
+                    'request_type' => $ar->getRequestType(),
+                    'target_type' => $ar->getTargetType(),
+                    'target_url' => $ar->getTargetUrl(),
+                    'product_id' => $ar->getProduct()?->getId(),
+                    'product_name' => $ar->getProduct()?->getName(),
+                    'category_id' => $ar->getCategory()?->getId(),
+                    'category_name' => $ar->getCategory()?->getName(),
+                    'brand_filter' => $ar->getBrandFilter(),
+                    'status' => $ar->getStatus(),
+                    'budget_proposal' => $ar->getBudgetProposal(),
+                    'duration_days' => $ar->getDurationDays(),
+                    'notes' => $ar->getNotes(),
+                    'company_id' => $ar->getCompany()?->getId(),
+                    'company_name' => $ar->getCompany()?->getCompanyName(),
+                    'created_at' => $ar->getCreatedAt()?->format(\DateTimeInterface::ATOM),
+                ], $items),
+                'pagination' => [
+                    'limit' => $limit,
+                    'offset' => $offset,
+                    'total' => $total,
+                ],
+            ];
+        });
     }
 
     #[Route('/scraping-requests', name: 'b2b_admin_list_scraping_requests', methods: ['GET'])]
@@ -478,45 +588,49 @@ final class B2BAdminController extends AbstractController
         $offset = max(0, $request->query->getInt('offset', 0));
         $status = trim((string) $request->query->get('status', ''));
 
-        $qb = $entityManager->createQueryBuilder()
-            ->select('sr')
-            ->from(B2BScrapingRequest::class, 'sr')
-            ->orderBy('sr.created_at', 'DESC')
-            ->setMaxResults($limit)
-            ->setFirstResult($offset);
+        $cacheKey = self::CACHE_KEY_SCRAPING . ".l{$limit}o{$offset}s{$status}";
 
-        if ($status !== '') {
-            $qb->andWhere('sr.status = :status')
-                ->setParameter('status', strtoupper($status));
-        }
+        return $this->cachedGet($this->cache, $cacheKey, static function () use ($entityManager, $limit, $offset, $status): array {
+            $qb = $entityManager->createQueryBuilder()
+                ->select('sr')
+                ->from(B2BScrapingRequest::class, 'sr')
+                ->orderBy('sr.created_at', 'DESC')
+                ->setMaxResults($limit)
+                ->setFirstResult($offset);
 
-        $items = $qb->getQuery()->getResult();
-        $total = $entityManager->createQueryBuilder()
-            ->select('COUNT(sr.id)')
-            ->from(B2BScrapingRequest::class, 'sr')
-            ->getQuery()
-            ->getSingleScalarResult();
+            if ($status !== '') {
+                $qb->andWhere('sr.status = :status')
+                    ->setParameter('status', strtoupper($status));
+            }
 
-        return $this->json([
-            'items' => array_map(fn (B2BScrapingRequest $sr) => [
-                'id' => $sr->getId(),
-                'owner_type' => $sr->getOwnerType(),
-                'target_type' => $sr->getTargetType(),
-                'target_url' => $sr->getTargetUrl(),
-                'status' => $sr->getStatus(),
-                'is_duplicate' => $sr->isDuplicate(),
-                'company_id' => $sr->getCompany()?->getId(),
-                'market_id' => $sr->getMarket()?->getId(),
-                'company_name' => $sr->getCompany()?->getCompanyName(),
-                'market_name' => $sr->getMarket()?->getCompanyName(),
-                'created_at' => $sr->getCreatedAt()?->format(\DateTimeInterface::ATOM),
-            ], $items),
-            'pagination' => [
-                'limit' => $limit,
-                'offset' => $offset,
-                'total' => $total,
-            ],
-        ]);
+            $items = $qb->getQuery()->getResult();
+            $total = $entityManager->createQueryBuilder()
+                ->select('COUNT(sr.id)')
+                ->from(B2BScrapingRequest::class, 'sr')
+                ->getQuery()
+                ->getSingleScalarResult();
+
+            return [
+                'items' => array_map(fn (B2BScrapingRequest $sr) => [
+                    'id' => $sr->getId(),
+                    'owner_type' => $sr->getOwnerType(),
+                    'target_type' => $sr->getTargetType(),
+                    'target_url' => $sr->getTargetUrl(),
+                    'status' => $sr->getStatus(),
+                    'is_duplicate' => $sr->isDuplicate(),
+                    'company_id' => $sr->getCompany()?->getId(),
+                    'market_id' => $sr->getMarket()?->getId(),
+                    'company_name' => $sr->getCompany()?->getCompanyName(),
+                    'market_name' => $sr->getMarket()?->getCompanyName(),
+                    'created_at' => $sr->getCreatedAt()?->format(\DateTimeInterface::ATOM),
+                ], $items),
+                'pagination' => [
+                    'limit' => $limit,
+                    'offset' => $offset,
+                    'total' => $total,
+                ],
+            ];
+        });
     }
 
     #[Route('/subscriptions', name: 'b2b_admin_create_subscription', methods: ['POST'])]
@@ -535,10 +649,11 @@ final class B2BAdminController extends AbstractController
         }
 
         $ownerType = strtoupper((string) ($body['ownerType'] ?? 'COMPANY'));
-        $planType = strtoupper((string) ($body['planType'] ?? 'SILVER'));
+        $rawPlan = strtoupper((string) ($body['planType'] ?? 'SILVER'));
+        $planType = str_starts_with($rawPlan, 'B2B_') ? $rawPlan : 'B2B_' . $rawPlan;
         $durationMonths = max(1, (int) ($body['durationMonths'] ?? 12));
 
-        $subscription = new B2BSubscription();
+        $subscription = new Subscription();
         $subscription->setOwnerType($ownerType);
         $subscription->setPlanType($planType);
         $subscription->setDurationMonths($durationMonths);
@@ -548,15 +663,9 @@ final class B2BAdminController extends AbstractController
         $subscription->setCreatedAt(new \DateTimeImmutable());
 
         if ($ownerType === 'COMPANY' && !empty($body['companyId'])) {
-            $company = $entityManager->find(B2BCompany::class, (int) $body['companyId']);
-            if ($company instanceof B2BCompany) {
-                $subscription->setCompany($company);
-            }
+            $subscription->setOwnerId((int) $body['companyId']);
         } elseif ($ownerType === 'MARKET' && !empty($body['marketId'])) {
-            $market = $entityManager->find(B2BMarket::class, (int) $body['marketId']);
-            if ($market instanceof B2BMarket) {
-                $subscription->setMarket($market);
-            }
+            $subscription->setOwnerId((int) $body['marketId']);
         }
 
         $entityManager->persist($subscription);
@@ -576,8 +685,8 @@ final class B2BAdminController extends AbstractController
             return $errorResponse;
         }
 
-        $subscription = $entityManager->find(B2BSubscription::class, $id);
-        if (!$subscription instanceof B2BSubscription) {
+        $subscription = $entityManager->find(Subscription::class, $id);
+        if (!$subscription instanceof Subscription) {
             return $this->json(['error' => 'Subscription not found.'], 404);
         }
 
@@ -604,47 +713,51 @@ final class B2BAdminController extends AbstractController
         $limit = max(1, min(100, $request->query->getInt('limit', 25)));
         $offset = max(0, $request->query->getInt('offset', 0));
 
-        $qb = $entityManager->createQueryBuilder()
-            ->select('c')
-            ->from(B2BCompany::class, 'c')
-            ->orderBy('c.joinedAt', 'DESC')
-            ->setMaxResults($limit)
-            ->setFirstResult($offset);
+        $cacheKey = self::CACHE_KEY_COMPANIES . ".l{$limit}o{$offset}";
 
-        $items = $qb->getQuery()->getResult();
+        return $this->cachedGet($this->cache, $cacheKey, function () use ($entityManager, $limit, $offset): array {
+            $qb = $entityManager->createQueryBuilder()
+                ->select('c')
+                ->from(B2BCompany::class, 'c')
+                ->orderBy('c.joinedAt', 'DESC')
+                ->setMaxResults($limit)
+                ->setFirstResult($offset);
 
-        $scrapingRepo = $entityManager->getRepository(B2BScrapingRequest::class);
-        $reportRepo = $entityManager->getRepository(B2BReport::class);
-        $listingRepo = $entityManager->getRepository(\App\Entity\ProductListing::class);
+            $items = $qb->getQuery()->getResult();
 
-        $total = $entityManager->createQueryBuilder()->select('COUNT(c.id)')->from(B2BCompany::class, 'c')->getQuery()->getSingleScalarResult();
+            $scrapingRepo = $entityManager->getRepository(B2BScrapingRequest::class);
+            $reportRepo = $entityManager->getRepository(B2BReport::class);
+            $listingRepo = $entityManager->getRepository(\App\Entity\ProductListing::class);
 
-        return $this->json([
-            'items' => array_map(function (B2BCompany $c) use ($scrapingRepo, $reportRepo, $listingRepo) {
-                $listingsCount = 0;
-                if ($c->getSeller()) {
-                    $listingsCount = (int) $listingRepo->createQueryBuilder('pl')
-                        ->select('COUNT(pl.id)')
-                        ->where('pl.seller = :seller')
-                        ->setParameter('seller', $c->getSeller())
-                        ->getQuery()
-                        ->getSingleScalarResult();
-                }
+            $total = $entityManager->createQueryBuilder()->select('COUNT(c.id)')->from(B2BCompany::class, 'c')->getQuery()->getSingleScalarResult();
 
-                return [
-                    'id' => $c->getId(),
-                    'email' => $c->getEmail(),
-                    'company_name' => $c->getCompanyName(),
-                    'status' => $c->getB2bStatus(),
-                    'is_verified' => $c->isVerified(),
-                    'joined_at' => $c->getJoinedAt()?->format(\DateTimeInterface::ATOM),
-                    'listings_count' => $listingsCount,
-                    'scraping_requests_count' => (int) $scrapingRepo->createQueryBuilder('sr')->select('COUNT(sr.id)')->where('sr.company = :company')->setParameter('company', $c)->getQuery()->getSingleScalarResult(),
-                    'reports_count' => (int) $reportRepo->createQueryBuilder('r')->select('COUNT(r.id)')->where('r.company = :company')->setParameter('company', $c)->getQuery()->getSingleScalarResult(),
-                ];
-            }, $items),
-            'pagination' => ['limit' => $limit, 'offset' => $offset, 'total' => $total],
-        ]);
+            return [
+                'items' => array_map(function (B2BCompany $c) use ($scrapingRepo, $reportRepo, $listingRepo) {
+                    $listingsCount = 0;
+                    if ($c->getSeller()) {
+                        $listingsCount = (int) $listingRepo->createQueryBuilder('pl')
+                            ->select('COUNT(pl.id)')
+                            ->where('pl.seller = :seller')
+                            ->setParameter('seller', $c->getSeller())
+                            ->getQuery()
+                            ->getSingleScalarResult();
+                    }
+
+                    return [
+                        'id' => $c->getId(),
+                        'email' => $c->getEmail(),
+                        'company_name' => $c->getCompanyName(),
+                        'status' => $c->getB2bStatus(),
+                        'is_verified' => $c->isVerified(),
+                        'joined_at' => $c->getJoinedAt()?->format(\DateTimeInterface::ATOM),
+                        'listings_count' => $listingsCount,
+                        'scraping_requests_count' => (int) $scrapingRepo->createQueryBuilder('sr')->select('COUNT(sr.id)')->where('sr.company = :company')->setParameter('company', $c)->getQuery()->getSingleScalarResult(),
+                        'reports_count' => (int) $reportRepo->createQueryBuilder('r')->select('COUNT(r.id)')->where('r.company = :company')->setParameter('company', $c)->getQuery()->getSingleScalarResult(),
+                    ];
+                }, $items),
+                'pagination' => ['limit' => $limit, 'offset' => $offset, 'total' => $total],
+            ];
+        });
     }
 
     #[Route('/markets', name: 'b2b_admin_list_markets', methods: ['GET'])]
@@ -660,34 +773,38 @@ final class B2BAdminController extends AbstractController
         $limit = max(1, min(100, $request->query->getInt('limit', 25)));
         $offset = max(0, $request->query->getInt('offset', 0));
 
-        $qb = $entityManager->createQueryBuilder()
-            ->select('m')
-            ->from(B2BMarket::class, 'm')
-            ->orderBy('m.joinedAt', 'DESC')
-            ->setMaxResults($limit)
-            ->setFirstResult($offset);
+        $cacheKey = self::CACHE_KEY_MARKETS . ".l{$limit}o{$offset}";
 
-        $items = $qb->getQuery()->getResult();
-        $scrapingRepo = $entityManager->getRepository(B2BScrapingRequest::class);
-        $reportRepo = $entityManager->getRepository(B2BReport::class);
+        return $this->cachedGet($this->cache, $cacheKey, function () use ($entityManager, $limit, $offset): array {
+            $qb = $entityManager->createQueryBuilder()
+                ->select('m')
+                ->from(B2BMarket::class, 'm')
+                ->orderBy('m.joinedAt', 'DESC')
+                ->setMaxResults($limit)
+                ->setFirstResult($offset);
 
-        $total = $entityManager->createQueryBuilder()->select('COUNT(m.id)')->from(B2BMarket::class, 'm')->getQuery()->getSingleScalarResult();
+            $items = $qb->getQuery()->getResult();
+            $scrapingRepo = $entityManager->getRepository(B2BScrapingRequest::class);
+            $reportRepo = $entityManager->getRepository(B2BReport::class);
 
-        return $this->json([
-            'items' => array_map(function (B2BMarket $m) use ($scrapingRepo, $reportRepo) {
-                return [
-                    'id' => $m->getId(),
-                    'email' => $m->getEmail(),
-                    'company_name' => $m->getCompanyName(),
-                    'status' => $m->getB2bStatus(),
-                    'is_verified' => $m->isVerified(),
-                    'joined_at' => $m->getJoinedAt()?->format(\DateTimeInterface::ATOM),
-                    'scraping_requests_count' => (int) $scrapingRepo->createQueryBuilder('sr')->select('COUNT(sr.id)')->where('sr.market = :market')->setParameter('market', $m)->getQuery()->getSingleScalarResult(),
-                    'reports_count' => (int) $reportRepo->createQueryBuilder('r')->select('COUNT(r.id)')->where('r.market = :market')->setParameter('market', $m)->getQuery()->getSingleScalarResult(),
-                ];
-            }, $items),
-            'pagination' => ['limit' => $limit, 'offset' => $offset, 'total' => $total],
-        ]);
+            $total = $entityManager->createQueryBuilder()->select('COUNT(m.id)')->from(B2BMarket::class, 'm')->getQuery()->getSingleScalarResult();
+
+            return [
+                'items' => array_map(function (B2BMarket $m) use ($scrapingRepo, $reportRepo) {
+                    return [
+                        'id' => $m->getId(),
+                        'email' => $m->getEmail(),
+                        'company_name' => $m->getCompanyName(),
+                        'status' => $m->getB2bStatus(),
+                        'is_verified' => $m->isVerified(),
+                        'joined_at' => $m->getJoinedAt()?->format(\DateTimeInterface::ATOM),
+                        'scraping_requests_count' => (int) $scrapingRepo->createQueryBuilder('sr')->select('COUNT(sr.id)')->where('sr.market = :market')->setParameter('market', $m)->getQuery()->getSingleScalarResult(),
+                        'reports_count' => (int) $reportRepo->createQueryBuilder('r')->select('COUNT(r.id)')->where('r.market = :market')->setParameter('market', $m)->getQuery()->getSingleScalarResult(),
+                    ];
+                }, $items),
+                'pagination' => ['limit' => $limit, 'offset' => $offset, 'total' => $total],
+            ];
+        });
     }
 
     #[Route('/trust-score/recalculate', name: 'b2b_admin_recalculate_trust_scores', methods: ['POST'])]
@@ -724,13 +841,15 @@ final class B2BAdminController extends AbstractController
             return $errorResponse;
         }
 
-        $conn = $this->entityManager->getConnection();
-        $rows = $conn->fetchAllAssociative('
-            SELECT id, weight_key, weight_label, weight_value::numeric(5,4) AS weight_value, weight_group, sort_order
-            FROM trust_score_weight ORDER BY sort_order
-        ');
+        return $this->cachedGet($this->cache, self::CACHE_KEY_WEIGHTS, function (): array {
+            $conn = $this->entityManager->getConnection();
+            $rows = $conn->fetchAllAssociative('
+                SELECT id, weight_key, weight_label, weight_value::numeric(5,4) AS weight_value, weight_group, sort_order
+                FROM trust_score_weight ORDER BY sort_order
+            ');
 
-        return $this->json(['items' => $rows]);
+            return ['items' => $rows];
+        });
     }
 
     #[Route('/trust-score/weights', name: 'b2b_admin_update_trust_score_weights', methods: ['POST'])]
@@ -784,18 +903,22 @@ final class B2BAdminController extends AbstractController
 
         $limit = max(1, min(500, $request->query->getInt('limit', 100)));
 
-        $conn = $this->entityManager->getConnection();
-        $rows = $conn->fetchAllAssociative('
-            SELECT h.id, h.listing_id, h.score, h.created_at,
-                   pl.product_id, p.name AS product_name
-            FROM trust_score_history h
-            LEFT JOIN product_listing pl ON pl.id = h.listing_id
-            LEFT JOIN product p ON p.id = pl.product_id
-            ORDER BY h.created_at DESC
-            LIMIT :limit
-        ', ['limit' => $limit]);
+        $cacheKey = self::CACHE_KEY_HISTORY . ".l{$limit}";
 
-        return $this->json(['items' => $rows]);
+        return $this->cachedGet($this->cache, $cacheKey, function () use ($limit): array {
+            $conn = $this->entityManager->getConnection();
+            $rows = $conn->fetchAllAssociative('
+                SELECT h.id, h.listing_id, h.score, h.created_at,
+                       pl.product_id, p.name AS product_name
+                FROM trust_score_history h
+                LEFT JOIN product_listing pl ON pl.id = h.listing_id
+                LEFT JOIN product p ON p.id = pl.product_id
+                ORDER BY h.created_at DESC
+                LIMIT :limit
+            ', ['limit' => $limit]);
+
+            return ['items' => $rows];
+        });
     }
 
     private function normalizeNullableFloat(mixed $value): ?float

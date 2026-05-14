@@ -5,45 +5,58 @@ namespace App\Controller;
 use App\Entity\Category;
 use App\Repository\CategoryRepository;
 use Doctrine\ORM\EntityManagerInterface;
+use Psr\Cache\CacheItemPoolInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Attribute\Route;
 
 final class CategoryController extends AbstractController
 {
+    use CachedResponseTrait;
+
+    private const CACHE_KEY_CATEGORIES = 'categories.all';
+    private const CACHE_KEY_CHILDREN_PREFIX = 'categories.children.';
+
+    public function __construct(
+        #[Autowire(service: 'general.cache')]
+        private readonly CacheItemPoolInterface $cache,
+    ) {
+    }
+
     #[Route('/categories', name: 'get_categories', methods: ['GET'])]
     public function getCategories(CategoryRepository $categoryRepository): JsonResponse
     {
-        $categories = $categoryRepository->findBy([], ['name' => 'ASC']);
+        return $this->cachedGet($this->cache, self::CACHE_KEY_CATEGORIES, static function () use ($categoryRepository): array {
+            $categories = $categoryRepository->findBy([], ['name' => 'ASC']);
 
-        $data = array_map(
-            static fn($category) => [
-                'id' => $category->getId(),
-                'name' => $category->getName(),
-                'parentId' => $category->getParent()?->getId(),
-            ],
-            $categories,
-        );
-
-        return $this->json($data);
+            return array_map(
+                static fn($category) => [
+                    'id' => $category->getId(),
+                    'name' => $category->getName(),
+                    'parentId' => $category->getParent()?->getId(),
+                ],
+                $categories,
+            );
+        });
     }
 
     #[Route('/categories/{id}/children', name: 'get_category_children', methods: ['GET'])]
     public function getCategoryChildren(int $id, CategoryRepository $categoryRepository): JsonResponse
     {
-        $children = $categoryRepository->findChildrenByParentId($id);
+        return $this->cachedGet($this->cache, self::CACHE_KEY_CHILDREN_PREFIX . $id, static function () use ($id, $categoryRepository): array {
+            $children = $categoryRepository->findChildrenByParentId($id);
 
-        $data = array_map(
-            static fn($category) => [
-                'id' => $category->getId(),
-                'name' => $category->getName(),
-                'parentId' => $category->getParent()?->getId(),
-            ],
-            $children,
-        );
-
-        return $this->json($data);
+            return array_map(
+                static fn($category) => [
+                    'id' => $category->getId(),
+                    'name' => $category->getName(),
+                    'parentId' => $category->getParent()?->getId(),
+                ],
+                $children,
+            );
+        });
     }
 
     #[Route('/categories', name: 'create_category', methods: ['POST'])]
@@ -73,6 +86,8 @@ final class CategoryController extends AbstractController
 
         $entityManager->persist($category);
         $entityManager->flush();
+
+        $this->invalidateCache($this->cache);
 
         return $this->json([
             'id' => $category->getId(),

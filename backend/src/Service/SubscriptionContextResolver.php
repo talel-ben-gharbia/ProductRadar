@@ -4,8 +4,7 @@ namespace App\Service;
 
 use App\Entity\B2BCompany;
 use App\Entity\B2BMarket;
-use App\Entity\B2BSubscription;
-use App\Entity\SubscriptionB2C;
+use App\Entity\Subscription;
 use App\Entity\User;
 use Doctrine\ORM\EntityManagerInterface;
 
@@ -50,22 +49,25 @@ final class SubscriptionContextResolver
         }
 
         // Step 1: Check B2B subscription
-        $b2bSub = $this->entityManager->getRepository(B2BSubscription::class)->findOneBy([
-            'owner_type' => $owner::class,
+        $ownerType = $owner instanceof B2BCompany ? 'COMPANY' : 'MARKET';
+        $b2bSub = $this->entityManager->getRepository(Subscription::class)->findOneBy([
+            'owner_type' => $ownerType,
+            'owner_id' => $owner->getId(),
             'active' => true,
         ]);
 
         // Step 2: Check B2C subscription as fallback
-        $b2cSub = $this->entityManager->getRepository(SubscriptionB2C::class)->findOneBy([
-            'client_id' => $user->getId(),
+        $b2cSub = $this->entityManager->getRepository(Subscription::class)->findOneBy([
+            'owner_type' => 'USER',
+            'owner_id' => $user->getId(),
             'active' => true,
         ]);
 
         // Step 3: Determine effective context
-        if ($b2bSub instanceof B2BSubscription) {
+        if ($b2bSub instanceof Subscription) {
             return [
                 'type' => 'B2B',
-                'plan' => $b2bSub->getPlanType(), // PREMIUM, SILVER, BRONZE
+                'plan' => $b2bSub->getPlanType(),
                 'active' => true,
                 'overrides_b2c' => true,
                 'b2b_subscription_id' => $b2bSub->getId(),
@@ -88,7 +90,7 @@ final class SubscriptionContextResolver
             'b2c_subscription' => $this->serializeB2CSubscription($b2cSub),
             'effective_limits' => $this->computeB2CLimits($b2cSub),
             'can_create_ads_requests' => $b2cSub?->isActive() ?? false,
-            'can_scrape_urls' => false, // B2C cannot scrape
+            'can_scrape_urls' => false,
             'can_generate_reports' => $b2cSub?->isActive() ?? false,
         ];
     }
@@ -105,7 +107,7 @@ final class SubscriptionContextResolver
      */
     public function checkQuota(
         B2BCompany|B2BMarket $owner,
-        string $operationType, // 'ads_requests', 'scraping_requests', 'reports'
+        string $operationType,
         int $quantity = 1,
     ): array {
         $context = $this->resolveB2BSubscriptionContext($owner);
@@ -123,6 +125,7 @@ final class SubscriptionContextResolver
             'ads_requests' => 'ads_requests_per_month',
             'scraping_requests' => 'scraping_requests_per_month',
             'reports' => 'reports_per_month',
+            'sponsored_products' => 'sponsored_products_per_month',
             default => null,
         };
 
@@ -166,6 +169,7 @@ final class SubscriptionContextResolver
                 'ads_requests' => 0,
                 'scraping_requests' => 0,
                 'reports' => 0,
+                'sponsored_products' => 0,
             ];
         }
 
@@ -173,6 +177,7 @@ final class SubscriptionContextResolver
             'ads_requests' => $usageJson[$currentMonth]['ads_requests'] += $quantity,
             'scraping_requests' => $usageJson[$currentMonth]['scraping_requests'] += $quantity,
             'reports' => $usageJson[$currentMonth]['reports'] += $quantity,
+            'sponsored_products' => $usageJson[$currentMonth]['sponsored_products'] += $quantity,
             default => null,
         };
 
@@ -181,44 +186,33 @@ final class SubscriptionContextResolver
     }
 
     private function computeEffectiveLimits(
-        B2BSubscription $b2bSub,
-        ?SubscriptionB2C $b2cSub,
+        Subscription $b2bSub,
+        ?Subscription $b2cSub,
     ): array {
-        // Base B2B limits by plan
         $b2bLimits = match ($b2bSub->getPlanType()) {
-            'PREMIUM' => [
+            'B2B_GOLD' => [
                 'ads_requests_per_month' => 50,
                 'scraping_requests_per_month' => 200,
                 'reports_per_month' => 20,
-                'max_watchlist_items' => 1000,
+                'max_watchlist_items' => 15,
+                'sponsored_products_per_month' => 20,
             ],
-            'SILVER' => [
+            'B2B_SILVER' => [
                 'ads_requests_per_month' => 20,
                 'scraping_requests_per_month' => 50,
                 'reports_per_month' => 5,
-                'max_watchlist_items' => 300,
-            ],
-            'BRONZE' => [
-                'ads_requests_per_month' => 5,
-                'scraping_requests_per_month' => 10,
-                'reports_per_month' => 2,
-                'max_watchlist_items' => 50,
+                'max_watchlist_items' => 5,
+                'sponsored_products_per_month' => 5,
             ],
             default => [],
         };
 
-        // If SILVER, inherit B2C limits as fallback
-        if ($b2bSub->getPlanType() === 'SILVER' && $b2cSub instanceof SubscriptionB2C) {
-            $b2cLimits = $this->computeB2CLimits($b2cSub);
-            return array_merge($b2cLimits, $b2bLimits);
-        }
-
         return $b2bLimits;
     }
 
-    private function computeB2CLimits(?SubscriptionB2C $sub): array
+    private function computeB2CLimits(?Subscription $sub): array
     {
-        if (!$sub instanceof SubscriptionB2C) {
+        if (!$sub instanceof Subscription) {
             return [
                 'ads_requests_per_month' => 0,
                 'scraping_requests_per_month' => 0,
@@ -245,24 +239,24 @@ final class SubscriptionContextResolver
         };
     }
 
-    private function canCreateAdsRequests(B2BSubscription $sub): bool
+    private function canCreateAdsRequests(Subscription $sub): bool
     {
-        return $sub->isActive() && $sub->getPlanType() !== 'BRONZE';
+        return $sub->isActive() && in_array($sub->getPlanType(), ['B2B_GOLD', 'B2B_SILVER']);
     }
 
-    private function canScrapeUrls(B2BSubscription $sub): bool
+    private function canScrapeUrls(Subscription $sub): bool
     {
-        return $sub->isActive() && in_array($sub->getPlanType(), ['PREMIUM', 'SILVER']);
+        return $sub->isActive() && in_array($sub->getPlanType(), ['B2B_GOLD', 'B2B_SILVER']);
     }
 
-    private function canGenerateReports(B2BSubscription $sub): bool
+    private function canGenerateReports(Subscription $sub): bool
     {
-        return $sub->isActive() && $sub->getPlanType() !== 'BRONZE';
+        return $sub->isActive() && in_array($sub->getPlanType(), ['B2B_GOLD', 'B2B_SILVER']);
     }
 
-    private function serializeB2CSubscription(?SubscriptionB2C $sub): array
+    private function serializeB2CSubscription(?Subscription $sub): array
     {
-        if (!$sub instanceof SubscriptionB2C) {
+        if (!$sub instanceof Subscription) {
             return ['plan' => 'FREE', 'active' => false];
         }
 

@@ -4,6 +4,7 @@ namespace App\Repository;
 
 use App\Entity\ProductListing;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
+use Doctrine\DBAL\ArrayParameterType;
 use Doctrine\ORM\QueryBuilder;
 use Doctrine\Persistence\ManagerRegistry;
 
@@ -36,10 +37,14 @@ class ProductListingRepository extends ServiceEntityRepository
                 ->setParameter('sellerId', $sellerId);
         }
 
-        return $queryBuilder
+        $rows = $queryBuilder
             ->orderBy('pl.id', 'DESC')
             ->getQuery()
+            ->setCacheable(true)
+            ->setLifetime(300)
             ->getArrayResult();
+
+        return $this->enrichWithTrustScores($rows);
     }
 
     /**
@@ -90,7 +95,8 @@ class ProductListingRepository extends ServiceEntityRepository
                 ->setParameter('sellerId', $sellerId);
         }
 
-        $rows = $queryBuilder->getQuery()->getArrayResult();
+            $rows = $queryBuilder->getQuery()->setCacheable(true)->setLifetime(300)->getArrayResult();
+        $rows = $this->enrichWithTrustScores($rows);
 
         $bestPerSeller = [];
         foreach ($rows as $row) {
@@ -116,22 +122,62 @@ class ProductListingRepository extends ServiceEntityRepository
             ->addSelect('pl.old_price AS old_price')
             ->addSelect('pl.product_url AS product_url')
             ->addSelect('pl.availability AS availability')
-            ->addSelect('pl.trust_score AS trust_score')
-                ->addSelect('pl.trust_score_breakdown AS trust_score_breakdown')
-                ->addSelect('pl.created_at AS created_at')
-                ->addSelect('pl.updated_at AS updated_at')
+            ->addSelect('pl.created_at AS created_at')
+            ->addSelect('pl.updated_at AS updated_at')
             ->addSelect('pl.is_active AS is_active')
             ->addSelect('p.id AS productId')
             ->addSelect('p.name AS productName')
-                ->addSelect('p.brand AS productBrand')
+            ->addSelect('p.brand AS productBrand')
             ->addSelect('p.image_url AS productImageUrl')
-                ->addSelect('c.id AS categoryId')
-                ->addSelect('c.name AS categoryName')
+            ->addSelect('c.id AS categoryId')
+            ->addSelect('c.name AS categoryName')
             ->addSelect('s.id AS sellerId')
             ->addSelect('s.name AS sellerName')
             ->leftJoin('pl.product', 'p')
-                ->leftJoin('p.category', 'c')
-                ->leftJoin('pl.seller', 's');
+            ->leftJoin('p.category', 'c')
+            ->leftJoin('pl.seller', 's');
+    }
+
+    private function enrichWithTrustScores(array $rows): array
+    {
+        $listingIds = array_values(array_unique(array_filter(
+            array_map(fn(array $r) => isset($r['id']) ? (int) $r['id'] : null, $rows)
+        )));
+
+        if (empty($listingIds)) {
+            return $rows;
+        }
+
+        $conn = $this->getEntityManager()->getConnection();
+        $scoreRows = $conn->fetchAllAssociative(
+            'SELECT DISTINCT ON (listing_id) listing_id, score, breakdown, created_at
+             FROM trust_score_history
+             WHERE listing_id IN (:ids)
+             ORDER BY listing_id, created_at DESC',
+            ['ids' => $listingIds],
+            ['ids' => ArrayParameterType::INTEGER]
+        );
+
+        $scoreMap = [];
+        foreach ($scoreRows as $sr) {
+            $scoreMap[(int) $sr['listing_id']] = [
+                'score' => $sr['score'] !== null ? (float) $sr['score'] : null,
+                'breakdown' => $sr['breakdown'] !== null ? json_decode($sr['breakdown'], true) : null,
+            ];
+        }
+
+        foreach ($rows as &$row) {
+            $id = isset($row['id']) ? (int) $row['id'] : null;
+            if ($id !== null && isset($scoreMap[$id])) {
+                $row['trust_score'] = $scoreMap[$id]['score'];
+                $row['trust_score_breakdown'] = $scoreMap[$id]['breakdown'];
+            } else {
+                $row['trust_score'] = null;
+                $row['trust_score_breakdown'] = null;
+            }
+        }
+
+        return $rows;
     }
 
 //    /**

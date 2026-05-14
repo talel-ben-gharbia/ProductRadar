@@ -90,6 +90,8 @@ export type UserFilters = {
   b2bStatus?: string
 }
 
+import { cachedFetch } from "@/lib/fetch-with-cache"
+
 function buildQuery(params: Record<string, string | number | undefined>): string {
   const searchParams = new URLSearchParams()
   for (const [key, value] of Object.entries(params)) {
@@ -119,27 +121,19 @@ export async function getUsers(
     b2bStatus: filters.b2bStatus,
   })
 
-  const response = await fetch(`/api/admin/users${query}`, { cache: "no-store" })
-  const data = (await parseJson(response)) as { error?: string }
+  const cacheKey = `users:list:l${limit}:o${offset}:${JSON.stringify(filters)}`
 
-  if (!response.ok) {
-    throw new Error(data.error || "Failed to fetch users.")
-  }
-
-  return data as PaginatedUsersResponse
+  return cachedFetch<PaginatedUsersResponse>(`/api/admin/users${query}`, {
+    cacheKey,
+    cacheTtl: 300,
+  })
 }
 
 export async function getUserAdminStats(): Promise<UserAdminStatsResponse> {
-  const response = await fetch(`/api/admin/users/stats`, {
-    cache: "no-store",
+  return cachedFetch<UserAdminStatsResponse>(`/api/admin/users/stats`, {
+    cacheKey: "users:stats",
+    cacheTtl: 300,
   })
-
-  const data = (await parseJson(response)) as { error?: string }
-  if (!response.ok) {
-    throw new Error(data.error || "Failed to fetch admin user stats.")
-  }
-
-  return data as UserAdminStatsResponse
 }
 
 export async function updateUserStatus(
@@ -166,16 +160,12 @@ export async function getPendingB2BUsers(
   search?: string,
 ): Promise<PaginatedUsersResponse> {
   const query = buildQuery({ limit, offset, search })
-  const response = await fetch(`/api/admin/users/b2b/pending${query}`, {
-    cache: "no-store",
+  const cacheKey = `users:b2b_pending:l${limit}:o${offset}:${search ?? ''}`
+
+  return cachedFetch<PaginatedUsersResponse>(`/api/admin/users/b2b/pending${query}`, {
+    cacheKey,
+    cacheTtl: 300,
   })
-
-  const data = (await parseJson(response)) as { error?: string }
-  if (!response.ok) {
-    throw new Error(data.error || "Failed to fetch pending B2B users.")
-  }
-
-  return data as PaginatedUsersResponse
 }
 
 export async function updateB2BStatus(
@@ -208,14 +198,10 @@ export async function updateB2BStatus(
 
 export async function getRecentB2BReviews(limit = 10): Promise<RecentB2BReviewsResponse> {
   const query = buildQuery({ limit })
-  const response = await fetch(`/api/admin/users/b2b/recent${query}`, {
-    cache: "no-store",
+  const cacheKey = `users:b2b_recent:l${limit}`
+
+  return cachedFetch<RecentB2BReviewsResponse>(`/api/admin/users/b2b/recent${query}`, {
+    cacheKey,
+    cacheTtl: 300,
   })
-
-  const data = (await parseJson(response)) as { error?: string }
-  if (!response.ok) {
-    throw new Error(data.error || "Failed to fetch recent B2B moderation history.")
-  }
-
-  return data as RecentB2BReviewsResponse
 }

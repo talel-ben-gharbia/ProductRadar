@@ -41,6 +41,8 @@ export type SubscriptionResyncResponse = {
   }
 }
 
+import { cachedFetch } from "@/lib/fetch-with-cache"
+
 function buildQuery(params: Record<string, string | number | undefined>): string {
   const searchParams = new URLSearchParams()
   for (const [key, value] of Object.entries(params)) {
@@ -50,10 +52,6 @@ function buildQuery(params: Record<string, string | number | undefined>): string
 
   const query = searchParams.toString()
   return query ? `?${query}` : ""
-}
-
-async function parseJson(response: Response): Promise<unknown> {
-  return response.json().catch(() => ({}))
 }
 
 export async function getSubscriptions(
@@ -69,29 +67,19 @@ export async function getSubscriptions(
     accountType: filters.accountType,
   })
 
-  const response = await fetch(`/api/admin/subscriptions${query}`, {
-    cache: "no-store",
+  const cacheKey = `subscriptions:list:l${limit}:o${offset}:${JSON.stringify(filters)}`
+
+  return cachedFetch<SubscriptionsResponse>(`/api/admin/subscriptions${query}`, {
+    cacheKey,
+    cacheTtl: 300,
   })
-
-  const data = (await parseJson(response)) as { error?: string }
-  if (!response.ok) {
-    throw new Error(data.error || "Failed to fetch subscriptions.")
-  }
-
-  return data as SubscriptionsResponse
 }
 
 export async function getSubscriptionDetail(id: number): Promise<SubscriptionItem> {
-  const response = await fetch(`/api/admin/subscriptions/${id}`, {
-    cache: "no-store",
+  return cachedFetch<SubscriptionItem>(`/api/admin/subscriptions/${id}`, {
+    cacheKey: `subscriptions:detail:${id}`,
+    cacheTtl: 300,
   })
-
-  const data = (await parseJson(response)) as { error?: string }
-  if (!response.ok) {
-    throw new Error(data.error || "Failed to fetch subscription detail.")
-  }
-
-  return data as SubscriptionItem
 }
 
 export async function resyncAllSubscriptions(): Promise<SubscriptionResyncResponse> {
@@ -101,7 +89,7 @@ export async function resyncAllSubscriptions(): Promise<SubscriptionResyncRespon
     body: JSON.stringify({}),
   })
 
-  const data = (await parseJson(response)) as { error?: string }
+  const data = (await response.json().catch(() => ({}))) as { error?: string }
   if (!response.ok) {
     throw new Error(data.error || 'Failed to resync subscriptions.')
   }

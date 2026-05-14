@@ -6,13 +6,13 @@ export type AdminUser = {
   updated_at: string
 }
 
+import { cachedFetch } from "@/lib/fetch-with-cache"
+
 export async function getAdmins(): Promise<AdminUser[]> {
-  const response = await fetch("/api/admin/admins", { cache: "no-store" })
-  if (!response.ok) {
-    const data = await response.json().catch(() => ({}))
-    throw new Error((data as { error?: string }).error || "Failed to fetch admins.")
-  }
-  return response.json()
+  return cachedFetch<AdminUser[]>("/api/admin/admins", {
+    cacheKey: "admins:list",
+    cacheTtl: 300,
+  })
 }
 
 export async function createAdmin(payload: {

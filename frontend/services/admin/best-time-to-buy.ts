@@ -1,5 +1,12 @@
 import { BACKEND_URL } from "@/utils/admin/constants"
+import { cachedFetch } from "@/lib/fetch-with-cache"
 import type { BestTimeToBuyPrediction } from "@/utils/types"
+
+interface BestTimeToBuyResponse {
+  error?: string
+  message?: string
+  prediction?: BestTimeToBuyPrediction
+}
 
 export async function getBestTimeToBuy(
   productId: number,
@@ -11,16 +18,12 @@ export async function getBestTimeToBuy(
   })
 
   const endpoint = `${BACKEND_URL}/best-time-to-buy?${params.toString()}`
-  const response = await fetch(endpoint, { cache: "no-store" })
-  const data = (await response.json()) as {
-    error?: string
-    message?: string
-    prediction?: BestTimeToBuyPrediction
-  }
+  const cacheKey = `best-time-to-buy:p${productId}:a${alerterId}`
 
-  if (!response.ok) {
-    throw new Error(data.message || data.error || `Failed to fetch prediction: ${response.status}`)
-  }
+  const data = await cachedFetch<BestTimeToBuyResponse>(endpoint, {
+    cacheKey,
+    cacheTtl: 300,
+  })
 
   if (!data.prediction) {
     throw new Error("Prediction payload is missing")

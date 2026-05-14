@@ -224,10 +224,6 @@ final class ProductMergeService
             $target->setProductUrl($source->getProductUrl());
         }
 
-        if ($target->getTrustScore() === null && $source->getTrustScore() !== null) {
-            $target->setTrustScore($source->getTrustScore());
-        }
-
         if ($target->isActive() === null && $source->isActive() !== null) {
             $target->setIsActive((bool) $source->isActive());
         }

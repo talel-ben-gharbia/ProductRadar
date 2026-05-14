@@ -29,6 +29,8 @@ export type ReviewsResponse = {
   }
 }
 
+import { cachedFetch } from "@/lib/fetch-with-cache"
+
 function buildQuery(params: Record<string, string | number | undefined>): string {
   const searchParams = new URLSearchParams()
   for (const [key, value] of Object.entries(params)) {
@@ -56,14 +58,12 @@ export async function getReviews(
     search: filters.search,
   })
 
-  const response = await fetch(`/api/admin/reviews${query}`, { cache: "no-store" })
-  const data = (await parseJson(response)) as { error?: string }
+  const cacheKey = `reviews:list:l${limit}:o${offset}:${JSON.stringify(filters)}`
 
-  if (!response.ok) {
-    throw new Error(data.error || "Failed to fetch reviews.")
-  }
-
-  return data as ReviewsResponse
+  return cachedFetch<ReviewsResponse>(`/api/admin/reviews${query}`, {
+    cacheKey,
+    cacheTtl: 300,
+  })
 }
 
 export async function updateReviewStatus(

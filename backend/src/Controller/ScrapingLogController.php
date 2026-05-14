@@ -5,7 +5,9 @@ namespace App\Controller;
 use App\Entity\ScrapingLog;
 use App\Repository\ScrapingLogRepository;
 use App\Security\AdminApiGuard;
+use Psr\Cache\CacheItemPoolInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\ResponseHeaderBag;
@@ -15,6 +17,17 @@ use Symfony\Component\Routing\Attribute\Route;
 #[Route('/admin/api/scraping-logs')]
 final class ScrapingLogController extends AbstractController
 {
+    use CachedResponseTrait;
+
+    private const CACHE_KEY_LIST = 'scraping_logs.list';
+    private const CACHE_KEY_RECENT = 'scraping_logs.recent';
+
+    public function __construct(
+        #[Autowire(service: 'general.cache')]
+        private readonly CacheItemPoolInterface $cache,
+    ) {
+    }
+
     #[Route('', name: 'admin_scraping_logs_list', methods: ['GET'])]
     public function list(
         Request $request,
@@ -27,11 +40,15 @@ final class ScrapingLogController extends AbstractController
         }
 
         $limit = max(1, min(100, $request->query->getInt('limit', 50)));
-        $items = $scrapingLogRepository->findRecent($limit);
+        $cacheKey = self::CACHE_KEY_LIST . ".l{$limit}";
 
-        return $this->json([
-            'items' => array_map(fn (ScrapingLog $item) => $this->serializeLog($item), $items),
-        ]);
+        return $this->cachedGet($this->cache, $cacheKey, function () use ($scrapingLogRepository, $limit): array {
+            $items = $scrapingLogRepository->findRecent($limit);
+
+            return [
+                'items' => array_map(fn (ScrapingLog $item) => $this->serializeLog($item), $items),
+            ];
+        });
     }
 
     #[Route('/recent', name: 'admin_scraping_logs_recent', methods: ['GET'])]
@@ -46,11 +63,15 @@ final class ScrapingLogController extends AbstractController
         }
 
         $limit = max(1, min(20, $request->query->getInt('limit', 5)));
-        $items = $scrapingLogRepository->findRecent($limit);
+        $cacheKey = self::CACHE_KEY_RECENT . ".l{$limit}";
 
-        return $this->json([
-            'items' => array_map(fn (ScrapingLog $item) => $this->serializeLog($item), $items),
-        ]);
+        return $this->cachedGet($this->cache, $cacheKey, function () use ($scrapingLogRepository, $limit): array {
+            $items = $scrapingLogRepository->findRecent($limit);
+
+            return [
+                'items' => array_map(fn (ScrapingLog $item) => $this->serializeLog($item), $items),
+            ];
+        });
     }
 
     #[Route('/export', name: 'admin_scraping_logs_export', methods: ['GET'])]

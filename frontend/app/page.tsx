@@ -1,6 +1,6 @@
 import Link from "next/link"
 import Image from "next/image"
-import { ArrowRight, BadgePercent, Flame, Gamepad2, TicketPercent, TrendingUp } from "lucide-react"
+import { ArrowRight, BadgePercent, Flame, Gamepad2, Star, TicketPercent, TrendingUp } from "lucide-react"
 
 import { B2CNavbar } from "@/components/B2C/b2c-navbar"
 import { Button } from "@/components/ui/button"
@@ -142,6 +142,7 @@ function ProductTile({ product }: { product: ShowcaseProduct }) {
 export default async function Page() {
   let rootCategories: RootCategory[] = []
   let productsForShowcase: ShowcaseProduct[] = []
+  let sponsoredProducts: ShowcaseProduct[] = []
 
   try {
     const categories = await getRawCategories()
@@ -149,6 +150,24 @@ export default async function Page() {
   } catch {
     rootCategories = []
   }
+
+  // Fetch sponsored products
+  try {
+    const sponsoredRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/b2b/b2c/sponsored-products`, { cache: "no-store" })
+    if (sponsoredRes.ok) {
+      const sponsoredData = await sponsoredRes.json()
+      if (sponsoredData?.items) {
+        sponsoredProducts = sponsoredData.items.map((sp: Record<string, unknown>) => ({
+          id: sp.product_id as number,
+          name: sp.product_name as string,
+          imageUrl: sp.product_image as string | null,
+          offersCount: 1,
+          bestPrice: null,
+          discountPercent: 0,
+        }))
+      }
+    }
+  } catch { /* ignore */ }
 
   try {
     const [products, listings] = await Promise.all([getProducts(), getProductListings()])
@@ -159,10 +178,14 @@ export default async function Page() {
         continue
       }
 
+      if (listing.is_active === false) {
+        continue
+      }
+
       const current = listingStatsByProduct.get(listing.productId) ?? { count: 0, bestPrice: null }
       current.count += 1
 
-      if (listing.price !== null) {
+      if (listing.price !== null && listing.price > 0) {
         if (current.bestPrice === null || listing.price < current.bestPrice) {
           current.bestPrice = listing.price
         }
@@ -324,6 +347,20 @@ export default async function Page() {
             </div>
           </div>
         </section>
+
+        {sponsoredProducts.length > 0 && (
+          <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-sm">
+            <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-amber-800">
+              <Star className="h-4 w-4 fill-amber-500 text-amber-500" />
+              Sponsored Products
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+              {sponsoredProducts.map((product) => (
+                <ProductTile key={`sponsored-${product.id}`} product={product} />
+              ))}
+            </div>
+          </section>
+        )}
 
         <section className="rounded-2xl border bg-white p-4 shadow-sm">
           <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-900">

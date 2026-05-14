@@ -2,8 +2,8 @@
 
 namespace App\Service;
 
+use App\Entity\Activity;
 use App\Entity\Admin;
-use App\Entity\AdminActivityLog;
 use Doctrine\ORM\EntityManagerInterface;
 
 final class AuditService
@@ -21,16 +21,19 @@ final class AuditService
         ?array $before = null,
         ?array $after = null,
         ?string $ipAddress = null,
-    ): AdminActivityLog {
-        $log = new AdminActivityLog();
+    ): Activity {
+        $log = new Activity();
+        $log->setActorType('ADMIN');
+        $log->setActorId($admin?->getId());
         $log->setAdmin($admin);
+        $log->setVerb($action);
         $log->setAction($action);
-        $log->setEntityType($entityType);
-        $log->setEntityId($entityId);
-        $log->setBeforeJson($before);
-        $log->setAfterJson($after);
-        $log->setCreatedAt(new \DateTimeImmutable());
+        $log->setSubjectType($entityType);
+        $log->setSubjectId($entityId);
+        $log->setContext($before);
+        $log->setMetadata($after);
         $log->setIpAddress($ipAddress);
+        $log->setCreatedAt(new \DateTimeImmutable());
 
         $this->entityManager->persist($log);
         $this->entityManager->flush();
@@ -43,10 +46,10 @@ final class AuditService
      */
     public function getEntityHistory(string $entityType, int $entityId, int $limit = 20): array
     {
-        return $this->entityManager->getRepository(AdminActivityLog::class)
+        return $this->entityManager->getRepository(Activity::class)
             ->findBy(
-                ['entityType' => $entityType, 'entityId' => $entityId],
-                ['createdAt' => 'DESC'],
+                ['subject_type' => $entityType, 'subject_id' => $entityId],
+                ['created_at' => 'DESC'],
                 $limit,
             );
     }

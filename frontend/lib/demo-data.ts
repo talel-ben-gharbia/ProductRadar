@@ -273,3 +273,9 @@ export const WATCHLIST_SEARCH_RESULTS = [
   { id: 23, name: "Samsung Galaxy Buds FE", brand: "Samsung" },
   { id: 24, name: "JBL Tune 770NC", brand: "JBL" },
 ]
+
+export const DEMO_SPONSORED_ARTICLES = [
+  { id: 1, product_id: 1, product_name: "Wireless Bluetooth Headphones Pro", product_brand: "SoundMax", product_image: null, status: "PUBLISHED", published_at: "2026-05-01T10:00:00Z", ends_at: "2026-05-31T10:00:00Z", created_at: "2026-04-28T09:00:00Z" },
+  { id: 2, product_id: 3, product_name: "Ergonomic Office Chair", product_brand: "ComfortPlus", product_image: null, status: "PUBLISHED", published_at: "2026-04-15T08:00:00Z", ends_at: "2026-05-15T08:00:00Z", created_at: "2026-04-10T14:00:00Z" },
+  { id: 3, product_id: 5, product_name: "Organic Green Tea Matcha Powder", product_brand: "GreenLeaf", product_image: null, status: "PENDING", published_at: null, ends_at: null, created_at: "2026-05-07T11:00:00Z" },
+]

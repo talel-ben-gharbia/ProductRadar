@@ -7,17 +7,35 @@ use App\Repository\CategoryRepository;
 use App\Repository\ProductRepository;
 use Doctrine\DBAL\Exception\ForeignKeyConstraintViolationException;
 use Doctrine\ORM\EntityManagerInterface;
+use Psr\Cache\CacheItemPoolInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Attribute\Route;
 
 final class ProductController extends AbstractController
 {
+    private const CACHE_KEY_PRODUCTS = 'products.all';
+    private const CACHE_KEY_PRODUCT_PREFIX = 'product.';
+    private const CACHE_TTL = 300;
+
+    public function __construct(
+        #[Autowire(service: 'products.cache')]
+        private readonly CacheItemPoolInterface $productsCache,
+    ) {
+    }
+
     #[Route('/products', name: 'get_products', methods: ['GET'])]
     public function getProducts(Request $request, ProductRepository $productRepository): JsonResponse
     {
         $categoryId = $request->query->getInt('categoryId', 0);
+        $cacheKey = $categoryId > 0 ? self::CACHE_KEY_PRODUCTS . ".cat{$categoryId}" : self::CACHE_KEY_PRODUCTS;
+
+        $cacheItem = $this->productsCache->getItem($cacheKey);
+        if ($cacheItem->isHit()) {
+            return $this->json($cacheItem->get());
+        }
 
         $products = $categoryId > 0
             ? $productRepository->findBy(['category' => $categoryId], ['id' => 'DESC'])
@@ -36,18 +54,29 @@ final class ProductController extends AbstractController
             $products,
         );
 
+        $cacheItem->set($data);
+        $cacheItem->expiresAfter(self::CACHE_TTL);
+        $this->productsCache->save($cacheItem);
+
         return $this->json($data);
     }
 
     #[Route('/products/{id}', name: 'get_product', methods: ['GET'])]
     public function getProduct(int $id, ProductRepository $productRepository): JsonResponse
     {
+        $cacheKey = self::CACHE_KEY_PRODUCT_PREFIX . $id;
+
+        $cacheItem = $this->productsCache->getItem($cacheKey);
+        if ($cacheItem->isHit()) {
+            return $this->json($cacheItem->get());
+        }
+
         $product = $productRepository->find($id);
         if (!$product) {
             return $this->json(['error' => 'Product not found.'], 404);
         }
 
-        return $this->json([
+        $data = [
             'id' => $product->getId(),
             'name' => $product->getName(),
             'brand' => $product->getBrand(),
@@ -72,7 +101,13 @@ final class ProductController extends AbstractController
                 ],
                 $product->getProductListings()->toArray(),
             ),
-        ]);
+        ];
+
+        $cacheItem->set($data);
+        $cacheItem->expiresAfter(self::CACHE_TTL);
+        $this->productsCache->save($cacheItem);
+
+        return $this->json($data);
     }
 
     #[Route('/products', name: 'create_product', methods: ['POST'])]
@@ -105,6 +140,8 @@ final class ProductController extends AbstractController
 
         $entityManager->persist($product);
         $entityManager->flush();
+
+        $this->clearProductCache();
 
         return $this->json([
             'id' => $product->getId(),
@@ -151,6 +188,8 @@ final class ProductController extends AbstractController
 
         $entityManager->flush();
 
+        $this->clearProductCache();
+
         return $this->json([
             'id' => $product->getId(),
             'name' => $product->getName(),
@@ -178,6 +217,13 @@ final class ProductController extends AbstractController
             ], 409);
         }
 
+        $this->clearProductCache();
+
         return $this->json(['success' => true]);
+    }
+
+    private function clearProductCache(): void
+    {
+        $this->productsCache->clear();
     }
 }

@@ -96,6 +96,8 @@ class ReviewRepository extends ServiceEntityRepository
         $total = (int) $this->createQueryBuilder('r')
             ->select('COUNT(r.id)')
             ->getQuery()
+            ->setCacheable(true)
+            ->setLifetime(300)
             ->getSingleScalarResult();
 
         $approved = (int) $this->createQueryBuilder('r')
@@ -103,6 +105,8 @@ class ReviewRepository extends ServiceEntityRepository
             ->andWhere('r.status = :status')
             ->setParameter('status', 'APPROVED')
             ->getQuery()
+            ->setCacheable(true)
+            ->setLifetime(300)
             ->getSingleScalarResult();
 
         $rejected = (int) $this->createQueryBuilder('r')
@@ -110,6 +114,8 @@ class ReviewRepository extends ServiceEntityRepository
             ->andWhere('r.status = :status')
             ->setParameter('status', 'REJECTED')
             ->getQuery()
+            ->setCacheable(true)
+            ->setLifetime(300)
             ->getSingleScalarResult();
 
         $pending = (int) $this->createQueryBuilder('r')
@@ -117,11 +123,15 @@ class ReviewRepository extends ServiceEntityRepository
             ->andWhere('r.status = :status')
             ->setParameter('status', 'PENDING')
             ->getQuery()
+            ->setCacheable(true)
+            ->setLifetime(300)
             ->getSingleScalarResult();
 
         $avgRating = $this->createQueryBuilder('r')
             ->select('AVG(r.rating)')
             ->getQuery()
+            ->setCacheable(true)
+            ->setLifetime(300)
             ->getSingleScalarResult() ?? 0;
 
         $approvalRate = $total > 0 ? round(($approved / $total) * 100, 2) : 0;
@@ -146,6 +156,8 @@ class ReviewRepository extends ServiceEntityRepository
             ->groupBy('r.rating')
             ->orderBy('r.rating', 'ASC')
             ->getQuery()
+            ->setCacheable(true)
+            ->setLifetime(300)
             ->getResult();
     }
 

@@ -6,7 +6,9 @@ use App\Entity\DataSource;
 use App\Repository\DataSourceRepository;
 use App\Security\AdminApiGuard;
 use Doctrine\ORM\EntityManagerInterface;
+use Psr\Cache\CacheItemPoolInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Attribute\Route;
@@ -14,6 +16,16 @@ use Symfony\Component\Routing\Attribute\Route;
 #[Route('/admin/api/data-sources')]
 final class DataSourceController extends AbstractController
 {
+    use CachedResponseTrait;
+
+    private const CACHE_KEY_LIST = 'data_sources.list';
+
+    public function __construct(
+        #[Autowire(service: 'general.cache')]
+        private readonly CacheItemPoolInterface $cache,
+    ) {
+    }
+
     #[Route('', name: 'admin_data_sources_list', methods: ['GET'])]
     public function list(
         Request $request,
@@ -35,16 +47,20 @@ final class DataSourceController extends AbstractController
             $activeFilter = filter_var($activeRaw, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
         }
 
-        $result = $dataSourceRepository->paginateForAdmin($limit, $offset, $search, $activeFilter);
+        $cacheKey = self::CACHE_KEY_LIST . ".l{$limit}.o{$offset}." . md5($search) . '.' . ($activeFilter === null ? 'all' : ($activeFilter ? '1' : '0'));
 
-        return $this->json([
-            'items' => array_map(fn (DataSource $source) => $this->serializeSource($source), $result['items']),
-            'pagination' => [
-                'limit' => $limit,
-                'offset' => $offset,
-                'total' => $result['total'],
-            ],
-        ]);
+        return $this->cachedGet($this->cache, $cacheKey, function () use ($dataSourceRepository, $limit, $offset, $search, $activeFilter): array {
+            $result = $dataSourceRepository->paginateForAdmin($limit, $offset, $search, $activeFilter);
+
+            return [
+                'items' => array_map(fn (DataSource $source) => $this->serializeSource($source), $result['items']),
+                'pagination' => [
+                    'limit' => $limit,
+                    'offset' => $offset,
+                    'total' => $result['total'],
+                ],
+            ];
+        });
     }
 
     #[Route('', name: 'admin_data_sources_create', methods: ['POST'])]
@@ -81,6 +97,8 @@ final class DataSourceController extends AbstractController
 
         $entityManager->persist($source);
         $entityManager->flush();
+
+        $this->invalidateCache($this->cache);
 
         return $this->json($this->serializeSource($source), 201);
     }
@@ -137,6 +155,8 @@ final class DataSourceController extends AbstractController
         $source->setUpdatedAt(new \DateTimeImmutable());
 
         $entityManager->flush();
+
+        $this->invalidateCache($this->cache);
 
         return $this->json($this->serializeSource($source));
     }

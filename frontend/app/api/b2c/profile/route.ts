@@ -1,6 +1,7 @@
 import { cookies } from "next/headers"
 import { NextRequest, NextResponse } from "next/server"
 
+import { cachedFetch } from "@/lib/fetch-with-cache"
 import { BACKEND_URL } from "@/utils/admin/constants"
 import { COOKIE_NAME, verifyB2CSessionToken } from "@/lib/b2c-session"
 
@@ -23,19 +24,13 @@ export async function GET() {
   }
 
   try {
-    const backendResponse = await fetch(
+    const data = await cachedFetch<unknown>(
       `${BACKEND_URL}/api/b2c/profile/${encodeURIComponent(session.firebase_uid)}`,
-      { cache: "no-store" },
+      {
+        cacheKey: `b2c:profile:${session.firebase_uid}`,
+        cacheTtl: 300,
+      },
     )
-
-    const data = await backendResponse.json().catch(() => ({}))
-
-    if (!backendResponse.ok) {
-      return NextResponse.json(
-        { error: (data as { error?: string }).error || "Failed to load profile." },
-        { status: backendResponse.status },
-      )
-    }
 
     return NextResponse.json({ customer: data }, { status: 200 })
   } catch {
@@ -53,7 +48,7 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 })
   }
 
-  let body: { fullName?: string | null; adress?: string | null }
+  let body: { fullName?: string | null; address?: string | null }
   try {
     body = await request.json()
   } catch {
@@ -68,7 +63,7 @@ export async function PUT(request: NextRequest) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           fullName: body.fullName ?? null,
-          adress: body.adress ?? null,
+          address: body.address ?? null,
         }),
       },
     )

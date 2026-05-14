@@ -2,14 +2,15 @@
 
 namespace App\Controller;
 
+use App\Entity\B2BAdsCampaign;
 use App\Entity\B2BAdsRequest;
 use App\Entity\B2BCompany;
 use App\Entity\B2BMarket;
 use App\Entity\B2BReport;
 use App\Entity\B2BScrapingRequest;
 use App\Entity\B2BSearchLog;
-use App\Entity\B2BSubscription;
 use App\Entity\B2BWatchlist;
+use App\Entity\Subscription;
 use App\Entity\Notification;
 use App\Entity\Product;
 use App\Entity\ProductListing;
@@ -17,13 +18,19 @@ use App\Entity\Seller;
 use App\Entity\User;
 use App\Repository\ProductListingRepository;
 use App\Repository\UserRepository;
+use App\Service\B2BNotificationService;
 use App\Service\B2BPlanGatingService;
 use App\Service\B2BAdsQuotaService;
+use App\Service\CacheVersionManager;
 use App\Service\SubscriptionContextResolver;
 use App\Service\TrustScoreCalculationService;
+use App\Service\B2BIdentityService;
 use App\Service\URLDuplicateDetector;
+use Doctrine\DBAL\ArrayParameterType;
 use Doctrine\ORM\EntityManagerInterface;
+use Psr\Cache\CacheItemPoolInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -33,10 +40,31 @@ use Symfony\Component\Routing\Attribute\Route;
 #[Route('/api/b2b/workspace')]
 final class B2BWorkspaceController extends AbstractController
 {
+    use CachedResponseTrait;
+
+    private const CACHE_KEY_SUMMARY_PREFIX = 'workspace.summary.';
+    private const CACHE_KEY_HEALTH_PREFIX = 'workspace.health.';
+    private const CACHE_KEY_TRUST_HISTORY_PREFIX = 'workspace.trust_history.';
+    private const CACHE_KEY_LISTINGS_PREFIX = 'workspace.listings.';
+    private const CACHE_KEY_NOTIFICATIONS_PREFIX = 'workspace.notifications.';
+    private const CACHE_KEY_ADS_PREFIX = 'workspace.ads.';
+    private const CACHE_KEY_REPORTS_PREFIX = 'workspace.reports.';
+    private const CACHE_KEY_WATCHLIST_PREFIX = 'workspace.watchlist.';
+    private const CACHE_KEY_WATCHLIST_SEARCH_PREFIX = 'workspace.watchlist_search.';
+    private const CACHE_KEY_COMPARE_LISTING_PREFIX = 'workspace.compare.listing.';
+    private const CACHE_KEY_COMPARE_PRODUCT_PREFIX = 'workspace.compare.product.';
+    private const CACHE_KEY_SCRAPING_PREFIX = 'workspace.scraping.';
+    private const CACHE_KEY_EXPORT_PREFIX = 'workspace.export.';
+
     public function __construct(
+        private readonly B2BNotificationService $b2bNotificationService,
         private readonly B2BPlanGatingService $gatingService,
+        private readonly B2BIdentityService $b2bIdentityService,
         private readonly SubscriptionContextResolver $subscriptionResolver,
         private readonly URLDuplicateDetector $urlDuplicateDetector,
+        private readonly CacheVersionManager $cacheVersionManager,
+        #[Autowire(service: 'general.cache')]
+        private readonly CacheItemPoolInterface $cache,
     ) {
     }
 
@@ -52,20 +80,24 @@ final class B2BWorkspaceController extends AbstractController
             return $user;
         }
 
-        $subscription = $this->resolveWorkspaceSubscription($user, $entityManager);
-        $notifications = $this->fetchWorkspaceNotifications($user, $entityManager, 5);
-        $searchInsights = $this->fetchSearchInsights($user, $entityManager);
+        $this->firePlanExpiryWarning($user, $entityManager);
 
-        $listings = $this->fetchWorkspaceListings($user, $productListingRepository, $entityManager);
-        $metrics = $this->buildWorkspaceMetrics($user, $listings, $entityManager, $searchInsights);
+        return $this->cachedGet($this->cache, $this->buildUserCacheKey($this->cacheVersionManager, $firebaseUid, self::CACHE_KEY_SUMMARY_PREFIX), function () use ($user, $productListingRepository, $entityManager): array {
+            $subscription = $this->resolveWorkspaceSubscription($user, $entityManager);
+            $notifications = $this->fetchWorkspaceNotifications($user, $entityManager, 5);
+            $searchInsights = $this->fetchSearchInsights($user, $entityManager);
 
-        return $this->json([
-            'user' => $this->serializeWorkspaceUser($user),
-            'subscription' => $this->serializeWorkspaceSubscription($subscription),
-            'metrics' => $metrics,
-            'search_insights' => $searchInsights,
-            'notifications' => $notifications,
-        ]);
+            $listings = $this->fetchWorkspaceListings($user, $productListingRepository, $entityManager);
+            $metrics = $this->buildWorkspaceMetrics($user, $listings, $entityManager, $searchInsights);
+
+            return [
+                'user' => $this->serializeWorkspaceUser($user),
+                'subscription' => $this->serializeWorkspaceSubscription($subscription),
+                'metrics' => $metrics,
+                'search_insights' => $searchInsights,
+                'notifications' => $notifications,
+            ];
+        });
     }
 
     #[Route('/{firebaseUid}/health-score', name: 'b2b_workspace_health_score', methods: ['GET'])]
@@ -80,7 +112,7 @@ final class B2BWorkspaceController extends AbstractController
             return $user;
         }
 
-        if ($user instanceof B2BMarket || !$user instanceof B2BCompany) {
+        if ($user instanceof B2BMarket || !($user instanceof B2BCompany)) {
             return $this->json([
                 'overall' => null,
                 'trust_dimension' => null,
@@ -90,60 +122,62 @@ final class B2BWorkspaceController extends AbstractController
             ]);
         }
 
-        $listings = $this->fetchWorkspaceListings($user, $productListingRepository, $entityManager);
+        return $this->cachedGet($this->cache, $this->buildUserCacheKey($this->cacheVersionManager, $firebaseUid, self::CACHE_KEY_HEALTH_PREFIX), function () use ($user, $productListingRepository, $entityManager): array {
+            $listings = $this->fetchWorkspaceListings($user, $productListingRepository, $entityManager);
 
-        if (empty($listings)) {
-            return $this->json([
-                'overall' => null,
-                'trust_dimension' => null,
-                'pricing_dimension' => null,
-                'stock_dimension' => null,
+            if (empty($listings)) {
+                return [
+                    'overall' => null,
+                    'trust_dimension' => null,
+                    'pricing_dimension' => null,
+                    'stock_dimension' => null,
+                    'trend' => null,
+                ];
+            }
+
+            $trustScores = array_filter(array_map(static fn (array $l) => $l['trust_score'] ?? null, $listings), static fn ($value) => is_numeric($value));
+            $avgTrust = !empty($trustScores) ? array_sum(array_map('floatval', $trustScores)) / count($trustScores) : 0.0;
+            $trustDimension = (int) round(min(100, max(0, $avgTrust)));
+
+            $total = count($listings);
+            $inStock = count(array_filter($listings, static fn (array $l) => ($l['availability'] ?? null) === true));
+            $stockDimension = $total > 0 ? (int) round(($inStock / $total) * 100) : 0;
+
+            $pricingScores = [];
+            foreach ($listings as $listing) {
+                $price = isset($listing['price']) && is_numeric($listing['price']) ? (float) $listing['price'] : null;
+                $cheapestPrice = isset($listing['cheapest_price']) && is_numeric($listing['cheapest_price']) ? (float) $listing['cheapest_price'] : null;
+                $vendorRank = isset($listing['vendor_rank']) && is_numeric($listing['vendor_rank']) ? (int) $listing['vendor_rank'] : null;
+
+                if ($price === null || $price <= 0 || $cheapestPrice === null || $cheapestPrice <= 0) {
+                    continue;
+                }
+
+                $gapRatio = max(0.0, ($price - $cheapestPrice) / $price);
+                $listingScore = 100 - min(100.0, $gapRatio * 180.0);
+                if ($vendorRank !== null && $vendorRank === 1) {
+                    $listingScore = min(100.0, $listingScore + 8.0);
+                }
+
+                $pricingScores[] = $listingScore;
+            }
+
+            $pricingDimension = !empty($pricingScores)
+                ? (int) round(array_sum($pricingScores) / count($pricingScores))
+                : 50;
+
+            $overall = (int) round(
+                $trustDimension * 0.40 + $pricingDimension * 0.30 + $stockDimension * 0.30
+            );
+
+            return [
+                'overall' => $overall,
+                'trust_dimension' => $trustDimension,
+                'pricing_dimension' => $pricingDimension,
+                'stock_dimension' => $stockDimension,
                 'trend' => null,
-            ]);
-        }
-
-        $trustScores = array_filter(array_map(static fn (array $l) => $l['trust_score'] ?? null, $listings), static fn ($value) => is_numeric($value));
-        $avgTrust = !empty($trustScores) ? array_sum(array_map('floatval', $trustScores)) / count($trustScores) : 0.0;
-        $trustDimension = (int) round(min(100, max(0, $avgTrust)));
-
-        $total = count($listings);
-        $inStock = count(array_filter($listings, static fn (array $l) => ($l['availability'] ?? null) === true));
-        $stockDimension = $total > 0 ? (int) round(($inStock / $total) * 100) : 0;
-
-        $pricingScores = [];
-        foreach ($listings as $listing) {
-            $price = isset($listing['price']) && is_numeric($listing['price']) ? (float) $listing['price'] : null;
-            $cheapestPrice = isset($listing['cheapest_price']) && is_numeric($listing['cheapest_price']) ? (float) $listing['cheapest_price'] : null;
-            $vendorRank = isset($listing['vendor_rank']) && is_numeric($listing['vendor_rank']) ? (int) $listing['vendor_rank'] : null;
-
-            if ($price === null || $price <= 0 || $cheapestPrice === null || $cheapestPrice <= 0) {
-                continue;
-            }
-
-            $gapRatio = max(0.0, ($price - $cheapestPrice) / $price);
-            $listingScore = 100 - min(100.0, $gapRatio * 180.0);
-            if ($vendorRank !== null && $vendorRank === 1) {
-                $listingScore = min(100.0, $listingScore + 8.0);
-            }
-
-            $pricingScores[] = $listingScore;
-        }
-
-        $pricingDimension = !empty($pricingScores)
-            ? (int) round(array_sum($pricingScores) / count($pricingScores))
-            : 50;
-
-        $overall = (int) round(
-            $trustDimension * 0.40 + $pricingDimension * 0.30 + $stockDimension * 0.30
-        );
-
-        return $this->json([
-            'overall' => $overall,
-            'trust_dimension' => $trustDimension,
-            'pricing_dimension' => $pricingDimension,
-            'stock_dimension' => $stockDimension,
-            'trend' => null,
-        ]);
+            ];
+        }, 60);
     }
 
     #[Route('/{firebaseUid}/trust-score-history', name: 'b2b_workspace_trust_score_history', methods: ['GET'])]
@@ -157,61 +191,63 @@ final class B2BWorkspaceController extends AbstractController
             return $user;
         }
 
-        $conn = $entityManager->getConnection();
+        return $this->cachedGet($this->cache, $this->buildUserCacheKey($this->cacheVersionManager, $firebaseUid, self::CACHE_KEY_TRUST_HISTORY_PREFIX), function () use ($user, $entityManager): array {
+            $conn = $entityManager->getConnection();
 
-        if ($user instanceof B2BCompany) {
-            $sellerId = $user->getSeller()?->getId();
-            if ($sellerId === null) {
-                return $this->json(['items' => []]);
+            if ($user instanceof B2BCompany) {
+                $sellerId = $user->getSeller()?->getId();
+                if ($sellerId === null) {
+                    return ['items' => []];
+                }
+
+                $since = (new \DateTimeImmutable())->modify('-90 days')->format('Y-m-d');
+                $rows = $conn->fetchAllAssociative('
+                    SELECT DATE(h.created_at) AS date,
+                           ROUND(AVG(h.score)::numeric, 2) AS avg_score,
+                           COUNT(DISTINCT h.listing_id) AS listing_count
+                    FROM trust_score_history h
+                    JOIN product_listing pl ON pl.id = h.listing_id
+                    WHERE pl.seller_id = :sellerId
+                      AND h.created_at >= :since
+                    GROUP BY DATE(h.created_at)
+                    ORDER BY date ASC
+                ', ['sellerId' => $sellerId, 'since' => $since]);
+
+                return ['items' => $rows];
             }
 
-            $since = (new \DateTimeImmutable())->modify('-90 days')->format('Y-m-d');
-            $rows = $conn->fetchAllAssociative('
-                SELECT DATE(h.created_at) AS date,
-                       ROUND(AVG(h.score)::numeric, 2) AS avg_score,
-                       COUNT(DISTINCT h.listing_id) AS listing_count
-                FROM trust_score_history h
-                JOIN product_listing pl ON pl.id = h.listing_id
-                WHERE pl.seller_id = :sellerId
-                  AND h.created_at >= :since
-                GROUP BY DATE(h.created_at)
-                ORDER BY date ASC
-            ', ['sellerId' => $sellerId, 'since' => $since]);
+            if ($user instanceof B2BMarket) {
+                $marketSellerId = $user->getSeller()?->getId();
+                $marketNames = array_filter([
+                    mb_strtolower((string) $user->getCompanyName()),
+                    mb_strtolower((string) $user->getCompanyMarket()),
+                ]);
 
-            return $this->json(['items' => $rows]);
-        }
+                $since = (new \DateTimeImmutable())->modify('-90 days')->format('Y-m-d');
+                $rows = $conn->fetchAllAssociative('
+                    SELECT DATE(h.created_at) AS date,
+                           ROUND(AVG(h.score)::numeric, 2) AS avg_score,
+                           COUNT(DISTINCT h.listing_id) AS listing_count
+                    FROM trust_score_history h
+                    JOIN product_listing pl ON pl.id = h.listing_id
+                    JOIN product p ON p.id = pl.product_id
+                    WHERE (pl.seller_id = :sellerId OR LOWER(p.brand) IN (:marketNames))
+                      AND h.created_at >= :since
+                    GROUP BY DATE(h.created_at)
+                    ORDER BY date ASC
+                ', [
+                    'sellerId' => $marketSellerId ?? 0,
+                    'marketNames' => $marketNames,
+                    'since' => $since,
+                ], [
+                    'marketNames' => \Doctrine\DBAL\ArrayParameterType::STRING,
+                ]);
 
-        if ($user instanceof B2BMarket) {
-            $marketSellerId = $user->getSeller()?->getId();
-            $marketNames = array_filter([
-                mb_strtolower((string) $user->getCompanyName()),
-                mb_strtolower((string) $user->getCompanyMarket()),
-            ]);
+                return ['items' => $rows];
+            }
 
-            $since = (new \DateTimeImmutable())->modify('-90 days')->format('Y-m-d');
-            $rows = $conn->fetchAllAssociative('
-                SELECT DATE(h.created_at) AS date,
-                       ROUND(AVG(h.score)::numeric, 2) AS avg_score,
-                       COUNT(DISTINCT h.listing_id) AS listing_count
-                FROM trust_score_history h
-                JOIN product_listing pl ON pl.id = h.listing_id
-                JOIN product p ON p.id = pl.product_id
-                WHERE (pl.seller_id = :sellerId OR LOWER(p.brand) IN (:marketNames))
-                  AND h.created_at >= :since
-                GROUP BY DATE(h.created_at)
-                ORDER BY date ASC
-            ', [
-                'sellerId' => $marketSellerId ?? 0,
-                'marketNames' => $marketNames,
-                'since' => $since,
-            ], [
-                'marketNames' => \Doctrine\DBAL\ArrayParameterType::STRING,
-            ]);
-
-            return $this->json(['items' => $rows]);
-        }
-
-        return $this->json(['items' => []]);
+            return ['items' => []];
+        }, 120);
     }
 
     #[Route('/{firebaseUid}/listings', name: 'b2b_workspace_listings', methods: ['GET'])]
@@ -227,7 +263,20 @@ final class B2BWorkspaceController extends AbstractController
             return $user;
         }
 
+        $cacheKey = $this->buildUserCacheKey($this->cacheVersionManager, $firebaseUid, self::CACHE_KEY_LISTINGS_PREFIX);
+        $cacheItem = $this->cache->getItem($cacheKey);
+        if ($cacheItem->isHit()) {
+            $filtered = $this->applyListingFilters($cacheItem->get(), $request);
+            $paginated = $this->paginateArray($filtered, max(1, $request->query->getInt('limit', 25)), max(0, $request->query->getInt('offset', 0)));
+            return $this->json($paginated);
+        }
+
         $rows = $this->fetchWorkspaceListings($user, $productListingRepository, $entityManager);
+
+        $cacheItem->set($rows);
+        $cacheItem->expiresAfter(60);
+        $this->cache->save($cacheItem);
+
         $filtered = $this->applyListingFilters($rows, $request);
         $paginated = $this->paginateArray($filtered, max(1, $request->query->getInt('limit', 25)), max(0, $request->query->getInt('offset', 0)));
 
@@ -262,17 +311,26 @@ final class B2BWorkspaceController extends AbstractController
                 return $this->json(['error' => 'Notification not found.'], 404);
             }
 
+            $notifOwner = $user instanceof B2BCompany ? $notification->getCompany() : $notification->getMarket();
+            if ($notifOwner?->getId() !== $user->getId()) {
+                return $this->json(['error' => 'Notification not found.'], 404);
+            }
+
             $notification->setIsRead(true);
             $entityManager->flush();
+
+            $this->cacheVersionManager->bumpVersion($firebaseUid);
 
             return $this->json(['id' => $notification->getId(), 'is_read' => true]);
         }
 
-        $limit = max(1, min(100, $request->query->getInt('limit', 25)));
-        $offset = max(0, $request->query->getInt('offset', 0));
-        $items = $this->fetchWorkspaceNotifications($user, $entityManager, $limit + $offset);
+        return $this->cachedGet($this->cache, $this->buildUserCacheKey($this->cacheVersionManager, $firebaseUid, self::CACHE_KEY_NOTIFICATIONS_PREFIX), function () use ($user, $entityManager, $request): array {
+            $limit = max(1, min(100, $request->query->getInt('limit', 25)));
+            $offset = max(0, $request->query->getInt('offset', 0));
+            $items = $this->fetchWorkspaceNotifications($user, $entityManager, $limit + $offset);
 
-        return $this->json($this->paginateArray($items, $limit, $offset));
+            return $this->paginateArray($items, $limit, $offset);
+        }, 60);
     }
 
     #[Route('/{firebaseUid}/ads-requests', name: 'b2b_workspace_ads_requests', methods: ['GET', 'POST'])]
@@ -289,18 +347,41 @@ final class B2BWorkspaceController extends AbstractController
         }
 
         if ($request->isMethod('GET')) {
-            $items = $entityManager->getRepository(B2BAdsRequest::class)->findBy(
-                $user instanceof B2BCompany ? ['company' => $user] : [],
-                ['created_at' => 'DESC', 'id' => 'DESC'],
-                100,
-            );
+            return $this->cachedGet($this->cache, $this->buildUserCacheKey($this->cacheVersionManager, $firebaseUid, self::CACHE_KEY_ADS_PREFIX), function () use ($user, $entityManager, $quotaService): array {
+                $items = $entityManager->getRepository(B2BAdsRequest::class)->findBy(
+                    $user instanceof B2BCompany ? ['company' => $user] : ['market' => $user],
+                    ['created_at' => 'DESC', 'id' => 'DESC'],
+                    100,
+                );
 
-            $quota = $quotaService->getQuotaUsage($user);
+                $quota = $quotaService->getQuotaUsage($user);
 
-            return $this->json([
-                'items' => array_map(fn (B2BAdsRequest $item) => $this->serializeAdsRequest($item), $items),
-                'quota' => $quota,
-            ]);
+                $campaignRepo = $entityManager->getRepository(B2BAdsCampaign::class);
+
+                return [
+                    'items' => array_map(function (B2BAdsRequest $item) use ($campaignRepo) {
+                        $data = $this->serializeAdsRequest($item);
+
+                        // Attach campaign details for approved requests
+                        if (strtoupper((string) $item->getStatus()) === 'APPROVED') {
+                            $campaign = $campaignRepo->findOneBy(['adsRequest' => $item]);
+                            if ($campaign) {
+                                $data['campaign'] = [
+                                    'id' => $campaign->getId(),
+                                    'status' => $campaign->getStatus(),
+                                    'agreed_price' => $campaign->getAgreedPrice(),
+                                    'starts_at' => $campaign->getStartsAt()?->format(\DateTimeInterface::ATOM),
+                                    'ends_at' => $campaign->getEndsAt()?->format(\DateTimeInterface::ATOM),
+                                    'active' => $campaign->isActive(),
+                                ];
+                            }
+                        }
+
+                        return $data;
+                    }, $items),
+                    'quota' => $quota,
+                ];
+            });
         }
 
         $body = json_decode((string) $request->getContent(), true);
@@ -338,6 +419,8 @@ final class B2BWorkspaceController extends AbstractController
         $adsRequest->setOwnerType($user instanceof B2BMarket ? 'B2B_MARKET' : 'B2B_COMPANY');
         if ($user instanceof B2BCompany) {
             $adsRequest->setCompany($user);
+        } elseif ($user instanceof B2BMarket) {
+            $adsRequest->setMarket($user);
         }
         $adsRequest->setRequestType($requestType);
         $adsRequest->setTargetType($targetType);
@@ -397,6 +480,7 @@ final class B2BWorkspaceController extends AbstractController
         $entityManager->flush();
 
         $this->subscriptionResolver->recordUsage($user, 'ads_requests');
+        $this->cacheVersionManager->bumpVersion($firebaseUid);
 
         return $this->json($this->serializeAdsRequest($adsRequest), 201);
     }
@@ -415,22 +499,24 @@ final class B2BWorkspaceController extends AbstractController
         }
 
         if ($request->isMethod('GET')) {
-            $items = $entityManager->getRepository(B2BReport::class)->findBy(
-                $user instanceof B2BCompany ? ['company' => $user] : ['market' => $user],
-                ['created_at' => 'DESC', 'id' => 'DESC'],
-                100,
-            );
+            return $this->cachedGet($this->cache, $this->buildUserCacheKey($this->cacheVersionManager, $firebaseUid, self::CACHE_KEY_REPORTS_PREFIX), function () use ($user, $entityManager): array {
+                $items = $entityManager->getRepository(B2BReport::class)->findBy(
+                    $user instanceof B2BCompany ? ['company' => $user] : ['market' => $user],
+                    ['created_at' => 'DESC', 'id' => 'DESC'],
+                    100,
+                );
 
-            return $this->json([
-                'items' => array_map(fn (B2BReport $item) => [
-                    'id' => $item->getId(),
-                    'report_type' => $item->getReportType(),
-                    'status' => $item->getStatus(),
-                    'file_path' => $item->getFilePath(),
-                    'generated_at' => $item->getGeneratedAt()?->format(\DateTimeInterface::ATOM),
-                    'created_at' => $item->getCreatedAt()?->format(\DateTimeInterface::ATOM),
-                ], $items),
-            ]);
+                return [
+                    'items' => array_map(fn (B2BReport $item) => [
+                        'id' => $item->getId(),
+                        'report_type' => $item->getReportType(),
+                        'status' => $item->getStatus(),
+                        'file_path' => $item->getFilePath(),
+                        'generated_at' => $item->getGeneratedAt()?->format(\DateTimeInterface::ATOM),
+                        'created_at' => $item->getCreatedAt()?->format(\DateTimeInterface::ATOM),
+                    ], $items),
+                ];
+            });
         }
 
         $body = json_decode((string) $request->getContent(), true);
@@ -496,6 +582,7 @@ final class B2BWorkspaceController extends AbstractController
         $entityManager->flush();
 
         $this->subscriptionResolver->recordUsage($user, 'reports');
+        $this->cacheVersionManager->bumpVersion($firebaseUid);
 
         return $this->json(['id' => $report->getId(), 'status' => 'GENERATED', 'file_path' => $report->getFilePath()], 201);
     }
@@ -512,17 +599,23 @@ final class B2BWorkspaceController extends AbstractController
             return $user;
         }
 
-        // Only Gold can export CSV
-        if (!$this->gatingService->canAccessFeature($user, B2BPlanGatingService::FEATURE_EXPORT_CSV)) {
-            return $this->json(['error' => 'CSV export requires a Gold subscription.'], 403);
-        }
+        $upperType = strtoupper($reportType);
+        $cacheKey = $this->buildUserCacheKey($this->cacheVersionManager, $firebaseUid, self::CACHE_KEY_EXPORT_PREFIX . $upperType);
+        $cacheItem = $this->cache->getItem($cacheKey);
+        if ($cacheItem->isHit()) {
+            $reportData = $cacheItem->get();
+        } else {
+            $listings = $this->fetchWorkspaceListings($user, $entityManager->getRepository(\App\Entity\ProductListing::class), $entityManager);
+            $searchInsights = $this->fetchSearchInsights($user, $entityManager);
+            $reportData = $this->buildReportCsvData($user, $upperType, $listings, $entityManager, $searchInsights);
 
-        $listings = $this->fetchWorkspaceListings($user, $entityManager->getRepository(\App\Entity\ProductListing::class), $entityManager);
-        $searchInsights = $this->fetchSearchInsights($user, $entityManager);
-        $reportData = $this->buildReportCsvData($user, strtoupper($reportType), $listings, $entityManager, $searchInsights);
+            if ($reportData === null) {
+                return $this->json(['error' => 'Unknown report type.'], 422);
+            }
 
-        if ($reportData === null) {
-            return $this->json(['error' => 'Unknown report type.'], 422);
+            $cacheItem->set($reportData);
+            $cacheItem->expiresAfter(300);
+            $this->cache->save($cacheItem);
         }
 
         $response = new StreamedResponse(function () use ($reportData) {
@@ -538,6 +631,52 @@ final class B2BWorkspaceController extends AbstractController
         return $response;
     }
 
+    #[Route('/{firebaseUid}/listings/export', name: 'b2b_workspace_listings_export', methods: ['GET'])]
+    public function exportListingsCsv(
+        string $firebaseUid,
+        UserRepository $userRepository,
+        ProductListingRepository $productListingRepository,
+        EntityManagerInterface $entityManager,
+    ): Response {
+        $user = $this->resolveWorkspaceUser($firebaseUid, $userRepository);
+        if ($user instanceof JsonResponse) {
+            return $user;
+        }
+
+        $listings = $this->fetchWorkspaceListings($user, $productListingRepository, $entityManager);
+
+        $headers = ['Product Name', 'Brand', 'Category', 'Price (DT)', 'Market Rank', 'Trust Score', 'Stock Status', 'Last Updated'];
+        $rows = array_map(function (array $row): array {
+            $rank = isset($row['vendor_rank'], $row['total_sellers'])
+                ? $row['vendor_rank'] . ' of ' . $row['total_sellers']
+                : '-';
+            return [
+                $row['productName'] ?? '-',
+                $row['productBrand'] ?? '-',
+                $row['categoryName'] ?? '-',
+                isset($row['price']) && is_numeric($row['price']) ? number_format((float) $row['price'], 2) : '-',
+                $rank,
+                isset($row['trust_score']) && is_numeric($row['trust_score']) ? number_format((float) $row['trust_score'], 1) : '-',
+                ($row['availability'] ?? null) === true ? 'In Stock' : 'Out of Stock',
+                $row['updated_at'] ?? '-',
+            ];
+        }, $listings);
+
+        $response = new StreamedResponse(function () use ($headers, $rows) {
+            $output = fopen('php://output', 'wb');
+            fputcsv($output, $headers);
+            foreach ($rows as $row) {
+                fputcsv($output, $row);
+            }
+            fclose($output);
+        });
+
+        $response->headers->set('Content-Type', 'text/csv; charset=utf-8');
+        $response->headers->set('Content-Disposition', 'attachment; filename="listings_' . date('Y-m-d') . '.csv"');
+
+        return $response;
+    }
+
     #[Route('/{firebaseUid}/subscription/renew', name: 'b2b_workspace_subscription_renew', methods: ['POST'])]
     public function renewSubscription(
         string $firebaseUid,
@@ -549,32 +688,30 @@ final class B2BWorkspaceController extends AbstractController
             return $user;
         }
 
-        $criteria = $user instanceof B2BCompany ? ['company' => $user] : ['market' => $user];
-        $currentSub = $entityManager->getRepository(B2BSubscription::class)->findOneBy(
-            $criteria + ['active' => true],
+        $currentSub = $entityManager->getRepository(Subscription::class)->findOneBy(
+            ['owner_type' => $user instanceof B2BCompany ? 'COMPANY' : 'MARKET', 'owner_id' => $user->getId(), 'active' => true],
             ['created_at' => 'DESC', 'id' => 'DESC']
         );
 
-        if (!$currentSub instanceof B2BSubscription) {
+        if (!$currentSub instanceof Subscription) {
             return $this->json(['error' => 'No active subscription to renew.'], 404);
         }
 
-        // Create a renewal request (same plan, new dates, inactive until approved)
-        $newSub = new B2BSubscription();
-        $newSub->setOwnerType($currentSub->getOwnerType());
-        $newSub->setPlanType($currentSub->getPlanType());
+        $newSub = new Subscription();
+        $newSub->setOwnerType($currentSub->getOwnerType() ?? ($user instanceof B2BCompany ? 'COMPANY' : 'MARKET'));
+        $newSub->setOwnerId((int) $user->getId());
+        $newSub->setPlanType($currentSub->getPlanType() ?? 'B2B_SILVER');
         $newSub->setDurationMonths($currentSub->getDurationMonths());
         $newSub->setStartDate(new \DateTimeImmutable());
         $newSub->setEndDate((new \DateTimeImmutable())->modify('+' . ($currentSub->getDurationMonths() ?? 12) . ' months'));
-        $newSub->setActive(false); // Pending admin approval
-        if ($user instanceof B2BCompany) $newSub->setCompany($user);
-        if ($user instanceof B2BMarket) $newSub->setMarket($user);
+        $newSub->setActive(false);
         $newSub->setCreatedAt(new \DateTimeImmutable());
 
         $entityManager->persist($newSub);
         $entityManager->flush();
 
-        // Notify admin (via notification) — simplified: create notification for the vendor
+        $this->cacheVersionManager->bumpVersion($firebaseUid);
+
         $notification = new Notification();
         $notification->setType('SUBSCRIPTION_RENEWAL_REQUESTED');
         $notification->setMessage(sprintf('Renewal requested for %s plan (%d months). Awaiting admin approval.', $currentSub->getPlanType(), $currentSub->getDurationMonths() ?? 12));
@@ -600,24 +737,23 @@ final class B2BWorkspaceController extends AbstractController
             return $user;
         }
 
-        // Check they aren't already Gold
         if ($this->gatingService->isGoldPlan($user)) {
             return $this->json(['error' => 'You are already on a Gold plan.'], 409);
         }
 
-        // Create an upgrade request to GOLD
-        $newSub = new B2BSubscription();
+        $newSub = new Subscription();
         $newSub->setOwnerType($user instanceof B2BMarket ? 'MARKET' : 'COMPANY');
+        $newSub->setOwnerId((int) $user->getId());
         $newSub->setPlanType('B2B_GOLD');
         $newSub->setDurationMonths(12);
         $newSub->setStartDate(new \DateTimeImmutable());
         $newSub->setEndDate((new \DateTimeImmutable())->modify('+12 months'));
-        $newSub->setActive(false); // Pending admin approval
-        if ($user instanceof B2BCompany) $newSub->setCompany($user);
-        if ($user instanceof B2BMarket) $newSub->setMarket($user);
+        $newSub->setActive(false);
         $newSub->setCreatedAt(new \DateTimeImmutable());
 
         $entityManager->persist($newSub);
+
+        $this->cacheVersionManager->bumpVersion($firebaseUid);
 
         // Notify
         $notification = new Notification();
@@ -632,6 +768,39 @@ final class B2BWorkspaceController extends AbstractController
         $entityManager->flush();
 
         return $this->json(['id' => $newSub->getId(), 'status' => 'PENDING', 'message' => 'Upgrade request submitted. Awaiting admin approval.'], 201);
+    }
+
+    #[Route('/{firebaseUid}/profile', name: 'b2b_workspace_profile_update', methods: ['PUT'])]
+    public function updateProfile(
+        string $firebaseUid,
+        Request $request,
+        UserRepository $userRepository,
+        EntityManagerInterface $entityManager,
+    ): JsonResponse {
+        $user = $this->resolveWorkspaceUser($firebaseUid, $userRepository);
+        if ($user instanceof JsonResponse) {
+            return $user;
+        }
+
+        if (!$user instanceof B2BCompany) {
+            return $this->json(['error' => 'Profile updates are only available for B2B companies.'], 403);
+        }
+
+        $body = json_decode((string) $request->getContent(), true);
+        if (!is_array($body)) {
+            return $this->json(['error' => 'Invalid request body.'], 400);
+        }
+
+        if (isset($body['fullName'])) $user->setFullName((string) $body['fullName']);
+        if (isset($body['companyName'])) $user->setCompanyName((string) $body['companyName']);
+        if (isset($body['companyWebsite'])) $user->setCompanyWebsite((string) $body['companyWebsite']);
+        if (isset($body['companyCountry'])) $user->setCompanyCountry((string) $body['companyCountry']);
+        if (isset($body['companyMarket'])) $user->setCompanyMarket((string) $body['companyMarket']);
+
+        $entityManager->flush();
+        $this->cacheVersionManager->bumpVersion($firebaseUid);
+
+        return $this->json(['success' => true]);
     }
 
     #[Route('/{firebaseUid}/watchlist/search', name: 'b2b_workspace_watchlist_search', methods: ['GET'])]
@@ -651,23 +820,25 @@ final class B2BWorkspaceController extends AbstractController
             return $this->json(['items' => []]);
         }
 
-        $qb = $entityManager->getRepository(Product::class)->createQueryBuilder('p')
-            ->select('p.id, p.name, p.brand')
-            ->where('LOWER(p.name) LIKE LOWER(:q)')
-            ->orWhere('LOWER(p.brand) LIKE LOWER(:q)')
-            ->setParameter('q', '%' . $q . '%')
-            ->setMaxResults(20)
-            ->orderBy('p.name', 'ASC');
+        return $this->cachedGet($this->cache, $this->buildUserCacheKey($this->cacheVersionManager, $firebaseUid, self::CACHE_KEY_WATCHLIST_SEARCH_PREFIX . md5($q)), static function () use ($entityManager, $q): array {
+            $qb = $entityManager->getRepository(Product::class)->createQueryBuilder('p')
+                ->select('p.id, p.name, p.brand')
+                ->where('LOWER(p.name) LIKE LOWER(:q)')
+                ->orWhere('LOWER(p.brand) LIKE LOWER(:q)')
+                ->setParameter('q', '%' . $q . '%')
+                ->setMaxResults(20)
+                ->orderBy('p.name', 'ASC');
 
-        $results = $qb->getQuery()->getResult();
+            $results = $qb->getQuery()->getResult();
 
-        return $this->json([
-            'items' => array_map(static fn (array $r) => [
-                'id' => (int) $r['id'],
-                'name' => $r['name'],
-                'brand' => $r['brand'],
-            ], $results),
-        ]);
+            return [
+                'items' => array_map(static fn (array $r) => [
+                    'id' => (int) $r['id'],
+                    'name' => $r['name'],
+                    'brand' => $r['brand'],
+                ], $results),
+            ];
+        }, 60);
     }
 
     #[Route('/{firebaseUid}/watchlist', name: 'b2b_workspace_watchlist_list', methods: ['GET'])]
@@ -681,55 +852,65 @@ final class B2BWorkspaceController extends AbstractController
             return $user;
         }
 
-        $criteria = $user instanceof B2BCompany ? ['company' => $user] : ['market' => $user];
-        $items = $entityManager->getRepository(B2BWatchlist::class)->findBy(
-            $criteria,
-            ['created_at' => 'DESC'],
-            100
-        );
+        return $this->cachedGet($this->cache, $this->buildUserCacheKey($this->cacheVersionManager, $firebaseUid, self::CACHE_KEY_WATCHLIST_PREFIX), function () use ($user, $entityManager): array {
+            $criteria = $user instanceof B2BCompany ? ['company' => $user] : ['market' => $user];
+            $items = $entityManager->getRepository(B2BWatchlist::class)->findBy(
+                $criteria,
+                ['created_at' => 'DESC'],
+                100
+            );
 
-        $productIds = array_filter(array_map(static fn (B2BWatchlist $w) => $w->getProduct()?->getId(), $items));
-        $productData = [];
-        if (!empty($productIds)) {
-            $listings = $entityManager->createQueryBuilder()
-                ->select('IDENTITY(pl.product) AS pid, MIN(pl.price) AS min_price, MAX(pl.price) AS max_price, COUNT(pl.id) AS total_sellers')
-                ->from(ProductListing::class, 'pl')
-                ->where('pl.product IN (:pids)')
-                ->andWhere('pl.is_active = true')
-                ->andWhere('pl.price IS NOT NULL')
-                ->setParameter('pids', $productIds)
-                ->groupBy('pl.product')
-                ->getQuery()
-                ->getResult();
+            $productIds = array_filter(array_map(static fn (B2BWatchlist $w) => $w->getProduct()?->getId(), $items));
+            $productData = [];
+            if (!empty($productIds)) {
+                $listings = $entityManager->createQueryBuilder()
+                    ->select('IDENTITY(pl.product) AS pid, MIN(pl.price) AS min_price, MAX(pl.price) AS max_price, COUNT(pl.id) AS total_sellers')
+                    ->from(ProductListing::class, 'pl')
+                    ->where('pl.product IN (:pids)')
+                    ->andWhere('pl.is_active = true')
+                    ->andWhere('pl.price IS NOT NULL')
+                    ->setParameter('pids', $productIds)
+                    ->groupBy('pl.product')
+                    ->getQuery()
+                    ->getResult();
 
-            foreach ($listings as $row) {
-                $pid = (int) $row['pid'];
-                $productData[$pid] = [
-                    'cheapest_price' => (float) $row['min_price'],
-                    'highest_price' => (float) $row['max_price'],
-                    'total_sellers' => (int) $row['total_sellers'],
-                ];
+                foreach ($listings as $row) {
+                    $pid = (int) $row['pid'];
+                    $productData[$pid] = [
+                        'cheapest_price' => (float) $row['min_price'],
+                        'highest_price' => (float) $row['max_price'],
+                        'total_sellers' => (int) $row['total_sellers'],
+                    ];
+                }
             }
-        }
 
-        $result = array_map(function (B2BWatchlist $w) use ($productData) {
-            $product = $w->getProduct();
-            $pid = $product?->getId();
-            $current = $productData[$pid] ?? null;
             return [
-                'id' => $w->getId(),
-                'product_id' => $pid,
-                'product_name' => $product?->getName() ?? 'Unknown',
-                'product_image' => $product?->getImageUrl(),
-                'product_brand' => $product?->getBrand(),
-                'followed_at' => $w->getCreatedAt()?->format(\DateTimeInterface::ATOM),
-                'cheapest_price' => $current['cheapest_price'] ?? null,
-                'highest_price' => $current['highest_price'] ?? null,
-                'total_sellers' => $current['total_sellers'] ?? 0,
+                'items' => array_map(function (B2BWatchlist $w) use ($productData) {
+                    $product = $w->getProduct();
+                    $pid = $product?->getId();
+                    $current = $productData[$pid] ?? null;
+                    $cheapestPrice = $current['cheapest_price'] ?? null;
+                    $baselinePrice = $w->getBaselinePrice();
+                    $priceDelta = null;
+                    if ($cheapestPrice !== null && $baselinePrice !== null) {
+                        $priceDelta = $cheapestPrice - $baselinePrice;
+                    }
+                    return [
+                        'id' => $w->getId(),
+                        'product_id' => $pid,
+                        'product_name' => $product?->getName() ?? 'Unknown',
+                        'product_image' => $product?->getImageUrl(),
+                        'product_brand' => $product?->getBrand(),
+                        'followed_at' => $w->getCreatedAt()?->format(\DateTimeInterface::ATOM),
+                        'cheapest_price' => $cheapestPrice,
+                        'highest_price' => $current['highest_price'] ?? null,
+                        'total_sellers' => $current['total_sellers'] ?? 0,
+                        'baseline_price' => $baselinePrice,
+                        'price_delta' => $priceDelta,
+                    ];
+                }, $items),
             ];
-        }, $items);
-
-        return $this->json(['items' => $result]);
+        }, 60);
     }
 
     #[Route('/{firebaseUid}/watchlist', name: 'b2b_workspace_watchlist_add', methods: ['POST'])]
@@ -784,8 +965,25 @@ final class B2BWorkspaceController extends AbstractController
         $watchlist->setCreatedAt(new \DateTimeImmutable());
         $watchlist->setUpdatedAt(new \DateTimeImmutable());
 
+        // Capture current cheapest price as baseline
+        $cheapest = $entityManager->createQueryBuilder()
+            ->select('MIN(pl.price)')
+            ->from(ProductListing::class, 'pl')
+            ->where('pl.product = :product')
+            ->andWhere('pl.is_active = true')
+            ->andWhere('pl.price IS NOT NULL')
+            ->setParameter('product', $product)
+            ->getQuery()
+            ->getSingleScalarResult();
+
+        if ($cheapest !== null) {
+            $watchlist->setBaselinePrice((float) $cheapest);
+        }
+
         $entityManager->persist($watchlist);
         $entityManager->flush();
+
+        $this->cacheVersionManager->bumpVersion($firebaseUid);
 
         return $this->json(['id' => $watchlist->getId(), 'status' => 'added'], 201);
     }
@@ -807,8 +1005,15 @@ final class B2BWorkspaceController extends AbstractController
             return $this->json(['error' => 'Watchlist item not found.'], 404);
         }
 
+        $owner = $user instanceof B2BCompany ? $watchlist->getCompany() : $watchlist->getMarket();
+        if ($owner?->getId() !== $user->getId()) {
+            return $this->json(['error' => 'Watchlist item not found.'], 404);
+        }
+
         $entityManager->remove($watchlist);
         $entityManager->flush();
+
+        $this->cacheVersionManager->bumpVersion($firebaseUid);
 
         return $this->json(['status' => 'removed']);
     }
@@ -835,7 +1040,11 @@ final class B2BWorkspaceController extends AbstractController
             return $this->json(['error' => 'Listing has no product.'], 404);
         }
 
-        return $this->compareByProduct($product, $user, $entityManager);
+        return $this->cachedGet($this->cache, $this->buildUserCacheKey($this->cacheVersionManager, $firebaseUid, self::CACHE_KEY_COMPARE_LISTING_PREFIX . $listingId), function () use ($product, $user, $entityManager): array {
+            $response = $this->compareByProduct($product, $user, $entityManager);
+            $data = json_decode($response->getContent(), true);
+            return is_array($data) ? $data : [];
+        }, 60);
     }
 
     #[Route('/{firebaseUid}/products/{productId}/compare', name: 'b2b_workspace_product_compare', methods: ['GET'])]
@@ -855,7 +1064,11 @@ final class B2BWorkspaceController extends AbstractController
             return $this->json(['error' => 'Product not found.'], 404);
         }
 
-        return $this->compareByProduct($product, $user, $entityManager);
+        return $this->cachedGet($this->cache, $this->buildUserCacheKey($this->cacheVersionManager, $firebaseUid, self::CACHE_KEY_COMPARE_PRODUCT_PREFIX . $productId), function () use ($product, $user, $entityManager): array {
+            $response = $this->compareByProduct($product, $user, $entityManager);
+            $data = json_decode($response->getContent(), true);
+            return is_array($data) ? $data : [];
+        }, 60);
     }
 
     private function compareByProduct(\App\Entity\Product $product, B2BCompany|B2BMarket $user, EntityManagerInterface $entityManager): JsonResponse
@@ -953,15 +1166,22 @@ final class B2BWorkspaceController extends AbstractController
         }
 
         if ($request->isMethod('GET')) {
-            $items = $entityManager->getRepository(B2BScrapingRequest::class)->findBy(
-                $user instanceof B2BCompany ? ['company' => $user] : [],
-                ['created_at' => 'DESC', 'id' => 'DESC'],
-                100,
-            );
+            return $this->cachedGet($this->cache, $this->buildUserCacheKey($this->cacheVersionManager, $firebaseUid, self::CACHE_KEY_SCRAPING_PREFIX), function () use ($user, $entityManager): array {
+                $criteria = match (true) {
+                    $user instanceof B2BCompany => ['company' => $user],
+                    $user instanceof B2BMarket => ['market' => $user],
+                    default => ['company' => -1], // return nothing for unknown types
+                };
+                $items = $entityManager->getRepository(B2BScrapingRequest::class)->findBy(
+                    $criteria,
+                    ['created_at' => 'DESC', 'id' => 'DESC'],
+                    100,
+                );
 
-            return $this->json([
-                'items' => array_map(fn (B2BScrapingRequest $item) => $this->serializeScrapingRequest($item), $items),
-            ]);
+                return [
+                    'items' => array_map(fn (B2BScrapingRequest $item) => $this->serializeScrapingRequest($item), $items),
+                ];
+            });
         }
 
         $body = json_decode((string) $request->getContent(), true);
@@ -975,17 +1195,33 @@ final class B2BWorkspaceController extends AbstractController
             return $this->json(['error' => 'Target URL is required.'], 422);
         }
 
+        // Quota check via SubscriptionContextResolver
+        $quotaCheck = $this->subscriptionResolver->checkQuota($user, 'scraping_requests', 1);
+        if (!$quotaCheck['allowed']) {
+            return $this->json([
+                'error' => $quotaCheck['reason'] ?? 'Scraping quota exceeded.',
+                'usage' => $quotaCheck['usage'],
+            ], 429);
+        }
+
         $normalizedUrl = mb_strtolower($targetUrl);
 
         // Primary check: existing DB-level duplicate detection
         $duplicateReason = $this->detectScrapingDuplicateReason($normalizedUrl, $entityManager);
 
         // Secondary check: intelligent URL normalization + domain clustering
+        $similarityWarning = null;
+        $similarUrls = [];
         if ($duplicateReason === null) {
             $detection = $this->urlDuplicateDetector->detectDuplicate($targetUrl);
             if ($detection['is_duplicate']) {
+                // HIGH similarity → reject
                 $duplicateReason = $detection['duplicate_reason']
                     ?? ($detection['suggestion'] ?? 'URL already tracked (similar match).');
+            } elseif (($detection['similarity_level'] ?? null) === 'MEDIUM') {
+                // MEDIUM similarity → warn but don't reject
+                $similarityWarning = $detection['warning'] ?? 'URL appears similar to existing tracked URLs';
+                $similarUrls = $detection['similar_urls'] ?? [];
             }
         }
 
@@ -1012,13 +1248,42 @@ final class B2BWorkspaceController extends AbstractController
         $entityManager->persist($scrapingRequest);
         $entityManager->flush();
 
-        return $this->json($this->serializeScrapingRequest($scrapingRequest), 201);
-    }
+        if ($duplicateReason === null) {
+            $this->subscriptionResolver->recordUsage($user, 'scraping_requests');
+        }
 
+        $this->cacheVersionManager->bumpVersion($firebaseUid);
+
+        $response = $this->serializeScrapingRequest($scrapingRequest);
+        if ($similarityWarning !== null) {
+            $response['warning'] = $similarityWarning;
+            $response['similar_urls'] = $similarUrls;
+        }
+
+        return $this->json($response, 201);
+    }
 
 
     private function resolveWorkspaceUser(string $firebaseUid, UserRepository $userRepository): B2BCompany|B2BMarket|JsonResponse
     {
+        // Primary: ownership-based resolution via B2BIdentityService
+        $company = $this->b2bIdentityService->resolveB2BCompanyByOwnership($firebaseUid);
+        if ($company instanceof B2BCompany) {
+            return $company;
+        }
+
+        $market = $this->b2bIdentityService->resolveB2BMarketByOwnership($firebaseUid);
+        if ($market instanceof B2BMarket) {
+            return $market;
+        }
+
+        // If ownership resolution returned 403 (ownership mismatch), reject — don't fall back
+        $error = $company instanceof JsonResponse ? $company : $market;
+        if ($error->getStatusCode() === 403) {
+            return $error;
+        }
+
+        // Legacy fallback: firebase_uid lookup only (backward compatibility)
         $user = $userRepository->findOneBy(['firebase_uid' => $firebaseUid]);
         if (!$user instanceof B2BCompany && !$user instanceof B2BMarket) {
             return $this->json(['error' => 'B2B user not found.'], 404);
@@ -1031,16 +1296,47 @@ final class B2BWorkspaceController extends AbstractController
         return $user;
     }
 
-    private function resolveWorkspaceSubscription(B2BCompany|B2BMarket $user, EntityManagerInterface $entityManager): array
+    private function firePlanExpiryWarning(B2BCompany|B2BMarket $user, EntityManagerInterface $entityManager): void
     {
-        $criteria = $user instanceof B2BCompany ? ['company' => $user] : ['market' => $user];
-        /** @var B2BSubscription|null $current */
-        $current = $entityManager->getRepository(B2BSubscription::class)->findOneBy(
-            $criteria,
+        $ownerType = $user instanceof B2BCompany ? 'COMPANY' : 'MARKET';
+        $current = $entityManager->getRepository(Subscription::class)->findOneBy(
+            ['owner_type' => $ownerType, 'owner_id' => $user->getId()],
             ['created_at' => 'DESC', 'id' => 'DESC']
         );
 
-        if (!$current instanceof B2BSubscription) {
+        if (!$current instanceof Subscription || !$current->isActive()) {
+            return;
+        }
+
+        $endDate = $current->getEndDate();
+        if (!$endDate) return;
+
+        $daysLeft = (int) (new \DateTimeImmutable())->diff($endDate)->days;
+        if ($daysLeft > 30 || $daysLeft < 0) return;
+
+        $notifCriteria = $user instanceof B2BCompany
+            ? ['company' => $user, 'type' => 'SUBSCRIPTION_EXPIRY_WARNING', 'is_read' => false]
+            : ['market' => $user, 'type' => 'SUBSCRIPTION_EXPIRY_WARNING', 'is_read' => false];
+
+        $existing = $entityManager->getRepository(Notification::class)->findOneBy(
+            $notifCriteria,
+            ['created_at' => 'DESC']
+        );
+
+        if ($existing instanceof Notification) return;
+
+        $this->b2bNotificationService->notifySubscriptionExpiryWarning($current, $daysLeft);
+    }
+
+    private function resolveWorkspaceSubscription(B2BCompany|B2BMarket $user, EntityManagerInterface $entityManager): array
+    {
+        $ownerType = $user instanceof B2BCompany ? 'COMPANY' : 'MARKET';
+        $current = $entityManager->getRepository(Subscription::class)->findOneBy(
+            ['owner_type' => $ownerType, 'owner_id' => $user->getId()],
+            ['created_at' => 'DESC', 'id' => 'DESC']
+        );
+
+        if (!$current instanceof Subscription) {
             return [
                 'source'         => 'none',
                 'plan_type'      => null,
@@ -1055,8 +1351,11 @@ final class B2BWorkspaceController extends AbstractController
         $now = new \DateTimeImmutable();
         $endDate = $current->getEndDate();
         $daysRemaining = $endDate !== null ? max(0, (int) $now->diff($endDate)->days) : null;
-        // auto-deactivate if expired
-        $isStillActive = $current->isActive() && ($endDate === null || $endDate > $now);
+        if ($current->isActive() && $endDate !== null && $endDate <= $now) {
+            $current->setActive(false);
+            $entityManager->flush();
+        }
+        $isStillActive = $current->isActive();
 
         return [
             'source'          => 'b2b',
@@ -1073,12 +1372,12 @@ final class B2BWorkspaceController extends AbstractController
 
     private function fetchWorkspaceListings(B2BCompany|B2BMarket $user, ProductListingRepository $productListingRepository, EntityManagerInterface $entityManager): array
     {
-        $rows = $productListingRepository->findListingRows();
         if ($user instanceof B2BCompany) {
             $sellerId = $user->getSeller()?->getId();
-            if ($sellerId !== null) {
-                $rows = $productListingRepository->findListingRows(null, $sellerId);
+            if ($sellerId === null) {
+                return [];
             }
+            $rows = $productListingRepository->findListingRows(null, $sellerId);
             $listings = array_values(array_map(fn (array $row) => $this->normalizeListingRow($row), $rows));
             return $this->enrichListingsWithRank($listings, $entityManager);
         }
@@ -1089,6 +1388,7 @@ final class B2BWorkspaceController extends AbstractController
         ]);
         
         $marketSellerId = $user->getSeller()?->getId();
+        $rows = $productListingRepository->findListingRows(null, null);
 
         $filtered = array_filter($rows, static function (array $row) use ($marketNames, $marketSellerId): bool {
             if ($marketSellerId !== null && isset($row['sellerId']) && (int) $row['sellerId'] === $marketSellerId) {
@@ -1104,59 +1404,52 @@ final class B2BWorkspaceController extends AbstractController
 
     private function enrichListingsWithRank(array $listings, EntityManagerInterface $entityManager): array
     {
-        $productIds = array_unique(array_filter(array_map(static fn (array $l) => $l['productId'], $listings)));
-        if (empty($productIds)) {
+        $listingIds = array_values(array_unique(array_filter(array_map(static fn (array $l) => $l['id'], $listings))));
+        if (empty($listingIds)) {
             return $listings;
         }
 
-        $qb = $entityManager->createQueryBuilder()
-            ->select('IDENTITY(pl.product) AS pid, COUNT(pl.id) AS total, MIN(pl.price) AS min_price')
-            ->from(ProductListing::class, 'pl')
-            ->where('pl.product IN (:pids)')
-            ->andWhere('pl.is_active = true')
-            ->andWhere('pl.price IS NOT NULL')
-            ->setParameter('pids', $productIds)
-            ->groupBy('pl.product');
+        $conn = $entityManager->getConnection();
+        $rows = $conn->fetchAllAssociative(
+            'SELECT sq.id, sq.vendor_rank, sq.total_sellers, sq.min_price, sq.max_price
+             FROM (
+                 SELECT pl.id,
+                        RANK() OVER (PARTITION BY pl.product_id ORDER BY pl.price ASC) AS vendor_rank,
+                        COUNT(*) OVER (PARTITION BY pl.product_id) AS total_sellers,
+                        MIN(pl.price) OVER (PARTITION BY pl.product_id) AS min_price,
+                        MAX(pl.price) OVER (PARTITION BY pl.product_id) AS max_price
+                 FROM product_listing pl
+                 WHERE pl.product_id IN (
+                     SELECT DISTINCT pl2.product_id FROM product_listing pl2 WHERE pl2.id IN (:ids)
+                 ) AND pl.is_active = true AND pl.price IS NOT NULL
+             ) sq
+             WHERE sq.id IN (:ids)',
+            ['ids' => $listingIds],
+            ['ids' => ArrayParameterType::INTEGER]
+        );
 
-        $stats = $qb->getQuery()->getResult();
-        $productStats = [];
-        foreach ($stats as $s) {
-            $productStats[(int) $s['pid']] = [
-                'total' => (int) $s['total'],
-                'min_price' => (float) $s['min_price'],
+        $rankMap = [];
+        foreach ($rows as $row) {
+            $rankMap[(int) $row['id']] = [
+                'vendor_rank' => (int) $row['vendor_rank'],
+                'total_sellers' => (int) $row['total_sellers'],
+                'cheapest_price' => (float) $row['min_price'],
+                'max_price' => isset($row['max_price']) ? (float) $row['max_price'] : null,
             ];
         }
 
-        $cheaperCounts = [];
-        foreach ($listings as $listing) {
-            $pid = $listing['productId'];
-            $price = $listing['price'];
-            if ($pid === null || $price === null) continue;
-            if (!isset($cheaperCounts[$pid])) {
-                $conn = $entityManager->getConnection();
-                $count = $conn->fetchOne(
-                    'SELECT COUNT(DISTINCT pl.id) FROM product_listing pl '
-                    . 'WHERE pl.product_id = :pid AND pl.is_active = true '
-                    . 'AND pl.price IS NOT NULL AND pl.price < :price',
-                    ['pid' => $pid, 'price' => $price]
-                );
-                $cheaperCounts[$pid] = (int) $count;
-            }
-        }
-
-        return array_map(function (array $listing) use ($productStats, $cheaperCounts) {
-            $pid = $listing['productId'];
-            $price = $listing['price'];
-            if ($pid !== null && $price !== null && isset($productStats[$pid])) {
-                $total = max(1, $productStats[$pid]['total']);
-                $cheaper = $cheaperCounts[$pid] ?? 0;
-                $listing['vendor_rank'] = $cheaper + 1;
-                $listing['total_sellers'] = $total;
-                $listing['cheapest_price'] = $productStats[$pid]['min_price'];
+        return array_map(function (array $listing) use ($rankMap) {
+            $id = $listing['id'];
+            if ($id !== null && isset($rankMap[$id])) {
+                $listing['vendor_rank'] = $rankMap[$id]['vendor_rank'];
+                $listing['total_sellers'] = $rankMap[$id]['total_sellers'];
+                $listing['cheapest_price'] = $rankMap[$id]['cheapest_price'];
+                $listing['max_price'] = $rankMap[$id]['max_price'];
             } else {
                 $listing['vendor_rank'] = null;
                 $listing['total_sellers'] = null;
                 $listing['cheapest_price'] = null;
+                $listing['max_price'] = null;
             }
             return $listing;
         }, $listings);
@@ -1171,10 +1464,15 @@ final class B2BWorkspaceController extends AbstractController
         $notificationsCount = count($this->fetchWorkspaceNotifications($user, $entityManager, 1000));
 
         $sevenDaysAgo = (new \DateTimeImmutable())->modify('-7 days');
+        $sevenDaysStr = $sevenDaysAgo->format(\DateTimeInterface::ATOM);
         $newThisWeek = 0;
         foreach ($rows as $row) {
             $created = $row['created_at'] ?? null;
-            if ($created instanceof \DateTimeInterface && $created >= $sevenDaysAgo) {
+            if ($created instanceof \DateTimeInterface) {
+                if ($created >= $sevenDaysAgo) {
+                    ++$newThisWeek;
+                }
+            } elseif (is_string($created) && $created >= $sevenDaysStr) {
                 ++$newThisWeek;
             }
         }
@@ -1207,6 +1505,32 @@ final class B2BWorkspaceController extends AbstractController
                 }
             }
 
+            $competitorPricing = $isGold && $vendorSellerId !== null && $productsCount > 0
+                ? $this->buildVendorCompetitorPricing($rows, $entityManager, $vendorSellerId, $trackingLimit, $trackedProductIds)
+                : [];
+
+            $cheapestCount = 0;
+            foreach ($competitorPricing as $cp) {
+                if (isset($cp['vendor_rank']) && (int) $cp['vendor_rank'] === 1) {
+                    ++$cheapestCount;
+                }
+            }
+
+            // Count unread competitive events from notifications
+            $competitiveTypes = ['COMPETITOR_UNDERCUT', 'COMPETITOR_OOS', 'NEW_COMPETITOR', 'STOCK_OPPORTUNITY', 'COMPETITOR_TRUST_DROP', 'STOCK_SHORTAGE', 'TRUST_DROP'];
+            $unreadCompetitive = 0;
+            foreach ($this->fetchWorkspaceNotifications($user, $entityManager, 50) as $n) {
+                if (!$n['is_read'] && in_array($n['type'], $competitiveTypes, true)) {
+                    ++$unreadCompetitive;
+                }
+            }
+
+            $stockMonitoring = $this->enrichStockMonitoringWithSellers(
+                $this->buildStockMonitoring($rows),
+                $rows,
+                $entityManager,
+            );
+
             $metrics = [
                 'mode' => 'vendor',
                 'products_count' => $productsCount,
@@ -1216,22 +1540,25 @@ final class B2BWorkspaceController extends AbstractController
                 'in_stock_count' => $inStockCount,
                 'out_of_stock_count' => $outOfStockCount,
                 'notifications_count' => $notificationsCount,
-                'stock_monitoring' => $this->buildStockMonitoring($rows),
+                'cheapest_count' => $cheapestCount,
+                'total_compared' => count($competitorPricing),
+                'unread_competitive_events' => $unreadCompetitive,
+                'stock_monitoring' => $stockMonitoring,
+                'competitor_reliability' => $this->buildOOSReliability($entityManager),
                 'top_listings' => array_slice($rows, 0, $trackingLimit),
                 'tracking_limit' => $trackingLimit,
                 'tracked_product_ids' => $trackedProductIds,
+                'competitor_pricing' => $competitorPricing,
+                'opportunities' => $isGold && $vendorSellerId !== null && $productsCount > 0
+                    ? $this->buildVendorOpportunities($rows, $entityManager)
+                    : [],
             ];
-
-            if ($isGold && $vendorSellerId !== null && $productsCount > 0) {
-                $metrics['competitor_pricing'] = $this->buildVendorCompetitorPricing($rows, $entityManager, $vendorSellerId, $trackingLimit, $trackedProductIds);
-                $metrics['opportunities'] = $this->buildVendorOpportunities($rows, $entityManager);
-            } else {
-                $metrics['competitor_pricing'] = [];
-                $metrics['opportunities'] = [];
-            }
 
             return $metrics;
         }
+
+        $competitorRanking = $this->buildCompetitorRanking($rows);
+        $stockIntelligence = $this->buildMarketStockIntelligence($rows, $entityManager);
 
         $metrics = [
             'mode' => 'market',
@@ -1244,14 +1571,24 @@ final class B2BWorkspaceController extends AbstractController
             'notifications_count' => $notificationsCount,
             'share_of_shelf' => $this->buildShareOfShelf($user, $rows, $entityManager),
             'price_dispersion' => $this->buildPriceDispersion($rows),
-            'competitor_ranking' => $this->buildCompetitorRanking($rows),
+            'competitor_ranking' => $competitorRanking,
+            'competitor_brands' => $competitorRanking,
+            'stock_intelligence' => $stockIntelligence,
+            'stock_by_seller' => $stockIntelligence,
+            'competitor_reliability' => $this->buildOOSReliability($entityManager),
         ];
 
         if ($isGold) {
-            $metrics['reputation'] = $this->buildReputationIntelligence($rows, $entityManager);
+            $reputation = $this->buildReputationIntelligence($rows, $entityManager);
+            $metrics['reputation'] = $reputation;
+            $metrics['reviews_sentiment'] = $reputation;
+            $metrics['reviews'] = $reputation;
             $metrics['demand_intelligence'] = $this->buildDemandIntelligence($searchInsights);
         } else {
-            $metrics['reputation'] = ['average_rating' => null, 'positive_keywords' => [], 'negative_keywords' => []];
+            $empty = ['average_rating' => null, 'positive_keywords' => [], 'negative_keywords' => []];
+            $metrics['reputation'] = $empty;
+            $metrics['reviews_sentiment'] = $empty;
+            $metrics['reviews'] = $empty;
             $metrics['demand_intelligence'] = ['top_queries' => [], 'zero_result_queries' => []];
         }
 
@@ -1323,9 +1660,38 @@ final class B2BWorkspaceController extends AbstractController
         arsort($topQueries);
         arsort($zeroResults);
 
+        // Compute trending: queries with most growth (last 7 days vs previous 7 days)
+        $trending = [];
+        $trendThreshold = (new \DateTimeImmutable())->modify('-7 days');
+        $recentQueries = [];
+        $olderQueries = [];
+        foreach ($items as $item) {
+            if (!$item instanceof B2BSearchLog || ($q = $item->getQuery()) === null || trim($q) === '') continue;
+            $lower = mb_strtolower(trim($q));
+            $createdAt = $item->getCreatedAt();
+            if ($createdAt !== null && $createdAt >= $trendThreshold) {
+                $recentQueries[$lower] = ($recentQueries[$lower] ?? 0) + 1;
+            } elseif ($createdAt !== null) {
+                $olderQueries[$lower] = ($olderQueries[$lower] ?? 0) + 1;
+            }
+        }
+        foreach ($recentQueries as $query => $recentCount) {
+            $olderCount = $olderQueries[$query] ?? 0;
+            if ($olderCount > 0 && $recentCount > $olderCount) {
+                $trending[$query] = [
+                    'query' => $query,
+                    'current' => $recentCount,
+                    'previous' => $olderCount,
+                    'growth' => round((($recentCount - $olderCount) / $olderCount) * 100),
+                ];
+            }
+        }
+        usort($trending, fn ($a, $b) => $b['growth'] <=> $a['growth']);
+
         return [
             'top_queries' => array_slice($topQueries, 0, 10, true),
             'zero_result_queries' => array_slice($zeroResults, 0, 10, true),
+            'trending' => array_slice($trending, 0, 5),
         ];
     }
 
@@ -1416,16 +1782,106 @@ final class B2BWorkspaceController extends AbstractController
     {
         $items = [];
         foreach ($rows as $row) {
+            $updatedAt = $row['updated_at'] ?? null;
             $items[] = [
                 'product_id' => $row['productId'] ?? null,
                 'product_name' => $row['productName'] ?? null,
+                'category' => $row['categoryName'] ?? null,
                 'out_of_stock_rate' => ($row['availability'] ?? null) === false ? 100 : 0,
                 'trust_score' => $row['trust_score'] ?? null,
                 'listing_url' => $row['product_url'] ?? null,
+                'updated_at' => $updatedAt instanceof \DateTimeInterface ? $updatedAt->format(\DateTimeInterface::ATOM) : (is_string($updatedAt) ? $updatedAt : null),
             ];
         }
 
-        return array_slice($items, 0, 20);
+        return $items;
+    }
+
+    private function enrichStockMonitoringWithSellers(array $stockItems, array $rows, EntityManagerInterface $entityManager): array
+    {
+        $productIds = array_values(array_unique(array_filter(array_map(static fn (array $row): ?int => isset($row['productId']) ? (int) $row['productId'] : null, $rows))));
+        if ($productIds === []) {
+            return $stockItems;
+        }
+
+        $conn = $entityManager->getConnection();
+        $allListings = $conn->fetchAllAssociative(
+            'SELECT pl.id, pl.product_id, pl.price, pl.availability,
+                    (SELECT tsh.score FROM trust_score_history tsh WHERE tsh.listing_id = pl.id ORDER BY tsh.created_at DESC LIMIT 1) AS trust_score,
+                    pl.product_url,
+                    s.name AS seller_name, s.id AS seller_id
+             FROM product_listing pl
+             JOIN seller s ON s.id = pl.seller_id
+             WHERE pl.product_id IN (:ids) AND pl.is_active = true
+             ORDER BY pl.product_id, pl.price ASC',
+            ['ids' => $productIds],
+            ['ids' => ArrayParameterType::INTEGER]
+        );
+
+        $grouped = [];
+        foreach ($allListings as $listing) {
+            $pid = (int) $listing['product_id'];
+            $grouped[$pid][] = $listing;
+        }
+
+        $idMap = [];
+        foreach ($stockItems as $i => $item) {
+            $pid = $item['product_id'];
+            if ($pid !== null) {
+                $idMap[$pid] = $i;
+            }
+        }
+
+        $vendorSellerIds = array_unique(array_filter(array_map(static fn (array $row): ?int => isset($row['sellerId']) ? (int) $row['sellerId'] : null, $rows)));
+
+        foreach ($grouped as $pid => $listings) {
+            if (!isset($idMap[$pid])) continue;
+            $idx = $idMap[$pid];
+            $stockItems[$idx]['sellers'] = array_map(fn (array $l) => [
+                'seller_id' => (int) $l['seller_id'],
+                'seller_name' => $l['seller_name'],
+                'in_stock' => ($l['availability'] ?? null) === true || $l['availability'] === '1',
+                'price' => $l['price'] !== null ? (float) $l['price'] : null,
+                'trust_score' => $l['trust_score'] !== null ? (float) $l['trust_score'] : null,
+                'is_vendor' => in_array((int) $l['seller_id'], $vendorSellerIds, true),
+            ], $listings);
+        }
+
+        return $stockItems;
+    }
+
+    private function buildOOSReliability(EntityManagerInterface $entityManager): array
+    {
+        $thirtyDaysAgo = (new \DateTimeImmutable())->modify('-30 days');
+
+        $rows = $entityManager->getConnection()->fetchAllAssociative(
+            'SELECT s.id AS seller_id, s.name AS seller_name,
+                    COUNT(ph.id) AS total_records,
+                    SUM(CASE WHEN ph.out_of_stock = true THEN 1 ELSE 0 END) AS out_of_stock_count
+             FROM price_history ph
+             JOIN product_listing pl ON pl.id = ph.product_listing_id
+             JOIN seller s ON s.id = pl.seller_id
+             WHERE ph.recorded_at >= :since
+             GROUP BY s.id, s.name
+             HAVING COUNT(ph.id) >= 5
+             ORDER BY out_of_stock_count DESC',
+            ['since' => $thirtyDaysAgo->format('Y-m-d H:i:s')]
+        );
+
+        $results = [];
+        foreach ($rows as $row) {
+            $total = (int) $row['total_records'];
+            $oosCount = (int) $row['out_of_stock_count'];
+            $results[] = [
+                'seller_id' => (int) $row['seller_id'],
+                'seller_name' => $row['seller_name'],
+                'total_records' => $total,
+                'out_of_stock_count' => $oosCount,
+                'oos_rate_30d' => $total > 0 ? round(($oosCount / $total) * 100, 1) : 0,
+            ];
+        }
+
+        return $results;
     }
 
     private function buildVendorOpportunities(array $rows, EntityManagerInterface $entityManager): array
@@ -1610,6 +2066,53 @@ final class B2BWorkspaceController extends AbstractController
         return array_values($categories);
     }
 
+    private function buildMarketStockIntelligence(array $rows, EntityManagerInterface $entityManager): array
+    {
+        $productIds = array_values(array_unique(array_filter(array_map(static fn (array $row): ?int => isset($row['productId']) ? (int) $row['productId'] : null, $rows))));
+        if (empty($productIds)) return [];
+
+        $conn = $entityManager->getConnection();
+        $allListings = $conn->fetchAllAssociative(
+            'SELECT pl.id, pl.product_id, pl.price, pl.availability,
+                    (SELECT tsh.score FROM trust_score_history tsh WHERE tsh.listing_id = pl.id ORDER BY tsh.created_at DESC LIMIT 1) AS trust_score,
+                    s.name AS seller_name, p.name AS product_name
+             FROM product_listing pl
+             JOIN seller s ON s.id = pl.seller_id
+             JOIN product p ON p.id = pl.product_id
+             WHERE pl.product_id IN (:ids) AND pl.is_active = true
+             ORDER BY pl.product_id, pl.price ASC',
+            ['ids' => $productIds],
+            ['ids' => ArrayParameterType::INTEGER]
+        );
+
+        $grouped = [];
+        foreach ($allListings as $listing) {
+            $pid = (int) $listing['product_id'];
+            $grouped[$pid][] = $listing;
+        }
+
+        $results = [];
+        foreach ($grouped as $pid => $listings) {
+            $inStock = count(array_filter($listings, fn ($l) => $l['availability'] === true || $l['availability'] === '1'));
+            $outOfStock = count($listings) - $inStock;
+            $results[] = [
+                'product_id' => $pid,
+                'product_name' => $listings[0]['product_name'] ?? 'Unknown',
+                'total_sellers' => count($listings),
+                'in_stock_count' => $inStock,
+                'out_of_stock_count' => $outOfStock,
+                'sellers' => array_map(fn ($l) => [
+                    'seller_name' => $l['seller_name'],
+                    'in_stock' => $l['availability'] === true || $l['availability'] === '1',
+                    'price' => (float) $l['price'],
+                    'trust_score' => $l['trust_score'] !== null ? (float) $l['trust_score'] : null,
+                ], $listings),
+            ];
+        }
+
+        return $results;
+    }
+
     private function buildPriceDispersion(array $rows): array
     {
         $byProduct = [];
@@ -1650,6 +2153,11 @@ final class B2BWorkspaceController extends AbstractController
                 'cheapest_seller' => $data['listings'][0]['seller'],
                 'expensive_seller' => $data['listings'][count($data['listings']) - 1]['seller'],
                 'seller_count' => count($prices),
+                // Aliases for frontend compatibility
+                'price_range' => round($max - $min, 2),
+                'seller_with_min' => $data['listings'][0]['seller'],
+                'seller_with_max' => $data['listings'][count($data['listings']) - 1]['seller'],
+                'sellers_count' => count($prices),
             ];
         }
 
@@ -1674,6 +2182,10 @@ final class B2BWorkspaceController extends AbstractController
                 'seller_name' => $sellerName,
                 'listing_count' => $count,
                 'market_share_percentage' => count($rows) > 0 ? round(($count / count($rows)) * 100, 2) : 0,
+                // Aliases for frontend compatibility
+                'brand' => $sellerName,
+                'listings_count' => $count,
+                'market_share_pct' => count($rows) > 0 ? round(($count / count($rows)) * 100, 2) : 0,
             ];
         }
 
@@ -1728,18 +2240,12 @@ final class B2BWorkspaceController extends AbstractController
                 $availability = ($row['availability'] ?? null) === true ? 'In Stock' : 'Out of Stock';
                 $updated = $row['updated_at'] ?? '';
 
-                $stats = ['cheapest_price' => null, 'total_sellers' => null, 'vendor_rank' => null];
-                if ($productId !== null && $price !== null) {
-                    $conn = $entityManager->getConnection();
-                    $cheapest = $conn->fetchOne('SELECT MIN(price) FROM product_listing WHERE product_id = :pid AND is_active = true AND price IS NOT NULL', ['pid' => $productId]);
-                    $total = $conn->fetchOne('SELECT COUNT(DISTINCT id) FROM product_listing WHERE product_id = :pid AND is_active = true AND price IS NOT NULL', ['pid' => $productId]);
-                    $cheaper = $conn->fetchOne('SELECT COUNT(DISTINCT id) FROM product_listing WHERE product_id = :pid AND is_active = true AND price IS NOT NULL AND price < :price', ['pid' => $productId, 'price' => $price]);
-                    $stats = [
-                        'cheapest_price' => $cheapest !== false ? (float) $cheapest : null,
-                        'total_sellers' => $total !== false ? (int) $total : null,
-                        'vendor_rank' => $cheaper !== false ? (int) $cheaper + 1 : null,
-                    ];
-                }
+                $stats = [
+                    'cheapest_price' => $row['cheapest_price'] ?? null,
+                    'max_price' => $row['max_price'] ?? null,
+                    'total_sellers' => $row['total_sellers'] ?? null,
+                    'vendor_rank' => $row['vendor_rank'] ?? null,
+                ];
 
                 $gap = $stats['cheapest_price'] !== null && $price !== null
                     ? round($price - $stats['cheapest_price'], 2)
@@ -1749,7 +2255,7 @@ final class B2BWorkspaceController extends AbstractController
                     $row['productName'] ?? 'Unknown',
                     $price !== null ? number_format($price, 2) . ' DT' : 'N/A',
                     $stats['cheapest_price'] !== null ? number_format($stats['cheapest_price'], 2) . ' DT' : 'N/A',
-                    'N/A',
+                    $stats['max_price'] !== null ? number_format($stats['max_price'], 2) . ' DT' : 'N/A',
                     $stats['vendor_rank'] !== null ? $stats['vendor_rank'] . ' of ' . $stats['total_sellers'] : 'N/A',
                     $stats['total_sellers'] ?? 'N/A',
                     $gap !== null ? number_format($gap, 2) . ' DT' : 'N/A',
@@ -1766,24 +2272,36 @@ final class B2BWorkspaceController extends AbstractController
             $headers = ['Product Name', 'Your Stock', 'Total Sellers', 'Sellers In Stock', 'Sellers OOS', 'Opportunity', 'Trust Score'];
             $rows = [];
 
+            $productIds = array_values(array_unique(array_filter(array_map(static fn (array $r) => $r['productId'] ?? null, $listings))));
+            $stockStats = [];
+            if (!empty($productIds)) {
+                $conn = $entityManager->getConnection();
+                $stockRows = $conn->fetchAllAssociative(
+                    'SELECT product_id, COUNT(*) AS total, SUM(CASE WHEN availability = true THEN 1 ELSE 0 END) AS in_stock
+                     FROM product_listing WHERE product_id IN (:pids) AND is_active = true GROUP BY product_id',
+                    ['pids' => $productIds],
+                    ['pids' => ArrayParameterType::INTEGER]
+                );
+                foreach ($stockRows as $sr) {
+                    $stockStats[(int) $sr['product_id']] = [
+                        'total' => (int) $sr['total'],
+                        'in_stock' => (int) $sr['in_stock'],
+                    ];
+                }
+            }
+
             foreach ($listings as $row) {
                 $productId = $row['productId'] ?? null;
                 $yourStock = ($row['availability'] ?? null) === true ? 'In Stock' : 'Out of Stock';
                 $trustScore = $row['trust_score'] ?? null;
 
-                $inStock = $oos = 0;
-                $opportunity = 'No';
-                $total = null;
-                if ($productId !== null) {
-                    $conn = $entityManager->getConnection();
-                    $allListings = $conn->fetchAllAssociative('SELECT availability FROM product_listing WHERE product_id = :pid AND is_active = true', ['pid' => $productId]);
-                    $total = count($allListings);
-                    $inStock = count(array_filter($allListings, fn($l) => (bool) $l['availability']));
-                    $oos = $total - $inStock;
-                    if ($oos > 0 && ($row['availability'] ?? null) === true) {
-                        $opportunity = 'Yes — ' . $oos . ' competitor(s) OOS';
-                    }
-                }
+                $stats = $productId !== null ? ($stockStats[$productId] ?? null) : null;
+                $total = $stats['total'] ?? null;
+                $inStock = $stats['in_stock'] ?? 0;
+                $oos = $total !== null ? $total - $inStock : 0;
+                $opportunity = ($oos > 0 && ($row['availability'] ?? null) === true)
+                    ? 'Yes — ' . $oos . ' competitor(s) OOS'
+                    : 'No';
 
                 $rows[] = [
                     $row['productName'] ?? 'Unknown',
@@ -2020,7 +2538,7 @@ final class B2BWorkspaceController extends AbstractController
             'product_url' => $row['product_url'] ?? null,
             'availability' => $row['availability'] ?? null,
             'trust_score' => isset($row['trust_score']) && is_numeric($row['trust_score']) ? (float) $row['trust_score'] : null,
-            'trust_score_breakdown' => $row['trust_score_breakdown'] ?? null,
+            'trust_score_breakdown' => $this->decodeTrustBreakdown($row['trust_score_breakdown'] ?? null),
             'created_at' => $serializeDate($row['created_at'] ?? null),
             'updated_at' => $serializeDate($row['updated_at'] ?? null),
             'is_active' => $row['is_active'] ?? null,
@@ -2044,13 +2562,16 @@ final class B2BWorkspaceController extends AbstractController
     {
         $category = trim((string) $request->query->get('category', ''));
         $inStock = $request->query->get('in_stock');
-        $trustMin = $request->query->get('trust_min');
-        $trustMax = $request->query->get('trust_max');
+        $trustMin = $request->query->get('trust_min') ?? $request->query->get('trust_score_min');
+        $trustMax = $request->query->get('trust_max') ?? $request->query->get('trust_score_max');
         $priceMin = $request->query->get('price_min');
         $priceMax = $request->query->get('price_max');
         $anomaliesOnly = filter_var((string) $request->query->get('anomalies_only', 'false'), FILTER_VALIDATE_BOOLEAN);
+        $search = trim((string) $request->query->get('search', ''));
+        $sortBy = trim((string) $request->query->get('sort_by', ''));
+        $sortOrder = strtolower(trim((string) $request->query->get('sort_order', 'asc')));
 
-        return array_values(array_filter($rows, static function (array $row) use ($category, $inStock, $trustMin, $trustMax, $priceMin, $priceMax, $anomaliesOnly): bool {
+        $rows = array_values(array_filter($rows, static function (array $row) use ($category, $inStock, $trustMin, $trustMax, $priceMin, $priceMax, $anomaliesOnly, $search): bool {
             if ($category !== '' && mb_strtolower((string) ($row['categoryName'] ?? '')) !== mb_strtolower($category)) {
                 return false;
             }
@@ -2082,8 +2603,36 @@ final class B2BWorkspaceController extends AbstractController
                 return false;
             }
 
+            if ($search !== '') {
+                $needle = mb_strtolower($search);
+                $productName = mb_strtolower((string) ($row['productName'] ?? ''));
+                $productBrand = mb_strtolower((string) ($row['productBrand'] ?? ''));
+                $ref = mb_strtolower((string) ($row['ref'] ?? ''));
+                if (!str_contains($productName, $needle) && !str_contains($productBrand, $needle) && !str_contains($ref, $needle)) {
+                    return false;
+                }
+            }
+
             return true;
         }));
+
+        if ($sortBy !== '') {
+            $allowed = ['price', 'trust_score', 'vendor_rank', 'productName', 'created_at'];
+            if (in_array($sortBy, $allowed, true)) {
+                $desc = $sortOrder === 'desc';
+                usort($rows, static function (array $a, array $b) use ($sortBy, $desc): int {
+                    $valA = $a[$sortBy] ?? null;
+                    $valB = $b[$sortBy] ?? null;
+                    if ($valA === null && $valB === null) return 0;
+                    if ($valA === null) return $desc ? -1 : 1;
+                    if ($valB === null) return $desc ? 1 : -1;
+                    $cmp = $valA <=> $valB;
+                    return $desc ? -$cmp : $cmp;
+                });
+            }
+        }
+
+        return $rows;
     }
 
     private function paginateArray(array $items, int $limit, int $offset): array
@@ -2118,5 +2667,14 @@ final class B2BWorkspaceController extends AbstractController
     private function normalizeNullableFloat(mixed $value): ?float
     {
         return is_numeric($value) ? (float) $value : null;
+    }
+
+    private function decodeTrustBreakdown(mixed $value): mixed
+    {
+        if (is_string($value)) {
+            $decoded = json_decode($value, true);
+            return is_array($decoded) ? $decoded : null;
+        }
+        return $value;
     }
 }

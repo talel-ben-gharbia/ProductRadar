@@ -21,7 +21,7 @@ type B2CProfile = {
   firebase_uid: string
   type: "customer"
   full_name: string | null
-  adress: string | null
+  address: string | null
 }
 
 type ProfileSectionId = "information" | "alerts" | "favorites"
@@ -111,7 +111,7 @@ export function B2CProfilePageContent() {
   const [saving, setSaving] = useState(false)
   const [profile, setProfile] = useState<B2CProfile | null>(null)
   const [fullName, setFullName] = useState("")
-  const [adress, setAdress] = useState("")
+  const [address, setAddress] = useState("")
   const [alertsLoading, setAlertsLoading] = useState(true)
   const [alerts, setAlerts] = useState<B2CAlert[]>([])
   const [alertsError, setAlertsError] = useState<string | null>(null)
@@ -128,7 +128,7 @@ export function B2CProfilePageContent() {
         if (cancelled) return
         setProfile(data.customer)
         setFullName(data.customer?.full_name ?? "")
-        setAdress(data.customer?.adress ?? "")
+        setAddress(data.customer?.address ?? "")
         setLoading(false)
       })
       .catch(() => {
@@ -239,7 +239,7 @@ export function B2CProfilePageContent() {
       const response = await fetch("/api/b2c/profile", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fullName, adress }),
+        body: JSON.stringify({ fullName, address }),
       })
 
       const data = await response.json()
@@ -250,7 +250,7 @@ export function B2CProfilePageContent() {
       const customer = data.customer as B2CProfile
       setProfile(customer)
       setFullName(customer.full_name ?? "")
-      setAdress(customer.adress ?? "")
+      setAddress(customer.address ?? "")
       toast.success("Profile updated successfully.")
       router.refresh()
     } catch (error) {
@@ -331,8 +331,8 @@ export function B2CProfilePageContent() {
                   <Input id="fullName" value={fullName} onChange={(event) => setFullName(event.target.value)} placeholder="Your full name" />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="adress">Address</Label>
-                  <Input id="adress" value={adress} onChange={(event) => setAdress(event.target.value)} placeholder="Your address" />
+                  <Label htmlFor="address">Address</Label>
+                  <Input id="address" value={address} onChange={(event) => setAddress(event.target.value)} placeholder="Your address" />
                 </div>
                 <div className="flex flex-wrap gap-3">
                   <Button type="submit" disabled={saving}>{saving ? "Saving..." : "Save changes"}</Button>

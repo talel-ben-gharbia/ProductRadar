@@ -1,6 +1,7 @@
 import { cookies } from "next/headers"
 import { NextRequest, NextResponse } from "next/server"
 
+import { cachedFetch } from "@/lib/fetch-with-cache"
 import { COOKIE_NAME, verifyB2CSessionToken } from "@/lib/b2c-session"
 import { BACKEND_URL } from "@/utils/admin/constants"
 
@@ -30,18 +31,10 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const backendResponse = await fetch(`${BACKEND_URL}/alerts?${params.toString()}`, {
-      cache: "no-store",
+    const data = await cachedFetch<unknown>(`${BACKEND_URL}/alerts?${params.toString()}`, {
+      cacheKey: `b2c:alerts:${session.id}`,
+      cacheTtl: 60,
     })
-
-    const data = await backendResponse.json().catch(() => [])
-
-    if (!backendResponse.ok) {
-      return NextResponse.json(
-        { error: (data as { error?: string }).error || "Failed to load alerts." },
-        { status: backendResponse.status },
-      )
-    }
 
     return NextResponse.json({ alerts: data }, { status: 200 })
   } catch {

@@ -2,6 +2,7 @@ import { cookies } from "next/headers"
 import { NextRequest, NextResponse } from "next/server"
 
 import { verifySessionToken, COOKIE_NAME } from "@/lib/admin-session"
+import { cachedFetch } from "@/lib/fetch-with-cache"
 import { BACKEND_URL } from "@/utils/admin/constants"
 
 async function isSuperAdmin(): Promise<boolean> {
@@ -22,30 +23,18 @@ export async function GET(request: NextRequest) {
     const sellerId = request.nextUrl.searchParams.get("sellerId")
 
     const params = new URLSearchParams()
-    if (productId) {
-      params.set("productId", productId)
-    }
-    if (sellerId) {
-      params.set("sellerId", sellerId)
-    }
+    if (productId) params.set("productId", productId)
+    if (sellerId) params.set("sellerId", sellerId)
 
     const query = params.toString()
     const endpoint = query
       ? `${BACKEND_URL}/product-listings?${query}`
       : `${BACKEND_URL}/product-listings`
 
-    const response = await fetch(endpoint, {
-      cache: "no-store",
+    const data = await cachedFetch<unknown>(endpoint, {
+      cacheKey: `listings:p${productId || "all"}:s${sellerId || "all"}`,
+      cacheTtl: 60,
     })
-
-    if (!response.ok) {
-      return NextResponse.json(
-        { message: `Failed to fetch product listings: ${response.status}` },
-        { status: response.status }
-      )
-    }
-
-    const data = await response.json()
     return NextResponse.json(data)
   } catch {
     return NextResponse.json(

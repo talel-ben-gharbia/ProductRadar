@@ -12,7 +12,7 @@ const COLORS = ["#6366f1", "#8b5cf6", "#a78bfa", "#c4b5fd", "#818cf8", "#7c3aed"
 type CompetitorItem = { brand?: string; listings_count?: number; market_share_pct?: number; avg_price?: number; avg_trust_score?: number }
 
 export default function CompetitorsPage() {
-  const { summary } = useB2B()
+  const { summary, loading } = useB2B()
   const metrics = summary?.metrics as Record<string, unknown> | undefined
   const data = ((metrics?.competitor_brands ?? metrics?.competitors ?? []) as CompetitorItem[])
 
@@ -20,6 +20,20 @@ export default function CompetitorsPage() {
     name: String(item.brand ?? "Brand").slice(0, 16),
     share: Number(item.market_share_pct ?? 0),
   }))
+
+  if (loading && !summary) {
+    return (
+      <div className="space-y-6">
+        <div className="h-8 w-48 animate-pulse rounded-lg bg-muted/50" />
+        <div className="h-4 w-72 animate-pulse rounded bg-muted/30" />
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="h-32 animate-pulse rounded-xl bg-muted/40" />
+          ))}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">

@@ -1,9 +1,11 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
-import { Megaphone, Plus, Search, Package, Tags } from "lucide-react"
+import { Megaphone, Plus, Search, Package, Tags, AlertTriangle } from "lucide-react"
 
 import { useB2B } from "@/components/B2B/b2b-context"
+import { QuotaBar, getMonthlyLimit, getCurrentUsage } from "@/components/B2B/b2b-quota-bar"
+import B2BErrorState from "@/components/B2B/b2b-error-state"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -11,64 +13,23 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 
-type AdsRequest = { id?: number; owner_type?: string; request_type?: string; target_type?: string; target_url?: string; status?: string; duration_days?: number; budget_proposal?: number; notes?: string; created_at?: string; product_id?: number; category_id?: number; brand_filter?: string; product_name?: string; category_name?: string }
-type SearchResult = { id: number; name: string; brand: string }
-
-function getWeeklyLimit(planType: string | null, type: "ads" | "scraping" | "reports"): number {
-  const isGold = planType != null && planType.toUpperCase().includes("GOLD")
-  const isSilver = planType != null && planType.toUpperCase().includes("SILVER")
-  if (isGold) {
-    return type === "ads" ? 15 : type === "scraping" ? 200 : 20
-  }
-  if (isSilver) {
-    return type === "ads" ? 2 : type === "scraping" ? 50 : 5
-  }
-  return type === "ads" ? 2 : type === "scraping" ? 10 : 2
-}
-
-function getCurrentWeekUsage(requests: AdsRequest[]): number {
-  const weekStart = new Date()
-  const day = weekStart.getDay() || 7
-  weekStart.setHours(0, 0, 0, 0)
-  weekStart.setDate(weekStart.getDate() - day + 1)
-
-  return requests.filter((request) => {
-    if (!request.created_at) return false
-    return new Date(request.created_at) >= weekStart
-  }).length
-}
-
-function QuotaBar({ usage, limit, label }: { usage: number; limit: number; label: string }) {
-  const pct = limit > 0 ? Math.min(100, Math.round((usage / limit) * 100)) : 0
-  const color = pct >= 90 ? "bg-red-500" : pct >= 70 ? "bg-amber-500" : "bg-emerald-500"
-  return (
-    <div className="rounded-xl border border-border/50 bg-muted/20 p-4">
-      <div className="mb-1.5 flex items-center justify-between text-xs">
-        <span className="font-medium text-muted-foreground">{label}</span>
-        <span className={`font-bold ${pct >= 90 ? "text-red-600" : pct >= 70 ? "text-amber-600" : "text-emerald-600"}`}>
-          {usage} / {limit} used
-        </span>
-      </div>
-      <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-        <div className={`h-full rounded-full transition-all duration-500 ${color}`} style={{ width: `${pct}%` }} />
-      </div>
-    </div>
-  )
-}
+import type { B2BAdsRequest as AdsRequest, B2BSearchResult as SearchResult } from "@/types/b2b"
 
 function ProductSearch({ onSelect }: { onSelect: (id: number, name: string, brand: string) => void }) {
   const [query, setQuery] = useState("")
   const [results, setResults] = useState<SearchResult[]>([])
   const [open, setOpen] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    if (query.length < 2) { setResults([]); return }
+    if (query.length < 2) { setResults([]); setError(null); return }
     const timer = setTimeout(async () => {
+      setError(null)
       try {
         const res = await fetch(`/api/b2b/workspace?endpoint=watchlist%2Fsearch&q=${encodeURIComponent(query)}`)
-        if (res.ok) { const data = await res.json(); setResults(data.items ?? []); setOpen(true) }
-      } catch { /* ignore */ }
+        if (res.ok) { const data = await res.json(); setResults(data.items ?? []); setOpen(true) } else { setError("Search failed") }
+      } catch { setError("Search failed") }
     }, 300)
     return () => clearTimeout(timer)
   }, [query])
@@ -84,7 +45,13 @@ function ProductSearch({ onSelect }: { onSelect: (id: number, name: string, bran
         <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search product by name or brand..." className="h-10 rounded-xl bg-background/50 pl-9 focus-visible:ring-violet-500/50" />
       </div>
-      {open && results.length > 0 && (
+      {error && (
+        <div className="absolute z-50 mt-1 w-full rounded-xl border border-red-200 bg-red-50 dark:border-red-900/50 dark:bg-red-950/30 p-3 text-center text-xs text-red-600 dark:text-red-400 shadow-lg">
+          <AlertTriangle className="mx-auto mb-1 size-4" />
+          {error}
+        </div>
+      )}
+      {open && results.length > 0 && !error && (
         <div className="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-xl border border-border bg-background shadow-lg">
           {results.map((r) => (
             <button key={r.id} type="button" onClick={() => { onSelect(r.id, r.name, r.brand); setOpen(false); setQuery("") }} className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm hover:bg-muted/50 transition-colors">
@@ -97,7 +64,7 @@ function ProductSearch({ onSelect }: { onSelect: (id: number, name: string, bran
           ))}
         </div>
       )}
-      {open && query.length >= 2 && results.length === 0 && (
+      {open && query.length >= 2 && results.length === 0 && !error && (
         <div className="absolute z-50 mt-1 w-full rounded-xl border border-border bg-background p-3 text-center text-sm text-muted-foreground shadow-lg">No products found</div>
       )}
     </div>
@@ -107,15 +74,35 @@ function ProductSearch({ onSelect }: { onSelect: (id: number, name: string, bran
 function CategorySelect({ value, onChange }: { value: string; onChange: (id: string) => void }) {
   const [categories, setCategories] = useState<{ id: number; name: string }[]>([])
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
+  const fetchCategories = useCallback(async () => {
     setLoading(true)
-    fetch("/api/categories")
-      .then((r) => r.ok ? r.json() : [])
-      .then((data) => setCategories(Array.isArray(data) ? data : data.items ?? []))
-      .catch(() => {})
-      .finally(() => setLoading(false))
+    setError(null)
+    try {
+      const r = await fetch("/api/categories")
+      if (r.ok) {
+        const data = await r.json()
+        setCategories(Array.isArray(data) ? data : data.items ?? [])
+      } else {
+        setError("Failed to load categories")
+      }
+    } catch { setError("Failed to load categories") }
+    setLoading(false)
   }, [])
+
+  useEffect(() => { fetchCategories() }, [fetchCategories])
+
+  if (error) {
+    return (
+      <div className="rounded-xl border border-red-200 bg-red-50 dark:border-red-900/50 dark:bg-red-950/30 p-3 text-center">
+        <p className="text-xs text-red-600 dark:text-red-400 mb-2">{error}</p>
+        <Button variant="outline" size="sm" onClick={() => { setError(null); fetchCategories() }} className="text-xs gap-1">
+          <AlertTriangle className="size-3" /> Retry
+        </Button>
+      </div>
+    )
+  }
 
   return (
     <select value={value} onChange={(e) => onChange(e.target.value)} className="h-10 w-full rounded-xl border bg-background/50 px-3 text-sm focus:ring-2 focus:ring-violet-500/50 transition-shadow">
@@ -128,9 +115,10 @@ function CategorySelect({ value, onChange }: { value: string; onChange: (id: str
 }
 
 export default function AdsRequestsPage() {
-  const { planType } = useB2B()
+  const { planType, summary } = useB2B()
   const [requests, setRequests] = useState<AdsRequest[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [showForm, setShowForm] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [form, setForm] = useState({ requestType: "BANNER", targetType: "PRODUCT", durationDays: "", budgetProposal: "", notes: "", productId: "", categoryId: "", brandFilter: "", targetUrl: "" })
@@ -138,10 +126,11 @@ export default function AdsRequestsPage() {
 
   const fetchRequests = useCallback(async () => {
     setLoading(true)
+    setError(null)
     try {
       const res = await fetch(`/api/b2b/workspace?endpoint=ads-requests`)
-      if (res.ok) { const data = await res.json(); setRequests(data.items ?? []) }
-    } catch { /* ignore */ }
+      if (res.ok) { const data = await res.json(); setRequests(data.items ?? []) } else { setError("Failed to load ads requests") }
+    } catch { setError("Failed to load ads requests") }
     setLoading(false)
   }, [])
 
@@ -149,6 +138,7 @@ export default function AdsRequestsPage() {
 
   const submitRequest = async () => {
     setSubmitting(true)
+    setError(null)
     try {
       const res = await fetch(`/api/b2b/workspace?endpoint=ads-requests`, {
         method: "POST",
@@ -160,13 +150,17 @@ export default function AdsRequestsPage() {
         setForm({ requestType: "BANNER", targetType: "PRODUCT", durationDays: "", budgetProposal: "", notes: "", productId: "", categoryId: "", brandFilter: "", targetUrl: "" })
         setSelectedProductLabel("")
         fetchRequests()
+      } else {
+        const data = await res.json().catch(() => ({}))
+        setError(data.error ?? "Failed to submit ads request")
       }
-    } catch { /* ignore */ }
+    } catch { setError("Failed to submit ads request") }
     setSubmitting(false)
   }
 
-  const adsUsage = getCurrentWeekUsage(requests)
-  const adsLimit = getWeeklyLimit(planType, "ads")
+  const usageJson = summary?.user?.usage_json as Record<string, unknown> | null | undefined
+  const adsUsage = getCurrentUsage(usageJson, "ads_requests")
+  const adsLimit = getMonthlyLimit(planType, "ads")
 
   const statusColor = (s?: string): string => {
     switch (s?.toUpperCase()) {
@@ -190,7 +184,9 @@ export default function AdsRequestsPage() {
         </Button>
       </div>
 
-      <QuotaBar usage={adsUsage} limit={adsLimit} label="Weekly Ads Request Quota" />
+      <QuotaBar usage={adsUsage} limit={adsLimit} label="Monthly Ads Request Quota" />
+
+      {error && <B2BErrorState message={error} onRetry={() => { setError(null); fetchRequests() }} />}
 
       {showForm && (
         <Card className="border-border/50 border-l-4 border-l-violet-500 shadow-xl shadow-violet-500/5 relative overflow-hidden group/form animate-in slide-in-from-top-4 fade-in duration-300">
@@ -214,6 +210,7 @@ export default function AdsRequestsPage() {
                 <select value={form.targetType} onChange={(e) => setForm((p) => ({ ...p, targetType: e.target.value }))} className="h-10 w-full rounded-xl border bg-background/50 px-3 text-sm focus:ring-2 focus:ring-violet-500/50 transition-shadow">
                   <option value="PRODUCT">Single Product</option>
                   <option value="BRAND_GROUP">Brand / Category Group</option>
+                  <option value="CATEGORY">Category</option>
                 </select>
               </div>
               <div className="space-y-1.5">
@@ -285,7 +282,7 @@ export default function AdsRequestsPage() {
                   Array.from({ length: 3 }).map((_, i) => (
                     <tr key={i}>{Array.from({ length: 8 }).map((_, j) => <td key={j} className="px-4 py-4"><div className="h-4 w-full animate-pulse rounded bg-muted/50" /></td>)}</tr>
                   ))
-                ) : requests.length === 0 ? (
+                ) : requests.length === 0 && !error ? (
                   <tr><td colSpan={8} className="px-4 py-20 text-center">
                     <div className="mx-auto flex size-16 items-center justify-center rounded-2xl bg-violet-50 dark:bg-violet-950/40 mb-4 ring-1 ring-violet-500/20">
                       <Megaphone className="size-8 text-violet-500/50" />

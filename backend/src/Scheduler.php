@@ -24,10 +24,14 @@ use Symfony\Component\Console\Style\SymfonyStyle;
  *
  * Additional recommended (daily full recalc at 2AM):
  *   0 2 * * * cd /path/to/backend && php bin/console app:trust-score:recalculate --full >> var/log/trust_score.log 2>&1
+ *
+ * Event consumer daemon (run continuously — NOT a cron):
+ *   Linux supervisord: php bin/console app:events:consume
+ *   Windows: use nssm to run as a Windows service
  */
 #[AsCommand(
     name: 'app:scheduler:run',
-    description: 'Run all periodic maintenance tasks (trust score incremental + subscription expiry check).',
+    description: 'Run all periodic maintenance tasks (trust score incremental + subscription expiry + event outbox).',
 )]
 final class Scheduler extends Command
 {
@@ -46,6 +50,7 @@ final class Scheduler extends Command
         $tasks = [
             'app:trust-score:recalculate' => [],
             'app:b2b:check-expiry'        => [],
+            'app:events:consume'          => ['--one-shot' => true],
         ];
 
         $exitCode = Command::SUCCESS;

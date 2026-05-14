@@ -4,6 +4,7 @@ namespace App\Repository;
 
 use App\Entity\PriceHistory;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
+use Doctrine\DBAL\ArrayParameterType;
 use Doctrine\Persistence\ManagerRegistry;
 
 /**
@@ -48,7 +49,7 @@ class PriceHistoryRepository extends ServiceEntityRepository
                 ->setParameter('listingId', $listingId);
         }
 
-        return $qb->getQuery()->getArrayResult();
+        return $qb->getQuery()->setCacheable(true)->setLifetime(300)->getArrayResult();
     }
 
     /**
@@ -68,6 +69,8 @@ class PriceHistoryRepository extends ServiceEntityRepository
             ->orderBy('ph.recorded_at', 'ASC')
             ->addOrderBy('ph.id', 'ASC')
             ->getQuery()
+            ->setCacheable(true)
+            ->setLifetime(300)
             ->getArrayResult();
     }
 
@@ -76,20 +79,47 @@ class PriceHistoryRepository extends ServiceEntityRepository
      */
     public function findTrainingRows(): array
     {
-        return $this->createQueryBuilder('ph')
+        $rows = $this->createQueryBuilder('ph')
             ->select('p.id AS productId')
-            ->select('IDENTITY(ph.productListing) AS listingId')
+            ->addSelect('IDENTITY(ph.productListing) AS listingId')
             ->addSelect('ph.recorded_at AS recordedAt')
             ->addSelect('ph.recorded_price AS recordedPrice')
             ->addSelect('ph.out_of_stock AS outOfStock')
             ->addSelect('ph.anomaly AS anomaly')
-            ->addSelect('pl.trust_score AS trustScore')
             ->join('ph.productListing', 'pl')
             ->leftJoin('pl.product', 'p')
             ->orderBy('ph.recorded_at', 'ASC')
             ->addOrderBy('ph.id', 'ASC')
             ->getQuery()
+            ->setCacheable(true)
+            ->setLifetime(300)
             ->getArrayResult();
+
+        $listingIds = array_values(array_unique(array_filter(
+            array_map(fn(array $r) => isset($r['listingId']) ? (int) $r['listingId'] : null, $rows)
+        )));
+        $scoreMap = [];
+        if (!empty($listingIds)) {
+            $conn = $this->getEntityManager()->getConnection();
+            $scoreRows = $conn->fetchAllAssociative(
+                'SELECT DISTINCT ON (listing_id) listing_id, score
+                 FROM trust_score_history
+                 WHERE listing_id IN (:ids)
+                 ORDER BY listing_id, created_at DESC',
+                ['ids' => $listingIds],
+                ['ids' => ArrayParameterType::INTEGER]
+            );
+            foreach ($scoreRows as $sr) {
+                $scoreMap[(int) $sr['listing_id']] = $sr['score'] !== null ? (float) $sr['score'] : null;
+            }
+        }
+
+        foreach ($rows as &$row) {
+            $lid = isset($row['listingId']) ? (int) $row['listingId'] : null;
+            $row['trustScore'] = $lid !== null && isset($scoreMap[$lid]) ? $scoreMap[$lid] : null;
+        }
+
+        return $rows;
     }
 
     //    /**

@@ -1,4 +1,5 @@
 import { BACKEND_URL } from "@/utils/admin/constants"
+import { cachedFetch } from "@/lib/fetch-with-cache"
 
 export type Seller = {
   id: number
@@ -22,15 +23,11 @@ async function fetchSellersFromApi(): Promise<Seller[]> {
         ? `${BACKEND_URL}/sellers`
         : "/api/sellers"
 
-    const response = await fetch(endpoint, {
-      cache: "no-store",
+    const sellers = await cachedFetch<Seller[]>(endpoint, {
+      cacheKey: "sellers:all",
+      cacheTtl: 300,
     })
-
-    if (!response.ok) {
-      throw new Error(`Failed to fetch sellers: ${response.status}`)
-    }
-
-    return (await response.json()) as Seller[]
+    return sellers
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown sellers fetch error"
     throw new Error(`Unable to load sellers from backend. ${message}`)

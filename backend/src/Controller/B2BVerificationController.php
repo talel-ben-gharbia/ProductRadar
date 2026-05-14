@@ -2,11 +2,11 @@
 
 namespace App\Controller;
 
-use App\Entity\AdminActivityLog;
+use App\Entity\Activity;
 use App\Entity\B2BCompany;
 use App\Entity\B2BMarket;
-use App\Entity\B2BSubscription;
 use App\Entity\PartnerRequest;
+use App\Entity\Subscription;
 use App\Entity\User;
 use App\Repository\AdminRepository;
 use App\Repository\PartnerRequestRepository;
@@ -16,7 +16,9 @@ use App\Security\AdminApiGuard;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Mailer\MailerInterface;
+use Psr\Cache\CacheItemPoolInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Attribute\Route;
@@ -25,6 +27,17 @@ use Symfony\Component\Mime\Email;
 #[Route('/admin/api/users/b2b')]
 final class B2BVerificationController extends AbstractController
 {
+    use CachedResponseTrait;
+
+    private const CACHE_KEY_PENDING = 'b2b_verification.pending';
+    private const CACHE_KEY_RECENT = 'b2b_verification.recent';
+
+    public function __construct(
+        #[Autowire(service: 'general.cache')]
+        private readonly CacheItemPoolInterface $cache,
+    ) {
+    }
+
     #[Route('/pending', name: 'admin_b2b_pending_list', methods: ['GET'])]
     public function listPending(
         Request $request,
@@ -39,17 +52,20 @@ final class B2BVerificationController extends AbstractController
         $limit = max(1, min(100, $request->query->getInt('limit', 25)));
         $offset = max(0, $request->query->getInt('offset', 0));
         $search = trim((string) $request->query->get('search', ''));
+        $cacheKey = self::CACHE_KEY_PENDING . ".l{$limit}.o{$offset}." . md5($search);
 
-        $result = $partnerRequestRepository->paginatePending($limit, $offset, $search);
+        return $this->cachedGet($this->cache, $cacheKey, function () use ($partnerRequestRepository, $limit, $offset, $search): array {
+            $result = $partnerRequestRepository->paginatePending($limit, $offset, $search);
 
-        return $this->json([
-            'items' => array_map(fn (PartnerRequest $request) => $this->serializeRequest($request), $result['items']),
-            'pagination' => [
-                'limit' => $limit,
-                'offset' => $offset,
-                'total' => $result['total'],
-            ],
-        ]);
+            return [
+                'items' => array_map(fn (PartnerRequest $pr) => $this->serializeRequest($pr), $result['items']),
+                'pagination' => [
+                    'limit' => $limit,
+                    'offset' => $offset,
+                    'total' => $result['total'],
+                ],
+            ];
+        });
     }
 
     #[Route('/recent', name: 'admin_b2b_recent_reviews', methods: ['GET'])]
@@ -64,34 +80,37 @@ final class B2BVerificationController extends AbstractController
         }
 
         $limit = max(1, min(100, $request->query->getInt('limit', 10)));
+        $cacheKey = self::CACHE_KEY_RECENT . ".l{$limit}";
 
-        $logs = $entityManager->createQueryBuilder()
-            ->select('log, admin')
-            ->from(AdminActivityLog::class, 'log')
-            ->leftJoin('log.admin', 'admin')
-            ->andWhere('log.entityType = :entityType')
-            ->andWhere('log.action IN (:actions)')
-            ->setParameter('entityType', 'PARTNER_REQUEST')
-            ->setParameter('actions', ['B2B_APPROVE', 'B2B_REJECT'])
-            ->orderBy('log.createdAt', 'DESC')
-            ->setMaxResults($limit)
-            ->getQuery()
-            ->getResult();
+        return $this->cachedGet($this->cache, $cacheKey, static function () use ($entityManager, $limit): array {
+            $logs = $entityManager->createQueryBuilder()
+                ->select('log, admin')
+                ->from(Activity::class, 'log')
+                ->leftJoin('log.admin', 'admin')
+                ->andWhere('log.subject_type = :entityType')
+                ->andWhere('log.action IN (:actions)')
+                ->setParameter('entityType', 'PARTNER_REQUEST')
+                ->setParameter('actions', ['B2B_APPROVE', 'B2B_REJECT'])
+                ->orderBy('log.created_at', 'DESC')
+                ->setMaxResults($limit)
+                ->getQuery()
+                ->getResult();
 
-        return $this->json([
-            'items' => array_map(
-                fn (AdminActivityLog $log) => [
-                    'id' => $log->getId(),
-                    'action' => $log->getAction(),
-                    'created_at' => $log->getCreatedAt()?->format(\DateTimeInterface::ATOM),
-                    'admin' => $log->getAdmin()?->getEmail(),
-                    'entity_id' => $log->getEntityId(),
-                    'before' => $log->getBeforeJson(),
-                    'after' => $log->getAfterJson(),
-                ],
-                $logs,
-            ),
-        ]);
+            return [
+                'items' => array_map(
+                    static fn (Activity $log) => [
+                        'id' => $log->getId(),
+                        'action' => $log->getAction() ?? $log->getVerb(),
+                        'created_at' => $log->getCreatedAt()?->format(\DateTimeInterface::ATOM),
+                        'admin' => $log->getAdmin()?->getEmail(),
+                        'entity_id' => $log->getSubjectId(),
+                        'before' => $log->getContext(),
+                        'after' => $log->getMetadata(),
+                    ],
+                    $logs,
+                ),
+            ];
+        });
     }
 
     #[Route('/{id}/status', name: 'admin_b2b_status_update', methods: ['PATCH'])]
@@ -146,6 +165,8 @@ final class B2BVerificationController extends AbstractController
 
         $approvedUser = null;
 
+        $isRejected = $status === 'REJECTED';
+
         if ($status === 'APPROVED') {
             $existingUser = $userRepository->findOneBy(['email' => $partnerRequest->getEmail()]);
             if ($existingUser !== null) {
@@ -184,57 +205,51 @@ final class B2BVerificationController extends AbstractController
             }
 
             try {
-                // Create the B2B record only if the request did not already create one.
-                // 2. Create/Promote User in local DB
-                $approvedUser = $this->createVerifiedB2bUser($partnerRequest, $entityManager);
+                $entityManager->wrapInTransaction(function (EntityManagerInterface $em) use (
+                    $existingUser, $partnerRequest, $seller, $payload, $plainPassword, $logger,
+                    &$approvedUser, &$subscription, &$firebaseUid
+                ) {
+                    if ($existingUser === null) {
+                        $approvedUser = $this->createVerifiedB2bUser($partnerRequest, $em);
+                    }
 
-                $approvedUser->setIsActive(true);
-                $approvedUser->setAccountStatus('ACTIVE');
-                $approvedUser->setB2bStatus('APPROVED');
-                $approvedUser->setIsVerified(true);
-                $approvedUser->setUpdatedAt(new \DateTimeImmutable());
+                    $approvedUser->setOwnerUser($approvedUser);
+                    $approvedUser->setIsActive(true);
+                    $approvedUser->setAccountStatus('ACTIVE');
+                    $approvedUser->setB2bStatus('APPROVED');
+                    $approvedUser->setIsVerified(true);
+                    $approvedUser->setUpdatedAt(new \DateTimeImmutable());
 
-                if (($approvedUser instanceof B2BCompany || $approvedUser instanceof B2BMarket) && $seller !== null) {
-                    $approvedUser->setSeller($seller);
-                }
+                    if (($approvedUser instanceof B2BCompany || $approvedUser instanceof B2BMarket) && $seller !== null) {
+                        $approvedUser->setSeller($seller);
+                    }
 
-                $planType = $payload['plan_type'] ?? 'SILVER';
-                $durationMonths = (int) ($payload['duration_months'] ?? 3);
-                $subscription = $this->attachB2bSubscription($approvedUser, $planType, $durationMonths);
+                    // Persist user first so getId() returns a real ID for the subscription
+                    $em->persist($approvedUser);
+                    $em->flush();
 
-                $entityManager->persist($subscription);
-                $entityManager->persist($approvedUser);
-                $entityManager->flush();
+                    $planType = $payload['plan_type'] ?? 'SILVER';
+                    $durationMonths = (int) ($payload['duration_months'] ?? 3);
+                    $subscription = $this->attachB2bSubscription($approvedUser, $planType, $durationMonths);
+                    $em->persist($subscription);
+                    $em->flush();
 
-                // Now attempt to provision the Firebase account. If this fails, remove the newly created user.
-                $provisionResult = $this->provisionFirebaseB2bUser((string) $partnerRequest->getEmail(), $plainPassword, $logger);
-                $firebaseUid = $provisionResult['uid'] ?? null;
-                if ($firebaseUid === null) {
-                    $logger->error('Firebase provisioning failed for B2B approval', ['email' => $partnerRequest->getEmail()]);
+                    // Firebase provisioning — if this fails, the transaction rolls back everything
+                    $provisionResult = $this->provisionFirebaseB2bUser((string) $partnerRequest->getEmail(), $plainPassword, $logger);
+                    $firebaseUid = $provisionResult['uid'] ?? null;
+                    if ($firebaseUid === null) {
+                        $logger->error('Firebase provisioning failed for B2B approval', ['email' => $partnerRequest->getEmail()]);
+                        throw new \RuntimeException($provisionResult['error'] ?? 'Firebase provisioning returned no UID');
+                    }
 
-                    $entityManager->remove($approvedUser);
-                    $entityManager->flush();
+                    $approvedUser->setFirebaseUid($firebaseUid);
+                    $em->flush();
+                });
 
-                    return $this->json([
-                        'error' => 'Firebase Error: This email already exists in Firebase Auth but the password does not match. If you are testing, please delete the user from the Firebase Console first.',
-                        'firebase_details' => $provisionResult['error'] ?? 'Unknown error'
-                    ], 502);
-                }
-
-                $approvedUser->setFirebaseUid($firebaseUid);
-                $entityManager->flush();
+                // Handle Firebase failure — the transaction was already rolled back
+                $subscription = null;
             } catch (\Throwable $e) {
                 $logger->error('Exception during B2B approval flow', ['exception' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
-                if (isset($approvedUser) && $approvedUser instanceof User) {
-                    try {
-                        $entityManager->remove($approvedUser);
-                        $entityManager->flush();
-                    } catch (\Throwable $_) {
-                        // ignore rollback error
-                    }
-                }
-
-                // In dev mode, return the exception message to simplify debugging locally.
                 $appEnv = $_ENV['APP_ENV'] ?? $_SERVER['APP_ENV'] ?? 'prod';
                 if (is_string($appEnv) && strtolower($appEnv) === 'dev') {
                     return $this->json(['error' => 'Internal server error during B2B approval.', 'exception' => $e->getMessage(), 'trace' => $e->getTraceAsString()], 500);
@@ -251,20 +266,27 @@ final class B2BVerificationController extends AbstractController
             'approved_email' => $responsePayload['email'] ?? null,
         ];
 
-        $activityLog = new AdminActivityLog();
+        $activityLog = new Activity();
         $activityLog
+            ->setActorType('ADMIN')
+            ->setActorId($admin?->getId())
             ->setAdmin($admin)
+            ->setVerb($status === 'APPROVED' ? 'B2B_APPROVE' : 'B2B_REJECT')
             ->setAction($status === 'APPROVED' ? 'B2B_APPROVE' : 'B2B_REJECT')
-            ->setEntityType('PARTNER_REQUEST')
-            ->setEntityId($partnerRequest->getId())
-            ->setBeforeJson($before)
-            ->setAfterJson($after)
+            ->setSubjectType('PARTNER_REQUEST')
+            ->setSubjectId($partnerRequest->getId())
+            ->setContext($before)
+            ->setMetadata($after)
             ->setIpAddress($request->getClientIp())
             ->setCreatedAt(new \DateTimeImmutable());
         $entityManager->persist($activityLog);
 
         $entityManager->remove($partnerRequest);
         $entityManager->flush();
+
+        if ($isRejected) {
+            $this->sendRejectionEmail((string) $partnerRequest->getEmail(), (string) $partnerRequest->getCompanyName(), $reviewerNote, $logger, $mailer);
+        }
 
         if ($approvedUser !== null) {
             $responsePayload = $this->serializeApprovedUser($approvedUser);
@@ -282,6 +304,8 @@ final class B2BVerificationController extends AbstractController
             'admin_role' => $adminApiGuard->getRole($request),
             'ip' => $request->getClientIp(),
         ]);
+
+        $this->invalidateCache($this->cache);
 
         return $this->json($responsePayload);
     }
@@ -351,21 +375,20 @@ final class B2BVerificationController extends AbstractController
         return $user;
     }
 
-    private function attachB2bSubscription(B2BCompany|B2BMarket $user, string $planType, int $durationMonths): B2BSubscription
+    private function attachB2bSubscription(B2BCompany|B2BMarket $user, string $planType, int $durationMonths): Subscription
     {
         $startDate = new \DateTimeImmutable();
         $endDate = $startDate->modify('+' . $durationMonths . ' months');
 
-        // Enforce valid plan types: SILVER or GOLD only
         $cleanPlan = strtoupper(trim($planType));
-        // Accept both 'SILVER' and 'B2B_SILVER' from frontend
         $cleanPlan = str_replace('B2B_', '', $cleanPlan);
         if (!in_array($cleanPlan, ['SILVER', 'GOLD'])) {
             $cleanPlan = 'SILVER';
         }
 
-        $subscription = new B2BSubscription();
+        $subscription = new Subscription();
         $subscription->setOwnerType($user instanceof B2BMarket ? 'MARKET' : 'COMPANY');
+        $subscription->setOwnerId((int) $user->getId());
         $subscription->setPlanType('B2B_' . $cleanPlan);
         $subscription->setDurationMonths($durationMonths);
         $subscription->setStartDate($startDate);
@@ -373,12 +396,6 @@ final class B2BVerificationController extends AbstractController
         $subscription->setActive(true);
         $subscription->setCreatedAt(new \DateTimeImmutable());
         $subscription->setActivatedAt(new \DateTimeImmutable());
-
-        if ($user instanceof B2BCompany) {
-            $subscription->setCompany($user);
-        } elseif ($user instanceof B2BMarket) {
-            $subscription->setMarket($user);
-        }
 
         return $subscription;
     }
@@ -418,9 +435,9 @@ final class B2BVerificationController extends AbstractController
             ?? $_SERVER['FIREBASE_WEB_API_KEY']
             ?? $_ENV['NEXT_PUBLIC_FIREBASE_API_KEY']
             ?? $_SERVER['NEXT_PUBLIC_FIREBASE_API_KEY']
-            ?? 'AIzaSyBHztYA2cs7XtsOsu1gFWOKzBeT6R2gRG4';
+            ?? '';
         if (!is_string($apiKey) || trim($apiKey) === '') {
-            return ['uid' => null, 'error' => 'API Key missing'];
+            return ['uid' => null, 'error' => 'FIREBASE_WEB_API_KEY environment variable not set'];
         }
 
         $signup = $this->postJson(
@@ -499,7 +516,7 @@ final class B2BVerificationController extends AbstractController
 
     private function sendApprovalConfirmationEmail(string $businessEmail, string $companyName, LoggerInterface $logger, MailerInterface $mailer): void
     {
-        $from = $_ENV['B2B_NOTIFICATIONS_FROM'] ?? $_SERVER['B2B_NOTIFICATIONS_FROM'] ?? 'your-gmail-address@gmail.com';
+        $from = $_ENV['B2B_NOTIFICATIONS_FROM'] ?? $_SERVER['B2B_NOTIFICATIONS_FROM'] ?? 'noreply@productradar.tn';
         $subject = 'Your ProductRadar B2B account has been approved';
         $message = "Hello,\n\nYour B2B registration for {$companyName} has been approved successfully.\nYou can now sign in and access the B2B dashboard.\n\nBest regards,\nProductRadar Team";
 
@@ -520,15 +537,39 @@ final class B2BVerificationController extends AbstractController
         }
     }
 
-    private function resolveProvisioningSecret(): string
+    private function sendRejectionEmail(string $businessEmail, string $companyName, string $reviewerNote, LoggerInterface $logger, MailerInterface $mailer): void
+    {
+        $from = $_ENV['B2B_NOTIFICATIONS_FROM'] ?? $_SERVER['B2B_NOTIFICATIONS_FROM'] ?? 'noreply@productradar.tn';
+        $subject = 'Update on Your ProductRadar B2B Registration';
+        $reasonText = $reviewerNote !== '' ? "\n\nReason: {$reviewerNote}" : '';
+        $message = "Hello,\n\nYour B2B registration for {$companyName} was not approved at this time.{$reasonText}\n\nIf you have any questions, please contact our support team.\n\nBest regards,\nProductRadar Team";
+
+        try {
+            $email = (new Email())
+                ->from($from)
+                ->to($businessEmail)
+                ->subject($subject)
+                ->text($message);
+
+            $mailer->send($email);
+        } catch (\Throwable $e) {
+            $logger->warning('B2B rejection email could not be sent.', [
+                'email' => $businessEmail,
+                'from' => $from,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    private function resolveProvisioningSecret(): ?string
     {
         $secret = $_ENV['B2B_PROVISIONING_SECRET']
             ?? $_SERVER['B2B_PROVISIONING_SECRET']
             ?? $_ENV['APP_SECRET']
             ?? $_SERVER['APP_SECRET']
-            ?? 'default-b2b-provisioning-secret-key-12345';
+            ?? '';
 
-        return is_string($secret) && trim($secret) !== '' ? $secret : 'default-b2b-provisioning-secret-key-12345';
+        return is_string($secret) && trim($secret) !== '' ? $secret : null;
     }
 
     private function serializeApprovedUser(B2BCompany|B2BMarket $user): array

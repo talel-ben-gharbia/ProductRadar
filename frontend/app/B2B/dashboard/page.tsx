@@ -39,10 +39,13 @@ import {
 } from "lucide-react"
 
 import { useB2B } from "@/components/B2B/b2b-context"
+import B2BErrorState from "@/components/B2B/b2b-error-state"
 import B2BSubscriptionBanner from "@/components/B2B/b2b-subscription-banner"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { timeAgo, ordinalSuffix } from "@/components/B2B/b2b-utils"
+
 
 const CHART_COLORS = ["#6366f1", "#8b5cf6", "#a78bfa", "#c4b5fd", "#818cf8", "#7c3aed"]
 
@@ -51,29 +54,66 @@ function fmt(value: unknown): string {
   return "-"
 }
 
-function timeAgo(dateStr: string | undefined | null): string {
-  if (!dateStr) return ""
-  const now = Date.now()
-  const date = new Date(dateStr).getTime()
-  const diff = now - date
-  const seconds = Math.floor(diff / 1000)
-  const minutes = Math.floor(seconds / 60)
-  const hours = Math.floor(minutes / 60)
-  const days = Math.floor(hours / 24)
-
-  if (seconds < 60) return "just now"
-  if (minutes < 60) return `${minutes}m ago`
-  if (hours < 24) return `${hours}h ago`
-  if (days < 7) return `${days}d ago`
-  if (days < 30) return `${Math.floor(days / 7)}w ago`
-  return new Date(dateStr).toLocaleDateString()
-}
-
 export default function B2BOverviewPage() {
-  const { summary, mode, planType, isGold, refresh } = useB2B()
+  const { summary, loading, mode, planType, isGold, refresh } = useB2B()
+
+  const [healthScore, setHealthScore] = useState<Record<string, unknown> | null>(null)
+  const [trustScoreTrend, setTrustScoreTrend] = useState<Array<Record<string, unknown>>>([])
+  const [trendError, setTrendError] = useState<string | null>(null)
+  const [dismissError, setDismissError] = useState<string | null>(null)
+  const [alertFilter, setAlertFilter] = useState<"competitive" | "all">("competitive")
+  const [dismissedAlerts, setDismissedAlerts] = useState<Set<number>>(new Set())
+
+  useEffect(() => {
+    const fetchHealth = async () => {
+      try {
+        const res = await fetch("/api/b2b/workspace?endpoint=health-score")
+        if (res.ok) {
+          setHealthScore(await res.json())
+        } else {
+          setHealthScore(null)
+        }
+      } catch {
+        setHealthScore(null)
+      }
+    }
+    fetchHealth()
+  }, [])
+
+  const fetchTrend = useCallback(async () => {
+    try {
+      setTrendError(null)
+      const res = await fetch("/api/b2b/workspace?endpoint=trust-score-history")
+      if (res.ok) {
+        const data = await res.json()
+        setTrustScoreTrend(data.items ?? [])
+      }
+    } catch {
+      setTrendError("Failed to load trust score history")
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchTrend()
+  }, [fetchTrend])
+
+  const handleDismissAlert = useCallback(async (notificationId: number) => {
+    try {
+      setDismissError(null)
+      await fetch("/api/b2b/workspace?endpoint=notifications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: notificationId }),
+      })
+    } catch {
+      setDismissError("Failed to dismiss alert")
+    }
+  }, [])
+
+  const competitiveTypes = new Set(["COMPETITOR_UNDERCUT", "STOCK_SHORTAGE", "COMPETITOR_TRUST_DROP", "DISPERSION_ANOMALY", "NEW_COMPETITOR", "STOCK_OPPORTUNITY", "COMPETITOR_OOS", "TRUST_DROP"])
+
   const metrics = summary?.metrics as Record<string, unknown> | undefined
 
-  // Clean up plan label: B2B_GOLD -> Gold, B2B_SILVER -> Silver
   const planLabel = planType
     ? planType.replace(/^B2B_/i, "").charAt(0).toUpperCase() + planType.replace(/^B2B_/i, "").slice(1).toLowerCase()
     : "—"
@@ -109,50 +149,6 @@ export default function B2BOverviewPage() {
   const zeroResults = (demandIntel?.zero_result_queries ?? {}) as Record<string, number>
   const stockMonitoring = (metrics?.stock_monitoring ?? []) as Array<Record<string, unknown>>
 
-  const [healthScore, setHealthScore] = useState<Record<string, unknown> | null>(null)
-  const [trustScoreTrend, setTrustScoreTrend] = useState<Array<Record<string, unknown>>>([])
-
-  useEffect(() => {
-    const fetchHealth = async () => {
-      try {
-        const res = await fetch("/api/b2b/workspace?endpoint=health-score")
-        if (res.ok) {
-          setHealthScore(await res.json())
-        } else {
-          setHealthScore(null)
-        }
-      } catch {
-        setHealthScore(null)
-      }
-    }
-    fetchHealth()
-  }, [])
-
-  useEffect(() => {
-    const fetchTrend = async () => {
-      try {
-        const res = await fetch("/api/b2b/workspace?endpoint=trust-score-history")
-        if (res.ok) {
-          const data = await res.json()
-          setTrustScoreTrend(data.items ?? [])
-        }
-      } catch { /* silent */ }
-    }
-    fetchTrend()
-  }, [])
-
-  const handleDismissAlert = useCallback(async (notificationId: number) => {
-    try {
-      await fetch("/api/b2b/workspace?endpoint=notifications", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: notificationId }),
-      })
-    } catch {}
-  }, [])
-
-  const [dismissedAlerts, setDismissedAlerts] = useState<Set<number>>(new Set())
-
   const handleExportDashboard = useCallback(() => {
     const lines = [
       "Metric,Value",
@@ -173,6 +169,17 @@ export default function B2BOverviewPage() {
     a.click()
     URL.revokeObjectURL(url)
   }, [productsCount, newProductsThisWeek, listingsCount, avgTrust, inStock, outOfStock, notificationsCount, opportunities])
+
+  if (loading && !summary) {
+    return (
+      <div className="flex min-h-[400px] items-center justify-center">
+        <div className="text-center">
+          <div className="mx-auto mb-4 size-8 animate-spin rounded-full border-4 border-indigo-500/30 border-t-indigo-500" />
+          <p className="text-sm text-muted-foreground">Loading dashboard data...</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -227,7 +234,7 @@ export default function B2BOverviewPage() {
             { label: "Products", value: productsCount, sub: newProductsThisWeek > 0 ? `+${newProductsThisWeek} this week` : null, color: "text-indigo-300" },
             { label: "Listings", value: listingsCount, sub: null, color: "text-violet-300" },
             { label: "Avg Trust Score", value: avgTrust, sub: "out of 100", color: "text-emerald-300" },
-            { label: "Active Alerts", value: notificationsCount, sub: "needs attention", color: notificationsCount > 0 ? "text-amber-300" : "text-emerald-300" },
+            { label: "Active Alerts", value: notificationsCount, sub: notificationsCount > 0 ? `${notifications.filter((n) => !n.is_read).length} unread` : "needs attention", color: notificationsCount > 0 ? "text-amber-300" : "text-emerald-300" },
           ].map((item) => (
             <div key={item.label} className="rounded-xl bg-white/5 px-4 py-3 ring-1 ring-white/10">
               <p className="text-[10px] font-bold uppercase tracking-wider text-indigo-200/60">{item.label}</p>
@@ -396,6 +403,9 @@ export default function B2BOverviewPage() {
       </section>
 
       {/* Trust Score Trend */}
+      {trendError ? (
+        <B2BErrorState message={trendError} onRetry={fetchTrend} />
+      ) : (
       <section className="grid gap-6">
         <Card className="border-border/50 shadow-sm">
           <CardHeader>
@@ -433,7 +443,7 @@ export default function B2BOverviewPage() {
           </CardContent>
         </Card>
       </section>
-
+      )}
       {/* Insights Row: Opportunities for Vendor / Demand for Market */}
       <section className="grid gap-6 lg:grid-cols-2">
         {mode === "vendor" ? (
@@ -547,6 +557,26 @@ export default function B2BOverviewPage() {
                   <p className="mt-1 text-2xl font-bold">{fmt(avgTrust)}</p>
                   <p className="text-[10px] text-muted-foreground">Avg. Product Score</p>
                 </div>
+                {(() => {
+                  const unreadCompetitive = notifications.filter((n) => !n.is_read && competitiveTypes.has(String(n.type ?? ""))).length
+                  if (unreadCompetitive === 0) return null
+                  return (
+                    <div className="col-span-2 rounded-2xl border border-red-200/50 bg-gradient-to-r from-red-50/80 to-amber-50/80 p-4 dark:border-red-900/30 dark:from-red-950/20 dark:to-amber-950/20">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-red-600 dark:text-red-400">Unread Competitive Events</p>
+                          <p className="mt-1 text-2xl font-bold text-red-600 dark:text-red-400">{unreadCompetitive}</p>
+                          <p className="text-[10px] text-muted-foreground">Events requiring your attention</p>
+                        </div>
+                        <Button variant="outline" size="sm" asChild className="h-8 text-xs border-red-200 hover:bg-red-50 dark:border-red-900 dark:hover:bg-red-950/30">
+                          <Link href="/B2B/dashboard/alerts">
+                            Review <ArrowRight className="ml-1 size-3" />
+                          </Link>
+                        </Button>
+                      </div>
+                    </div>
+                  )
+                })()}
              </div>
              <div className="rounded-2xl border border-border/50 bg-indigo-50/50 p-4 dark:bg-indigo-950/20">
                 <div className="flex items-center justify-between">
@@ -562,37 +592,53 @@ export default function B2BOverviewPage() {
       </section>
 
       {/* Smart Alerts */}
+      {dismissError && (
+        <B2BErrorState message={dismissError} onRetry={() => setDismissError(null)} />
+      )}
       {mode === "vendor" && (
         <Card className="border-border/50 shadow-sm overflow-hidden">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardHeader className="flex flex-col gap-3 pb-2 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-2">
               <Bell className="size-4 text-indigo-500" />
-              <CardTitle className="text-sm">Smart Alerts</CardTitle>
+              <CardTitle className="text-sm">Intelligence Feed</CardTitle>
               {(() => {
-                const critical = notifications.filter((n) => String(n.severity ?? "").toUpperCase() === "CRITICAL" && !dismissedAlerts.has(Number(n.id))).length
+                const critical = notifications.filter((n) => !dismissedAlerts.has(Number(n.id)) && String(n.severity ?? "").toUpperCase() === "CRITICAL").length
                 return critical > 0 ? (
                   <Badge className="bg-red-500 text-[10px] text-white">{critical} critical</Badge>
                 ) : null
               })()}
             </div>
-            <Button variant="ghost" size="sm" asChild className="h-7 text-xs">
-              <Link href="/B2B/dashboard/alerts">View all <ArrowRight className="ml-1 size-3" /></Link>
-            </Button>
+            <div className="flex items-center gap-2">
+              <div className="flex rounded-lg border border-border/50 p-0.5 bg-muted/30">
+                <button type="button" onClick={() => setAlertFilter("competitive")}
+                  className={`rounded-md px-2.5 py-1 text-[10px] font-medium transition-colors ${alertFilter === "competitive" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
+                  Competitive
+                </button>
+                <button type="button" onClick={() => setAlertFilter("all")}
+                  className={`rounded-md px-2.5 py-1 text-[10px] font-medium transition-colors ${alertFilter === "all" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
+                  All
+                </button>
+              </div>
+              <Button variant="ghost" size="sm" asChild className="h-7 text-xs">
+                <Link href="/B2B/dashboard/alerts">View all <ArrowRight className="ml-1 size-3" /></Link>
+              </Button>
+            </div>
           </CardHeader>
           <CardContent className="space-y-2 max-h-96 overflow-y-auto">
             {(() => {
               const active = notifications.filter((n) => !dismissedAlerts.has(Number(n.id)))
-              if (active.length === 0) {
+              const filtered = alertFilter === "competitive" ? active.filter((n) => competitiveTypes.has(String(n.type ?? ""))) : active
+              const emptyLabel = alertFilter === "competitive" ? "No competitive intelligence alerts right now." : "No alerts need your attention right now."
+              if (filtered.length === 0) {
                 return (
                   <div className="flex flex-col items-center justify-center py-12 text-center">
                     <CheckCircle2 className="mb-3 size-10 text-emerald-400/40" />
-                    <p className="text-sm font-medium text-muted-foreground">All clear</p>
-                    <p className="text-xs text-muted-foreground/70 mt-1">No alerts need your attention right now.</p>
+                    <p className="text-sm font-medium text-muted-foreground">{emptyLabel}</p>
                   </div>
                 )
               }
               const severityRank: Record<string, number> = { CRITICAL: 0, WARNING: 1, SUCCESS: 2, INFO: 3 }
-              const sorted = [...active].sort((a, b) => {
+              const sorted = [...filtered].sort((a, b) => {
                 const ra = severityRank[String(a.severity ?? "").toUpperCase()] ?? 99
                 const rb = severityRank[String(b.severity ?? "").toUpperCase()] ?? 99
                 if (ra !== rb) return ra - rb
@@ -602,11 +648,16 @@ export default function B2BOverviewPage() {
                 const nType = String(n.type ?? "")
                 const isUndercut = nType === "COMPETITOR_UNDERCUT"
                 const isStockShortage = nType === "STOCK_SHORTAGE"
+                const isTrustDrop = nType === "COMPETITOR_TRUST_DROP" || nType === "TRUST_DROP"
+                const isDispersion = nType === "DISPERSION_ANOMALY"
+                const isNewCompetitor = nType === "NEW_COMPETITOR"
+                const isStockOpportunity = nType === "STOCK_OPPORTUNITY"
+                const isCompetitorOos = nType === "COMPETITOR_OOS"
                 const isAds = nType.includes("ADS")
                 const isScraping = nType.includes("SCRAPING")
                 const isSub = nType.includes("SUBSCRIPTION")
-                const FeedIcon = isUndercut ? TrendingDown : isStockShortage ? AlertTriangle : isAds ? DollarSign : isScraping ? Package : isSub ? Shield : Bell
-                const feedColor = isUndercut ? "text-red-500 bg-red-50 dark:bg-red-950/30" : isStockShortage ? "text-amber-500 bg-amber-50 dark:bg-amber-950/30" : isAds ? "text-emerald-500 bg-emerald-50 dark:bg-emerald-950/30" : "text-indigo-500 bg-indigo-50 dark:bg-indigo-950/30"
+                const FeedIcon = isUndercut ? TrendingDown : isTrustDrop ? TrendingDown : isStockShortage ? AlertTriangle : isNewCompetitor ? Zap : isStockOpportunity ? CheckCircle2 : isCompetitorOos ? XCircle : isDispersion ? BarChart3 : isAds ? DollarSign : isScraping ? Package : isSub ? Shield : Bell
+                const feedColor = isUndercut ? "text-red-500 bg-red-50 dark:bg-red-950/30" : isStockShortage ? "text-amber-500 bg-amber-50 dark:bg-amber-950/30" : isTrustDrop ? "text-orange-500 bg-orange-50 dark:bg-orange-950/30" : isNewCompetitor ? "text-blue-500 bg-blue-50 dark:bg-blue-950/30" : isStockOpportunity ? "text-emerald-500 bg-emerald-50 dark:bg-emerald-950/30" : isCompetitorOos ? "text-slate-500 bg-slate-50 dark:bg-slate-950/30" : isDispersion ? "text-violet-500 bg-violet-50 dark:bg-violet-950/30" : isAds ? "text-emerald-500 bg-emerald-50 dark:bg-emerald-950/30" : "text-indigo-500 bg-indigo-50 dark:bg-indigo-950/30"
                 const nid = Number(n.id)
                 return (
                   <div key={String(n.id ?? n.created_at)} className="flex items-start gap-3 rounded-xl border border-border/50 bg-card p-3">
@@ -620,13 +671,13 @@ export default function B2BOverviewPage() {
                         {timeAgo(n.created_at as string | undefined | null)}
                         <Badge variant="outline" className="text-[8px] ml-1">{String(n.severity ?? "info")}</Badge>
                       </p>
-                      {(isUndercut || isStockShortage) && (n.product_listing_id as number) && (
+                      {Boolean((isUndercut || isStockShortage || isNewCompetitor || isStockOpportunity || isCompetitorOos || isTrustDrop) && n.product_listing_id) && (
                         <Link
                           href={`/B2B/dashboard/comparison?listingId=${n.product_listing_id as number}`}
                           className="mt-1 inline-flex items-center gap-0.5 text-[10px] text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300"
                         >
                           <Eye className="size-3" />
-                          {isUndercut ? "Compare prices" : "View listing"}
+                          {isUndercut ? "Compare prices" : isTrustDrop ? "View trust details" : isNewCompetitor ? "View competitor" : "View listing"}
                         </Link>
                       )}
                     </div>
@@ -842,11 +893,5 @@ export default function B2BOverviewPage() {
       </section>
     </div>
   )
-}
-
-function ordinalSuffix(n: number): string {
-  const s = ["th", "st", "nd", "rd"]
-  const v = n % 100
-  return s[(v - 20) % 10] ?? s[v] ?? s[0]
 }
 

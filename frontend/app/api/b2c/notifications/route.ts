@@ -1,6 +1,7 @@
 import { cookies } from "next/headers"
 import { NextResponse } from "next/server"
 
+import { cachedFetch } from "@/lib/fetch-with-cache"
 import { COOKIE_NAME, verifyB2CSessionToken } from "@/lib/b2c-session"
 import { BACKEND_URL } from "@/utils/admin/constants"
 
@@ -23,19 +24,13 @@ export async function GET() {
   }
 
   try {
-    const backendResponse = await fetch(
+    const data = await cachedFetch<unknown>(
       `${BACKEND_URL}/notifications?clientId=${encodeURIComponent(String(session.id))}`,
-      { cache: "no-store" },
+      {
+        cacheKey: `b2c:notifs:${session.id}`,
+        cacheTtl: 60,
+      },
     )
-
-    const data = await backendResponse.json().catch(() => [])
-
-    if (!backendResponse.ok) {
-      return NextResponse.json(
-        { error: (data as { error?: string }).error || "Failed to load notifications." },
-        { status: backendResponse.status },
-      )
-    }
 
     return NextResponse.json({ notifications: data }, { status: 200 })
   } catch {

@@ -2,29 +2,41 @@
 
 import { useCallback, useEffect, useState } from "react"
 import { Bell, Check, Filter } from "lucide-react"
+import B2BErrorState from "@/components/B2B/b2b-error-state"
 
 import { useB2B } from "@/components/B2B/b2b-context"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 
-type Notification = { id?: number; type?: string; message?: string; severity?: string; is_read?: boolean; created_at?: string; product_listing_id?: number }
+import type { B2BNotification as Notification } from "@/types/b2b"
 
 export default function AlertsPage() {
   const { firebaseUid } = useB2B()
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<"all" | "unread">("all")
+  const [offset, setOffset] = useState(0)
+  const [pagination, setPagination] = useState<{ limit: number; offset: number; total: number }>({ limit: 25, offset: 0, total: 0 })
+  const [fetchError, setFetchError] = useState<string | null>(null)
+  const [markError, setMarkError] = useState<string | null>(null)
 
-  const fetchNotifications = useCallback(async () => {
+  const limit = 25
+
+  const fetchNotifications = useCallback(async (newOffset = 0) => {
     setLoading(true)
+    setFetchError(null)
     try {
-      const res = await fetch(`/api/b2b/workspace?endpoint=notifications&limit=100`)
+      const res = await fetch(`/api/b2b/workspace?endpoint=notifications&limit=${limit}&offset=${newOffset}`)
       if (res.ok) {
         const data = await res.json()
         setNotifications(data.items ?? [])
+        setPagination(data.pagination ?? { limit, offset: newOffset, total: 0 })
+        setOffset(newOffset)
       }
-    } catch { /* ignore */ }
+    } catch {
+      setFetchError("Failed to load notifications")
+    }
     setLoading(false)
   }, [])
 
@@ -38,7 +50,9 @@ export default function AlertsPage() {
         body: JSON.stringify({ id }),
       })
       setNotifications((prev) => prev.map((n) => n.id === id ? { ...n, is_read: true } : n))
-    } catch { /* ignore */ }
+    } catch {
+      setMarkError("Failed to mark notification as read")
+    }
   }
 
   const filtered = filter === "unread" ? notifications.filter((n) => !n.is_read) : notifications
@@ -61,14 +75,20 @@ export default function AlertsPage() {
           <p className="text-sm text-muted-foreground">{unreadCount} unread notification{unreadCount !== 1 ? "s" : ""}</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant={filter === "all" ? "default" : "outline"} size="sm" onClick={() => setFilter("all")}>All</Button>
-          <Button variant={filter === "unread" ? "default" : "outline"} size="sm" onClick={() => setFilter("unread")}>
+          <Button variant={filter === "all" ? "default" : "outline"} size="sm" onClick={() => { setFilter("all"); fetchNotifications(0) }}>All</Button>
+          <Button variant={filter === "unread" ? "default" : "outline"} size="sm" onClick={() => { setFilter("unread"); fetchNotifications(0) }}>
             Unread ({unreadCount})
           </Button>
         </div>
       </div>
 
       <div className="space-y-3">
+        {fetchError && (
+          <B2BErrorState message={fetchError} onRetry={() => { setFetchError(null); fetchNotifications(offset) }} />
+        )}
+        {markError && (
+          <B2BErrorState message={markError} onRetry={() => setMarkError(null)} />
+        )}
         {loading ? (
           Array.from({ length: 5 }).map((_, i) => (
             <Card key={i} className="border-border/50">
@@ -105,6 +125,22 @@ export default function AlertsPage() {
               </CardContent>
             </Card>
           ))
+        )}
+
+        {pagination.total > pagination.limit && (
+          <div className="flex items-center justify-between border-t pt-4">
+            <p className="text-xs text-muted-foreground">
+              Showing {pagination.offset + 1}–{Math.min(pagination.offset + pagination.limit, pagination.total)} of {pagination.total}
+            </p>
+            <div className="flex gap-1.5">
+              <Button variant="outline" size="sm" disabled={offset <= 0} onClick={() => fetchNotifications(offset - limit)}>
+                Previous
+              </Button>
+              <Button variant="outline" size="sm" disabled={offset + limit >= pagination.total} onClick={() => fetchNotifications(offset + limit)}>
+                Next
+              </Button>
+            </div>
+          </div>
         )}
       </div>
     </div>

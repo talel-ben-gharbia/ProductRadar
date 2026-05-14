@@ -34,13 +34,32 @@ final class URLDuplicateDetector
      *   "suggestions": []
      * }
      *
-     * OR if duplicate found:
+     * OR if exact duplicate found:
      * {
      *   "is_duplicate": true,
      *   "duplicate_reason": "EXACT_MATCH_IN_PRODUCT_LISTING",
      *   "existing_record_id": 123,
      *   "existing_record_type": "product_listing",
      *   "similar_urls": [...]
+     * }
+     *
+     * OR if similar URL found (similarity_level = HIGH):
+     * - similarity > 0.95 → auto-reject
+     * {
+     *   "is_duplicate": true,
+     *   "duplicate_reason": "SIMILAR_URL_HIGH",
+     *   "similarity_level": "HIGH",
+     *   "similar_urls": [...]
+     * }
+     *
+     * OR if similar URL found (similarity_level = MEDIUM):
+     * - 0.70 < similarity <= 0.95 → warning, don't reject
+     * {
+     *   "is_duplicate": false,
+     *   "duplicate_reason": null,
+     *   "similarity_level": "MEDIUM",
+     *   "similar_urls": [...],
+     *   "warning": "URL appears similar to existing tracked URLs"
      * }
      */
     public function detectDuplicate(string $targetUrl, string $targetType = 'PRODUCT_LISTING'): array
@@ -56,6 +75,7 @@ final class URLDuplicateDetector
                 'existing_record_id' => $exactMatch['id'],
                 'existing_record_type' => 'product_listing',
                 'existing_record_name' => $exactMatch['name'],
+                'similarity_level' => 'HIGH',
             ];
         }
 
@@ -68,6 +88,7 @@ final class URLDuplicateDetector
                 'existing_record_id' => $exactMatch['id'],
                 'existing_record_type' => 'category_link',
                 'existing_record_name' => $exactMatch['name'],
+                'similarity_level' => 'HIGH',
             ];
         }
 
@@ -75,11 +96,26 @@ final class URLDuplicateDetector
         $similarUrls = $this->findSimilarUrls($normalizedUrl);
 
         if (!empty($similarUrls)) {
+            $maxSimilarity = max(array_column($similarUrls, 'similarity_score'));
+
+            if ($maxSimilarity > 0.95) {
+                // HIGH similarity → auto-reject
+                return [
+                    'is_duplicate' => true,
+                    'duplicate_reason' => 'SIMILAR_URL_HIGH',
+                    'similarity_level' => 'HIGH',
+                    'similar_urls' => $similarUrls,
+                    'suggestion' => 'URL is highly similar to an existing tracked URL',
+                ];
+            }
+
+            // MEDIUM similarity (0.70-0.95) → warning only, don't reject
             return [
-                'is_duplicate' => true,
-                'duplicate_reason' => 'SIMILAR_URL_DETECTED',
+                'is_duplicate' => false,
+                'duplicate_reason' => null,
+                'similarity_level' => 'MEDIUM',
                 'similar_urls' => $similarUrls,
-                'suggestion' => 'URL appears similar to existing tracked URL',
+                'warning' => 'URL appears similar to existing tracked URLs',
             ];
         }
 
@@ -89,6 +125,7 @@ final class URLDuplicateDetector
             'duplicate_reason' => null,
             'similar_urls' => [],
             'suggestions' => [],
+            'similarity_level' => null,
         ];
     }
 
@@ -260,7 +297,7 @@ final class URLDuplicateDetector
             $resultUrl = $result['source_url'] ?? '';
             $similarity = $this->calculateSimilarity($normalizedUrl, $resultUrl);
 
-            if ($similarity > 0.80 && strtolower($resultUrl) !== strtolower($normalizedUrl)) {
+            if ($similarity > 0.70 && strtolower($resultUrl) !== strtolower($normalizedUrl)) {
                 $similar[] = [
                     'url' => $resultUrl,
                     'product_name' => $result['product_name'],

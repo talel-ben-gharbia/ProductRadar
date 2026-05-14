@@ -31,18 +31,22 @@ export interface SourceHealth {
   last_errors: Array<{ executed_at: string; error: string }>;
 }
 
+import { cachedFetch } from "@/lib/fetch-with-cache"
+
 export async function getReviewAnalytics(): Promise<ReviewAnalytics> {
-  const res = await fetch('/api/admin/reviews/analytics');
-  if (!res.ok) throw new Error('Failed to fetch analytics');
-  return res.json();
+  return cachedFetch<ReviewAnalytics>('/api/admin/reviews/analytics', {
+    cacheKey: 'reviews:analytics',
+    cacheTtl: 300,
+  });
 }
 
 export async function getAutoModerationSuggestion(
   reviewId: number,
 ): Promise<AutoModerationSuggestion> {
-  const res = await fetch(`/api/admin/reviews/${reviewId}/auto-moderate`);
-  if (!res.ok) throw new Error('Failed to fetch suggestion');
-  return res.json();
+  return cachedFetch<AutoModerationSuggestion>(`/api/admin/reviews/${reviewId}/auto-moderate`, {
+    cacheKey: `reviews:auto_moderate:${reviewId}`,
+    cacheTtl: 300,
+  });
 }
 
 export async function batchModerationReviews(
@@ -60,7 +64,8 @@ export async function batchModerationReviews(
 }
 
 export async function getSourceHealth(sourceName: string): Promise<SourceHealth> {
-  const res = await fetch(`/api/admin/scraping-logs/source/${encodeURIComponent(sourceName)}/health`);
-  if (!res.ok) throw new Error('Failed to fetch source health');
-  return res.json();
+  return cachedFetch<SourceHealth>(
+    `/api/admin/scraping-logs/source/${encodeURIComponent(sourceName)}/health`,
+    { cacheKey: `scraping_logs:health:${sourceName}`, cacheTtl: 300 },
+  );
 }

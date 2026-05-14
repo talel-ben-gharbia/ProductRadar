@@ -133,7 +133,7 @@ final class CompetitorDetectionEngine
                     $opportunities[] = [
                         'type' => 'UNDERCUT_OPPORTUNITY',
                         'product_id' => $listing->getId(),
-                        'product_name' => $listing->getProductName(),
+                        'product_name' => $listing->getProduct()?->getName(),
                         'current_price' => $listing->getPrice(),
                         'market_min' => $analysis['lowest_price_competitor']['price'],
                         'gap' => $gap,
@@ -151,7 +151,7 @@ final class CompetitorDetectionEngine
                 $risks[] = [
                     'type' => $analysis['anomaly_risk'],
                     'product_id' => $listing->getId(),
-                    'product_name' => $listing->getProductName(),
+                    'product_name' => $listing->getProduct()?->getName(),
                     'severity' => $this->classifyRiskSeverity($analysis['anomaly_risk']),
                     'details' => $analysis,
                 ];

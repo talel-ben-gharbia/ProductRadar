@@ -1,8 +1,8 @@
 "use client"
 
-import React, { useState } from "react"
+import React, { useState, useEffect } from "react"
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts"
-import { AlertTriangle, CheckCircle2, Clock, Filter, Package, Search, Shield, XCircle, Zap } from "lucide-react"
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Clock, DollarSign, Filter, Package, Search, Shield, Store, XCircle, Zap } from "lucide-react"
 
 import { useB2B } from "@/components/B2B/b2b-context"
 import { Badge } from "@/components/ui/badge"
@@ -10,7 +10,8 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 
-type StockItem = { product_id?: number; product_name?: string; out_of_stock_rate?: number; trust_score?: number; listing_url?: string; category?: string; updated_at?: string }
+type StockItem = { product_id?: number; product_name?: string; category?: string; out_of_stock_rate?: number; trust_score?: number; listing_url?: string; updated_at?: string; sellers?: SellerStock[] }
+type SellerStock = { seller_id: number; seller_name: string; in_stock: boolean; price: number | null; trust_score: number | null; is_vendor: boolean }
 
 function StockBar({ rate }: { rate: number }) {
   const color = rate === 0 ? "bg-emerald-500" : rate <= 10 ? "bg-amber-500" : "bg-red-500"
@@ -32,7 +33,7 @@ function RiskBadge({ rate }: { rate: number }) {
 }
 
 export default function StockMonitoringPage() {
-  const { summary } = useB2B()
+  const { summary, loading } = useB2B()
   const metrics = summary?.metrics as Record<string, unknown> | undefined
   const data = ((metrics?.stock_monitoring ?? []) as StockItem[])
   const inStock = Number(metrics?.in_stock_count ?? 0)
@@ -45,6 +46,11 @@ export default function StockMonitoringPage() {
   const [categoryFilter, setCategoryFilter] = useState("")
   const [riskFilter, setRiskFilter] = useState("")
   const [showFilters, setShowFilters] = useState(false)
+  const [page, setPage] = useState(1)
+  const [expandedId, setExpandedId] = useState<number | null>(null)
+  const [sortBy, setSortBy] = useState("")
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc")
+  const ITEMS_PER_PAGE = 20
 
   const categories = [...new Set(data.map((d) => d.category ?? d.product_name?.split(" ")[0] ?? "General"))]
 
@@ -60,12 +66,41 @@ export default function StockMonitoringPage() {
       riskFilter === "critical" ? rate > 50 : true
     )
     return matchesSearch && matchesCategory && matchesRisk
+  }).sort((a, b) => {
+    if (!sortBy) return 0
+    const valA = sortBy === "trust_score" ? Number(a.trust_score ?? 0) : Number(a.out_of_stock_rate ?? 0)
+    const valB = sortBy === "trust_score" ? Number(b.trust_score ?? 0) : Number(b.out_of_stock_rate ?? 0)
+    return sortOrder === "asc" ? valA - valB : valB - valA
   })
+
+  const totalPages = Math.ceil(filtered.length / ITEMS_PER_PAGE)
+  const paginatedData = filtered.slice(
+    (page - 1) * ITEMS_PER_PAGE,
+    page * ITEMS_PER_PAGE,
+  )
+
+  useEffect(() => {
+    setPage(1)
+  }, [search, categoryFilter, riskFilter])
 
   const pieData = [
     { name: "In Stock", value: inStock, color: "#22c55e" },
     { name: "Out of Stock", value: outOfStock, color: "#ef4444" },
   ].filter((d) => d.value > 0)
+
+  if (loading && !summary) {
+    return (
+      <div className="space-y-6">
+        <div className="h-8 w-48 animate-pulse rounded-lg bg-muted/50" />
+        <div className="h-4 w-72 animate-pulse rounded bg-muted/30" />
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="h-32 animate-pulse rounded-xl bg-muted/40" />
+          ))}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -185,7 +220,11 @@ export default function StockMonitoringPage() {
       <Card className="border-border/50 shadow-sm">
         <CardHeader>
           <CardTitle className="flex items-center gap-2"><Package className="size-4" /> Product Stock Details</CardTitle>
-          <CardDescription>{filtered.length} product{filtered.length !== 1 ? "s" : ""} tracked</CardDescription>
+          <CardDescription>
+            {filtered.length > ITEMS_PER_PAGE
+              ? `Showing ${(page - 1) * ITEMS_PER_PAGE + 1}–${Math.min(page * ITEMS_PER_PAGE, filtered.length)} of ${filtered.length} products`
+              : `${filtered.length} product${filtered.length !== 1 ? "s" : ""} in your catalog`}
+          </CardDescription>
         </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
@@ -194,53 +233,182 @@ export default function StockMonitoringPage() {
                 <tr>
                   <th className="px-4 py-3 font-medium">Product</th>
                   <th className="px-4 py-3 font-medium text-center">Stock Status</th>
-                  <th className="px-4 py-3 font-medium text-center">OOS Rate</th>
+                  <th className="cursor-pointer select-none px-4 py-3 font-medium text-center hover:text-foreground" onClick={() => { if (sortBy === "oos") setSortOrder(o => o === "asc" ? "desc" : "asc"); else { setSortBy("oos"); setSortOrder("asc") } }}>
+                    OOS Rate {sortBy === "oos" ? (sortOrder === "asc" ? "▲" : "▼") : <span className="text-transparent">◇</span>}
+                  </th>
                   <th className="px-4 py-3 font-medium text-center">Risk Level</th>
-                  <th className="px-4 py-3 font-medium text-center">Trust Score</th>
+                  <th className="cursor-pointer select-none px-4 py-3 font-medium text-center hover:text-foreground" onClick={() => { if (sortBy === "trust_score") setSortOrder(o => o === "asc" ? "desc" : "asc"); else { setSortBy("trust_score"); setSortOrder("asc") } }}>
+                    Trust Score {sortBy === "trust_score" ? (sortOrder === "asc" ? "▲" : "▼") : <span className="text-transparent">◇</span>}
+                  </th>
                   <th className="px-4 py-3 font-medium text-right">Last Updated</th>
+                  <th className="px-4 py-3 font-medium text-center">Sellers</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/50">
                 {filtered.length === 0 ? (
-                  <tr><td colSpan={6} className="px-4 py-12 text-center text-muted-foreground">
+                  <tr><td colSpan={7} className="px-4 py-12 text-center text-muted-foreground">
                     <Search className="mx-auto mb-2 size-6 text-muted-foreground/40" />
                     No stock data matches your filters
                   </td></tr>
                 ) : (
-                  filtered.map((item, i) => {
+                  paginatedData.map((item, i) => {
                     const rate = Number(item.out_of_stock_rate ?? 0)
+                    const pid = item.product_id ?? i
+                    const isExpanded = expandedId === pid
+                    const sellers = item.sellers ?? []
+                    const competitorCount = sellers.filter((s) => !s.is_vendor).length
                     return (
-                      <tr key={item.product_id ?? i} className="transition-colors hover:bg-muted/20">
-                        <td className="px-4 py-3 font-medium max-w-[200px] truncate">{String(item.product_name ?? "-")}</td>
-                        <td className="px-4 py-3 text-center">
-                          <Badge variant={rate === 0 ? "default" : rate <= 50 ? "secondary" : "destructive"} className="text-[10px]">
-                            {rate === 0 ? "In Stock" : rate <= 50 ? "Low Stock" : "Out of Stock"}
-                          </Badge>
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          <StockBar rate={rate} />
-                        </td>
-                        <td className="px-4 py-3 text-center"><RiskBadge rate={rate} /></td>
-                        <td className="px-4 py-3 text-center">
-                          {typeof item.trust_score === "number" ? (
-                            <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-bold ${item.trust_score >= 80 ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400" : item.trust_score >= 50 ? "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400" : "bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400"}`}>
-                              {item.trust_score.toFixed(0)}
+                      <React.Fragment key={pid}>
+                        <tr className="transition-colors hover:bg-muted/20">
+                          <td className="px-4 py-3 font-medium max-w-[200px] truncate">{String(item.product_name ?? "-")}</td>
+                          <td className="px-4 py-3 text-center">
+                            <Badge variant={rate === 0 ? "default" : rate <= 50 ? "secondary" : "destructive"} className="text-[10px]">
+                              {rate === 0 ? "In Stock" : rate <= 50 ? "Low Stock" : "Out of Stock"}
+                            </Badge>
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <StockBar rate={rate} />
+                          </td>
+                          <td className="px-4 py-3 text-center"><RiskBadge rate={rate} /></td>
+                          <td className="px-4 py-3 text-center">
+                            {typeof item.trust_score === "number" ? (
+                              <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-bold ${item.trust_score >= 80 ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400" : item.trust_score >= 50 ? "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400" : "bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400"}`}>
+                                {item.trust_score.toFixed(0)}
+                              </span>
+                            ) : "-"}
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                              <Clock className="size-3" />
+                              {item.updated_at ? new Date(item.updated_at).toLocaleDateString() : "N/A"}
                             </span>
-                          ) : "-"}
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                            <Clock className="size-3" />
-                            {item.updated_at ? new Date(item.updated_at).toLocaleDateString() : "N/A"}
-                          </span>
-                        </td>
-                      </tr>
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            {sellers.length > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => setExpandedId(isExpanded ? null : pid)}
+                                className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                              >
+                                <Store className="size-3" />
+                                {competitorCount}
+                                {isExpanded ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                        {isExpanded && sellers.length > 0 && (
+                          <tr className="bg-muted/20">
+                            <td colSpan={7} className="px-8 py-3">
+                              <div className="rounded-xl border border-border/50 bg-background p-4">
+                                <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                                  <Store className="mr-1 inline size-3" />
+                                  All Sellers — {item.product_name}
+                                </p>
+                                <div className="overflow-x-auto">
+                                  <table className="min-w-full text-xs">
+                                    <thead>
+                                      <tr className="border-b text-left text-muted-foreground">
+                                        <th className="pb-2 pr-4 font-medium">Seller</th>
+                                        <th className="pb-2 pr-4 font-medium text-right">Price</th>
+                                        <th className="pb-2 pr-4 font-medium text-center">Stock</th>
+                                        <th className="pb-2 font-medium text-right">Trust</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {sellers
+                                        .sort((a, b) => {
+                                          if (a.is_vendor && !b.is_vendor) return -1
+                                          if (!a.is_vendor && b.is_vendor) return 1
+                                          return (a.price ?? Infinity) - (b.price ?? Infinity)
+                                        })
+                                        .map((s) => (
+                                          <tr key={s.seller_id} className="border-b border-border/30 last:border-0">
+                                            <td className="py-2 pr-4">
+                                              <span className="inline-flex items-center gap-1">
+                                                {s.is_vendor && (
+                                                  <Badge variant="outline" className="mr-1 text-[9px] border-indigo-300 text-indigo-600 dark:border-indigo-700 dark:text-indigo-400">You</Badge>
+                                                )}
+                                                {s.seller_name}
+                                              </span>
+                                            </td>
+                                            <td className="py-2 pr-4 text-right font-mono">
+                                              {s.price != null ? (
+                                                <span className="inline-flex items-center gap-0.5">
+                                                  <DollarSign className="size-2.5 text-muted-foreground/60" />
+                                                  {s.price.toFixed(2)}
+                                                </span>
+                                              ) : "-"}
+                                            </td>
+                                            <td className="py-2 pr-4 text-center">
+                                              <Badge variant={s.in_stock ? "default" : "destructive"} className="text-[9px]">
+                                                {s.in_stock ? "In Stock" : "OOS"}
+                                              </Badge>
+                                            </td>
+                                            <td className="py-2 text-right font-mono">
+                                              {s.trust_score != null ? (
+                                                <span className={s.trust_score >= 80 ? "text-emerald-600" : s.trust_score >= 50 ? "text-amber-600" : "text-red-600"}>
+                                                  {s.trust_score.toFixed(0)}
+                                                </span>
+                                              ) : "-"}
+                                            </td>
+                                          </tr>
+                                        ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
                     )
                   })
                 )}
               </tbody>
             </table>
           </div>
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between border-t px-4 py-3">
+              <span className="text-sm text-muted-foreground">
+                Page {page} of {totalPages}
+              </span>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={page === 1}
+                  onClick={() => setPage(page - 1)}
+                >
+                  Previous
+                </Button>
+                {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
+                  const start = Math.max(1, page - 3)
+                  const pageNum = start + i
+                  if (pageNum > totalPages) return null
+                  return (
+                    <Button
+                      key={pageNum}
+                      variant={pageNum === page ? "default" : "outline"}
+                      size="sm"
+                      className="min-w-[32px]"
+                      onClick={() => setPage(pageNum)}
+                    >
+                      {pageNum}
+                    </Button>
+                  )
+                })}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={page === totalPages}
+                  onClick={() => setPage(page + 1)}
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

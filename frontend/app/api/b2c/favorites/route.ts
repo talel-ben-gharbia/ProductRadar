@@ -1,6 +1,7 @@
 import { cookies } from "next/headers"
 import { NextRequest, NextResponse } from "next/server"
 
+import { cachedFetch } from "@/lib/fetch-with-cache"
 import { BACKEND_URL } from "@/utils/admin/constants"
 import { COOKIE_NAME, verifyB2CSessionToken } from "@/lib/b2c-session"
 
@@ -31,23 +32,13 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const backendResponse = await fetch(`${BACKEND_URL}/favorites?${params.toString()}`, {
-      cache: "no-store",
+    const data = await cachedFetch<unknown>(`${BACKEND_URL}/favorites?${params.toString()}`, {
+      cacheKey: `b2c:favs:${session.id}`,
+      cacheTtl: 60,
     })
 
-    const data = await backendResponse.json().catch(() => [])
-
-    if (!backendResponse.ok) {
-      console.error("[favorites/GET] Backend error:", backendResponse.status, data)
-      return NextResponse.json(
-        { error: (data as { error?: string }).error || "Failed to load favorites." },
-        { status: backendResponse.status },
-      )
-    }
-
     return NextResponse.json({ favorites: data }, { status: 200 })
-  } catch (error) {
-    console.error("[favorites/GET] Network error:", error)
+  } catch {
     return NextResponse.json({ error: "Unable to connect to backend." }, { status: 502 })
   }
 }

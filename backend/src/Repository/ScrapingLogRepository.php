@@ -26,6 +26,8 @@ class ScrapingLogRepository extends ServiceEntityRepository
             ->addOrderBy('l.id', 'DESC')
             ->setMaxResults(max(1, min(100, $limit)))
             ->getQuery()
+            ->setCacheable(true)
+            ->setLifetime(300)
             ->getResult();
     }
 
@@ -38,6 +40,8 @@ class ScrapingLogRepository extends ServiceEntityRepository
             ->orderBy('l.executed_at', 'DESC')
             ->addOrderBy('l.id', 'DESC')
             ->getQuery()
+            ->setCacheable(true)
+            ->setLifetime(300)
             ->getResult();
     }
 
@@ -81,8 +85,8 @@ class ScrapingLogRepository extends ServiceEntityRepository
             ->setFirstResult($offset)
             ->setMaxResults($limit);
 
-        $items = $qb->getQuery()->getResult();
-        $total = (int) $countQb->getQuery()->getSingleScalarResult();
+        $items = $qb->getQuery()->setCacheable(true)->setLifetime(300)->getResult();
+        $total = (int) $countQb->getQuery()->setCacheable(true)->setLifetime(300)->getSingleScalarResult();
 
         return ['items' => $items, 'total' => $total];
     }
@@ -98,6 +102,8 @@ class ScrapingLogRepository extends ServiceEntityRepository
             ->orderBy('l.executed_at', 'DESC')
             ->setMaxResults($limit)
             ->getQuery()
+            ->setCacheable(true)
+            ->setLifetime(300)
             ->getResult();
 
         if (empty($logs)) {

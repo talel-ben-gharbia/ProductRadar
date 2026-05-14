@@ -32,10 +32,18 @@ final class B2BAdsQuotaService
         $ownerId = $user->getId();
         $ownerType = $user instanceof B2BCompany ? 'COMPANY' : 'MARKET';
 
-        $count = $this->entityManager->getConnection()->fetchOne(
-            'SELECT COUNT(*) FROM b2b_ads_request WHERE owner_type = :owner_type AND company_id = :owner_id AND created_at >= NOW() - INTERVAL \'7 days\'',
-            ['owner_type' => $ownerType, 'owner_id' => $ownerId]
-        );
+        $sql = 'SELECT COUNT(*) FROM b2b_ads_request WHERE owner_type = :owner_type AND created_at >= NOW() - INTERVAL \'7 days\'';
+        $params = ['owner_type' => $ownerType];
+
+        if ($ownerType === 'COMPANY') {
+            $sql .= ' AND company_id = :owner_id';
+            $params['owner_id'] = $ownerId;
+        } elseif ($ownerType === 'MARKET') {
+            $sql .= ' AND market_id = :owner_id';
+            $params['owner_id'] = $ownerId;
+        }
+
+        $count = $this->entityManager->getConnection()->fetchOne($sql, $params);
 
         if (!is_numeric($count) || $count === null) {
             $count = 0;

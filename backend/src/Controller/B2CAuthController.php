@@ -5,21 +5,32 @@ namespace App\Controller;
 use App\Entity\B2BCompany;
 use App\Entity\B2BMarket;
 use App\Entity\Customer;
-use App\Entity\SubscriptionB2C;
+use App\Entity\Subscription;
 use App\Entity\User;
 use App\Repository\UserRepository;
 use App\Service\SubscriptionLifecycleService;
 use Doctrine\ORM\EntityManagerInterface;
+use Psr\Cache\CacheItemPoolInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Attribute\Route;
 
 final class B2CAuthController extends AbstractController
 {
+    use CachedResponseTrait;
+
+    private const CACHE_KEY_PROFILE = 'b2c_auth.profile.';
     private const ACCOUNT_TYPE_B2C = 'B2C';
     private const ACCOUNT_TYPE_B2B_COMPANY = 'B2B_COMPANY';
     private const ACCOUNT_TYPE_B2B_MARKET = 'B2B_MARKET';
+
+    public function __construct(
+        #[Autowire(service: 'general.cache')]
+        private readonly CacheItemPoolInterface $cache,
+    ) {
+    }
 
     #[Route('/api/b2c/auth/firebase', name: 'b2c_auth_firebase', methods: ['POST'])]
     public function firebaseAuth(
@@ -146,13 +157,15 @@ final class B2CAuthController extends AbstractController
     #[Route('/api/b2c/profile/{firebaseUid}', name: 'b2c_profile_get', methods: ['GET'])]
     public function getProfile(string $firebaseUid, UserRepository $userRepository): JsonResponse
     {
-        $user = $userRepository->findOneWithSubscriptionByFirebaseUid($firebaseUid);
+        return $this->cachedGet($this->cache, self::CACHE_KEY_PROFILE . $firebaseUid, function () use ($firebaseUid, $userRepository): array {
+            $user = $userRepository->findOneWithSubscriptionByFirebaseUid($firebaseUid);
 
-        if (!$user instanceof Customer && !$user instanceof B2BCompany && !$user instanceof B2BMarket) {
-            return $this->json(['error' => 'User not found.'], 404);
-        }
+            if (!$user instanceof Customer && !$user instanceof B2BCompany && !$user instanceof B2BMarket) {
+                throw new \RuntimeException('User not found.');
+            }
 
-        return $this->json($this->serializeUser($user));
+            return $this->serializeUser($user);
+        });
     }
 
     #[Route('/api/b2c/profile/{firebaseUid}', name: 'b2c_profile_update', methods: ['PUT'])]
@@ -182,15 +195,27 @@ final class B2CAuthController extends AbstractController
             }
         }
 
-        if (array_key_exists('adress', $body)) {
-            $adressRaw = $body['adress'];
-            $adress = is_string($adressRaw) ? trim($adressRaw) : null;
-            $user->setAdress($adress === '' ? null : $adress);
+        if (array_key_exists('address', $body)) {
+            $addressRaw = $body['address'];
+            $address = is_string($addressRaw) ? trim($addressRaw) : null;
+            $user->setAddress($address === '' ? null : $address);
+        }
+
+        if ($user instanceof B2BCompany || $user instanceof B2BMarket) {
+            foreach (['companyName', 'companyWebsite', 'companyCountry', 'companyMarket'] as $field) {
+                if (array_key_exists($field, $body)) {
+                    $val = is_string($body[$field]) ? trim($body[$field]) : null;
+                    $setter = 'set' . ucfirst($field);
+                    $user->$setter($val === '' ? null : $val);
+                }
+            }
         }
 
         $user->setUpdatedAt(new \DateTimeImmutable());
 
         $entityManager->flush();
+
+        $this->invalidateCache($this->cache);
 
         return $this->json($this->serializeUser($user));
     }
@@ -210,7 +235,7 @@ final class B2CAuthController extends AbstractController
             'firebase_uid' => $customer->getFirebaseUid(),
             'type' => strtolower($accountType),
             'full_name' => $customer instanceof Customer ? $customer->getFullName() : ($customer instanceof B2BCompany || $customer instanceof B2BMarket ? $customer->getFullName() : null),
-            'adress' => $customer->getAdress(),
+            'address' => $customer->getAddress(),
             'is_verified' => $customer instanceof Customer ? $customer->isVerified() : ($customer instanceof B2BCompany || $customer instanceof B2BMarket ? $customer->isVerified() : null),
             'is_active' => $customer->isActive(),
             'joined_at' => $customer instanceof Customer || $customer instanceof B2BCompany || $customer instanceof B2BMarket ? $customer->getJoinedAt()?->format(\DateTimeInterface::ATOM) : null,
@@ -227,9 +252,9 @@ final class B2CAuthController extends AbstractController
         ];
     }
 
-    private function serializeSubscription(?SubscriptionB2C $subscription): ?array
+    private function serializeSubscription(?Subscription $subscription): ?array
     {
-        if (!$subscription instanceof SubscriptionB2C) {
+        if (!$subscription instanceof Subscription) {
             return null;
         }
 

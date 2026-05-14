@@ -1,7 +1,6 @@
 import { cookies } from "next/headers"
 import { NextResponse, type NextRequest } from "next/server"
-
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://127.0.0.1:8000"
+import { BACKEND_URL } from "@/utils/admin/constants"
 
 async function getAdminCookie() {
   const cookieStore = await cookies()
@@ -16,7 +15,7 @@ const getAdminHeaders = (adminSession: string) => ({
   "X-Admin-Id": "1",
 })
 
-export async function GET(request: NextRequest) {
+async function proxy(method: string, request: NextRequest): Promise<NextResponse> {
   const adminSession = await getAdminCookie()
   if (!adminSession) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
@@ -25,55 +24,31 @@ export async function GET(request: NextRequest) {
   const backendUrl = `${BACKEND_URL}/api/b2b/admin/${endpoint}${params ? "?" + params : ""}`
 
   try {
-    const res = await fetch(backendUrl, {
+    const options: RequestInit & { headers: Record<string, string> } = {
+      method,
       headers: getAdminHeaders(adminSession),
       cache: "no-store",
-    })
+    }
+    if (method !== "GET") {
+      options.headers["Content-Type"] = "application/json"
+      options.body = await request.text()
+    }
+    const res = await fetch(backendUrl, options)
     const data = await res.json()
     return NextResponse.json(data, { status: res.status })
   } catch {
     return NextResponse.json({ error: "Backend unavailable" }, { status: 502 })
   }
+}
+
+export async function GET(request: NextRequest) {
+  return proxy("GET", request)
 }
 
 export async function POST(request: NextRequest) {
-  const adminSession = await getAdminCookie()
-  if (!adminSession) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-
-  const endpoint = request.nextUrl.pathname.replace("/api/admin/b2b-workflows/", "")
-  const body = await request.text()
-  const backendUrl = `${BACKEND_URL}/api/b2b/admin/${endpoint}`
-
-  try {
-    const res = await fetch(backendUrl, {
-      method: "POST",
-      headers: { ...getAdminHeaders(adminSession), "Content-Type": "application/json" },
-      body,
-    })
-    const data = await res.json()
-    return NextResponse.json(data, { status: res.status })
-  } catch {
-    return NextResponse.json({ error: "Backend unavailable" }, { status: 502 })
-  }
+  return proxy("POST", request)
 }
 
 export async function PATCH(request: NextRequest) {
-  const adminSession = await getAdminCookie()
-  if (!adminSession) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-
-  const endpoint = request.nextUrl.pathname.replace("/api/admin/b2b-workflows/", "")
-  const body = await request.text()
-  const backendUrl = `${BACKEND_URL}/api/b2b/admin/${endpoint}`
-
-  try {
-    const res = await fetch(backendUrl, {
-      method: "PATCH",
-      headers: { ...getAdminHeaders(adminSession), "Content-Type": "application/json" },
-      body,
-    })
-    const data = await res.json()
-    return NextResponse.json(data, { status: res.status })
-  } catch {
-    return NextResponse.json({ error: "Backend unavailable" }, { status: 502 })
-  }
+  return proxy("PATCH", request)
 }

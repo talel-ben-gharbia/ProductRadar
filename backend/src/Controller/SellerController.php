@@ -7,28 +7,40 @@ use App\Repository\SellerRepository;
 use App\Security\AdminApiGuard;
 use Doctrine\DBAL\Exception\ForeignKeyConstraintViolationException;
 use Doctrine\ORM\EntityManagerInterface;
+use Psr\Cache\CacheItemPoolInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Attribute\Route;
 
 final class SellerController extends AbstractController
 {
+    use CachedResponseTrait;
+
+    private const CACHE_KEY_SELLERS = 'sellers.all';
+
+    public function __construct(
+        #[Autowire(service: 'general.cache')]
+        private readonly CacheItemPoolInterface $cache,
+    ) {
+    }
+
     #[Route('/sellers', name: 'get_sellers', methods: ['GET'])]
     public function getSellers(SellerRepository $sellerRepository): JsonResponse
     {
-        $sellers = $sellerRepository->findBy([], ['name' => 'ASC']);
+        return $this->cachedGet($this->cache, self::CACHE_KEY_SELLERS, static function () use ($sellerRepository): array {
+            $sellers = $sellerRepository->findBy([], ['name' => 'ASC']);
 
-        $data = array_map(
-            static fn ($seller) => [
-                'id' => $seller->getId(),
-                'name' => $seller->getName(),
-                'url' => $seller->getUrl(),
-            ],
-            $sellers,
-        );
-
-        return $this->json($data);
+            return array_map(
+                static fn ($seller) => [
+                    'id' => $seller->getId(),
+                    'name' => $seller->getName(),
+                    'url' => $seller->getUrl(),
+                ],
+                $sellers,
+            );
+        });
     }
 
     #[Route('/sellers', name: 'create_seller', methods: ['POST'])]
@@ -64,6 +76,8 @@ final class SellerController extends AbstractController
 
         $entityManager->persist($seller);
         $entityManager->flush();
+
+        $this->invalidateCache($this->cache);
 
         return $this->json($this->serializeSeller($seller), 201);
     }
@@ -106,6 +120,8 @@ final class SellerController extends AbstractController
         $seller->setUrl($url);
         $entityManager->flush();
 
+        $this->invalidateCache($this->cache);
+
         return $this->json($this->serializeSeller($seller));
     }
 
@@ -135,6 +151,8 @@ final class SellerController extends AbstractController
                 'error' => 'Cannot delete seller while related listings still exist.',
             ], 409);
         }
+
+        $this->invalidateCache($this->cache);
 
         return $this->json(['success' => true]);
     }

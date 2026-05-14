@@ -6,6 +6,8 @@ use App\Repository\AlertRepository;
 use Doctrine\ORM\Mapping as ORM;
 
 #[ORM\Entity(repositoryClass: AlertRepository::class)]
+#[ORM\Index(name: 'idx_alert_product', columns: ['product_id'])]
+#[ORM\Index(name: 'idx_alert_alerter', columns: ['alerter_id'])]
 class Alert
 {
     #[ORM\Id]

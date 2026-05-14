@@ -8,6 +8,8 @@ use Doctrine\ORM\Mapping as ORM;
 #[ORM\Entity(repositoryClass: B2BSponsoredArticleRepository::class)]
 #[ORM\Table(name: 'b2b_sponsored_article', indexes: [
     new ORM\Index(name: 'idx_b2b_sponsored_article_status', columns: ['status']),
+    new ORM\Index(name: 'idx_b2b_sponsored_article_product', columns: ['product_id']),
+    new ORM\Index(name: 'idx_b2b_sponsored_article_company', columns: ['company_id']),
 ])]
 class B2BSponsoredArticle
 {
@@ -19,6 +21,14 @@ class B2BSponsoredArticle
     #[ORM\ManyToOne(targetEntity: B2BAdsRequest::class)]
     #[ORM\JoinColumn(name: 'ads_request_id', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
     private ?B2BAdsRequest $adsRequest = null;
+
+    #[ORM\ManyToOne(targetEntity: Product::class)]
+    #[ORM\JoinColumn(name: 'product_id', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
+    private ?Product $product = null;
+
+    #[ORM\ManyToOne(targetEntity: B2BCompany::class)]
+    #[ORM\JoinColumn(name: 'company_id', referencedColumnName: 'id', nullable: true, onDelete: 'CASCADE')]
+    private ?B2BCompany $company = null;
 
     #[ORM\Column(length: 255)]
     private ?string $title = null;
@@ -36,6 +46,9 @@ class B2BSponsoredArticle
     private ?\DateTimeImmutable $published_at = null;
 
     #[ORM\Column(nullable: true)]
+    private ?\DateTimeImmutable $ends_at = null;
+
+    #[ORM\Column(nullable: true)]
     private ?\DateTimeImmutable $created_at = null;
 
     public function getId(): ?int
@@ -51,6 +64,30 @@ class B2BSponsoredArticle
     public function setAdsRequest(?B2BAdsRequest $adsRequest): static
     {
         $this->adsRequest = $adsRequest;
+
+        return $this;
+    }
+
+    public function getProduct(): ?Product
+    {
+        return $this->product;
+    }
+
+    public function setProduct(?Product $product): static
+    {
+        $this->product = $product;
+
+        return $this;
+    }
+
+    public function getCompany(): ?B2BCompany
+    {
+        return $this->company;
+    }
+
+    public function setCompany(?B2BCompany $company): static
+    {
+        $this->company = $company;
 
         return $this;
     }
@@ -111,6 +148,18 @@ class B2BSponsoredArticle
     public function setPublishedAt(?\DateTimeImmutable $publishedAt): static
     {
         $this->published_at = $publishedAt;
+
+        return $this;
+    }
+
+    public function getEndsAt(): ?\DateTimeImmutable
+    {
+        return $this->ends_at;
+    }
+
+    public function setEndsAt(?\DateTimeImmutable $endsAt): static
+    {
+        $this->ends_at = $endsAt;
 
         return $this;
     }

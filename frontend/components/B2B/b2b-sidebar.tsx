@@ -60,6 +60,7 @@ const VENDOR_NAV: NavItem[] = [
   { href: "/B2B/dashboard/alerts", name: "Alerts", icon: Bell },
   { href: "/B2B/dashboard/reports", name: "Reports", icon: FileText },
   { href: "/B2B/dashboard/ads-requests", name: "Ads Requests", icon: Megaphone },
+  { href: "/B2B/dashboard/sponsored-products", name: "Sponsored Products", icon: TrendingUp },
   { href: "/B2B/dashboard/scraping-requests", name: "Scraping Requests", icon: Search },
   { href: "/B2B/dashboard/settings", name: "Settings", icon: Settings },
 ]
@@ -83,6 +84,8 @@ function B2BSidebar() {
   const { summary, mode, planType, isGold, logout } = useB2B()
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement | null>(null)
+  const notifications = (summary?.notifications ?? []) as Array<Record<string, unknown>>
+  const unreadCount = notifications.filter((n) => !n.is_read).length
 
   const navItems = mode === "market" ? MARKET_NAV : VENDOR_NAV
   const companyName = summary?.user?.company_name ?? "B2B Workspace"
@@ -177,6 +180,11 @@ function B2BSidebar() {
                     <Link href={item.href}>
                       <item.icon className="size-4" />
                       <span>{item.name}</span>
+                      {item.name === "Alerts" && unreadCount > 0 && (
+                        <span className="ml-auto inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold text-white">
+                          {unreadCount > 99 ? "99+" : unreadCount}
+                        </span>
+                      )}
                       {item.gold && !isGold && (
                         <Star className="ml-auto size-3 text-amber-500" />
                       )}

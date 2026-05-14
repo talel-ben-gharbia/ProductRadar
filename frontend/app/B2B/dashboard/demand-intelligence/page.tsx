@@ -14,11 +14,28 @@ const COLORS = ["#6366f1", "#8b5cf6", "#a78bfa", "#c4b5fd", "#818cf8", "#7c3aed"
 type SearchEntry = { query?: string; count?: number; zero_results?: boolean; results_count?: number }
 
 export default function DemandIntelligencePage() {
-  const { summary, isGold } = useB2B()
-  const searchInsights = summary?.search_insights as Record<string, unknown> | undefined
-  const topSearches = ((searchInsights?.top_queries ?? searchInsights?.top_searches ?? []) as SearchEntry[])
-  const zeroResults = ((searchInsights?.zero_result_queries ?? []) as SearchEntry[])
-  const trending = ((searchInsights?.trending ?? []) as SearchEntry[])
+  const { summary, isGold, loading } = useB2B()
+  const metrics = summary?.metrics as Record<string, unknown> | undefined
+  const demandIntel = (summary?.search_insights ?? metrics?.demand_intelligence ?? {}) as Record<string, unknown>
+  const rawTop = (demandIntel?.top_queries ?? demandIntel?.top_searches ?? {}) as Record<string, number>
+  const topSearches: SearchEntry[] = Object.entries(rawTop).map(([query, count]) => ({ query, count }))
+  const rawZero = (demandIntel?.zero_result_queries ?? {}) as Record<string, number>
+  const zeroResults: SearchEntry[] = Object.entries(rawZero).map(([query, count]) => ({ query, count }))
+  const trending = ((demandIntel?.trending ?? []) as SearchEntry[])
+
+  if (loading && !summary) {
+    return (
+      <div className="space-y-6">
+        <div className="h-8 w-48 animate-pulse rounded-lg bg-muted/50" />
+        <div className="h-4 w-72 animate-pulse rounded bg-muted/30" />
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="h-32 animate-pulse rounded-xl bg-muted/40" />
+          ))}
+        </div>
+      </div>
+    )
+  }
 
   if (!isGold) {
     return <B2BPlanGate featureName="Demand Intelligence" />

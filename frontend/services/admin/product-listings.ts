@@ -1,4 +1,5 @@
 import { BACKEND_URL } from "@/utils/admin/constants"
+import { cachedFetch } from "@/lib/fetch-with-cache"
 import type { ProductListing } from "@/utils/types"
 
 async function parseJson(response: Response): Promise<unknown> {
@@ -27,15 +28,13 @@ async function fetchProductListingsFromApi(
         : query
           ? `/api/product-listings?${query}`
           : "/api/product-listings"
-    const response = await fetch(endpoint, {
-      cache: "no-store",
+
+    const cacheKey = `listings:p${productId ?? 0}:s${sellerId ?? 0}`
+
+    const productListings = await cachedFetch<ProductListing[]>(endpoint, {
+      cacheKey,
+      cacheTtl: 300,
     })
-
-    if (!response.ok) {
-      throw new Error(`Failed to fetch product listings: ${response.status}`)
-    }
-
-    const productListings = (await response.json()) as ProductListing[]
     return productListings
   } catch (error) {
     const message =

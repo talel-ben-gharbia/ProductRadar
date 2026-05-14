@@ -37,11 +37,11 @@ class PartnerRequestRepository extends ServiceEntityRepository
         }
 
         /** @var PartnerRequest[] $items */
-        $items = $qb->getQuery()->getResult();
+        $items = $qb->getQuery()->setCacheable(true)->setLifetime(300)->getResult();
 
         return [
             'items' => $items,
-            'total' => (int) $countQb->getQuery()->getSingleScalarResult(),
+            'total' => (int) $countQb->getQuery()->setCacheable(true)->setLifetime(300)->getSingleScalarResult(),
         ];
     }
 }

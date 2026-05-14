@@ -1,5 +1,6 @@
 "use client"
 
+import { getAuth, signOut } from "firebase/auth"
 import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from "react"
 
 export type B2BUserInfo = {
@@ -48,7 +49,7 @@ type B2BContextValue = {
   isGold: boolean
   isSilver: boolean
   refresh: () => Promise<void>
-  logout: () => void
+  logout: () => Promise<void>
 }
 
 const B2BContext = createContext<B2BContextValue>({
@@ -61,7 +62,7 @@ const B2BContext = createContext<B2BContextValue>({
   isGold: false,
   isSilver: false,
   refresh: async () => {},
-  logout: () => {},
+  logout: async () => {},
 })
 
 export function useB2B() {
@@ -83,7 +84,7 @@ export function B2BProvider({ children, initialSummary, firebaseUid }: {
   const planType = (summary?.subscription?.plan_type as string | null) ?? null
   // Handle both 'B2B_GOLD' and 'GOLD' plan type formats
   const isGold = planType != null && planType.toUpperCase().includes("GOLD")
-  const isSilver = planType != null && (planType.toUpperCase().includes("SILVER") || isGold)
+  const isSilver = planType != null && planType.toUpperCase().includes("SILVER")
 
   const refresh = useCallback(async () => {
     if (!firebaseUid) return
@@ -104,7 +105,16 @@ export function B2BProvider({ children, initialSummary, firebaseUid }: {
     }
   }, [firebaseUid])
 
-  const logout = useCallback(() => {
+  // Auto-retry on mount if server-side fetch failed (summary is null)
+  useEffect(() => {
+    if (firebaseUid && !initialSummary) {
+      refresh()
+    }
+  }, [firebaseUid, initialSummary, refresh])
+
+  const logout = useCallback(async () => {
+    setSummary(null)
+    try { await signOut(getAuth()) } catch { /* firebase signOut is best-effort */ }
     document.cookie = "b2c_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT"
     window.location.href = "/B2B"
   }, [])

@@ -28,9 +28,6 @@ class ProductListing
     #[ORM\Column(nullable: true)]
     private ?bool $availability = null;
 
-    #[ORM\Column(nullable: true)]
-    private ?float $trust_score = null;
-
     #[ORM\Column]
     private ?\DateTimeImmutable $created_at = null;
 
@@ -46,12 +43,6 @@ class ProductListing
     #[ORM\ManyToOne(inversedBy: 'productlisting')]
     #[ORM\JoinColumn(nullable: false)]
     private ?Seller $seller = null;
-
-    #[ORM\Column(type: 'json', nullable: true)]
-    private ?array $trust_score_breakdown = null;
-
-    #[ORM\Column(nullable: true)]
-    private ?\DateTimeImmutable $trust_score_updated_at = null;
 
     #[ORM\Column(length: 255)]
     private ?string $ref = null;
@@ -73,6 +64,12 @@ class ProductListing
      */
     #[ORM\OneToMany(targetEntity: Notification::class, mappedBy: 'product_listing')]
     private Collection $notifications;
+
+    private ?float $currentTrustScore = null;
+
+    private ?array $currentTrustScoreBreakdown = null;
+
+    private ?\DateTimeImmutable $currentTrustScoreUpdatedAt = null;
 
     public function __construct()
     {
@@ -130,18 +127,6 @@ class ProductListing
     public function setAvailability(?bool $availability): static
     {
         $this->availability = $availability;
-
-        return $this;
-    }
-
-    public function getTrustScore(): ?float
-    {
-        return $this->trust_score;
-    }
-
-    public function setTrustScore(?float $trust_score): static
-    {
-        $this->trust_score = $trust_score;
 
         return $this;
     }
@@ -216,18 +201,6 @@ class ProductListing
     public function setRef(string $ref): static
     {
         $this->ref = $ref;
-
-        return $this;
-    }
-
-    public function getTrustScoreBreakdown(): ?array
-    {
-        return $this->trust_score_breakdown;
-    }
-
-    public function setTrustScoreBreakdown(?array $trustScoreBreakdown): static
-    {
-        $this->trust_score_breakdown = $trustScoreBreakdown;
 
         return $this;
     }
@@ -322,18 +295,6 @@ class ProductListing
         return $this;
     }
 
-    public function getTrustScoreUpdatedAt(): ?\DateTimeImmutable
-    {
-        return $this->trust_score_updated_at;
-    }
-
-    public function setTrustScoreUpdatedAt(?\DateTimeImmutable $trustScoreUpdatedAt): static
-    {
-        $this->trust_score_updated_at = $trustScoreUpdatedAt;
-
-        return $this;
-    }
-
     /**
      * Get count of price changes in the last 90 days.
      * Used by TrustScoreExplainer to measure price stability.
@@ -352,10 +313,43 @@ class ProductListing
      * For now returns a calculated average. Can be extended to store seller ratings.
      * Used by TrustScoreExplainer to measure seller reliability.
      */
+    public function getTrustScore(): ?float
+    {
+        return $this->currentTrustScore;
+    }
+
+    public function setTrustScore(?float $trustScore): static
+    {
+        $this->currentTrustScore = $trustScore;
+        return $this;
+    }
+
+    public function getTrustScoreBreakdown(): ?array
+    {
+        return $this->currentTrustScoreBreakdown;
+    }
+
+    public function setTrustScoreBreakdown(?array $breakdown): static
+    {
+        $this->currentTrustScoreBreakdown = $breakdown;
+        return $this;
+    }
+
+    public function getTrustScoreUpdatedAt(): ?\DateTimeImmutable
+    {
+        return $this->currentTrustScoreUpdatedAt;
+    }
+
+    public function setTrustScoreUpdatedAt(?\DateTimeImmutable $updatedAt): static
+    {
+        $this->currentTrustScoreUpdatedAt = $updatedAt;
+        return $this;
+    }
+
     public function getSellerTrust(): ?float
     {
-        if ($this->trust_score !== null) {
-            return round(max(0.0, min(5.0, $this->trust_score / 20)), 1);
+        if ($this->currentTrustScore !== null) {
+            return round(max(0.0, min(5.0, $this->currentTrustScore / 20)), 1);
         }
 
         if (!$this->seller) {

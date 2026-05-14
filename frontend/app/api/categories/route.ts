@@ -2,6 +2,7 @@ import { cookies } from "next/headers"
 import { NextRequest, NextResponse } from "next/server"
 
 import { verifySessionToken, COOKIE_NAME } from "@/lib/admin-session"
+import { cachedFetch } from "@/lib/fetch-with-cache"
 import { BACKEND_URL } from "@/utils/admin/constants"
 
 async function isSuperAdmin(): Promise<boolean> {
@@ -18,18 +19,10 @@ async function isSuperAdmin(): Promise<boolean> {
 
 export async function GET() {
   try {
-    const response = await fetch(`${BACKEND_URL}/categories`, {
-      cache: "no-store",
+    const data = await cachedFetch<unknown>(`${BACKEND_URL}/categories`, {
+      cacheKey: "categories:all",
+      cacheTtl: 300,
     })
-
-    if (!response.ok) {
-      return NextResponse.json(
-        { message: `Failed to fetch categories: ${response.status}` },
-        { status: response.status }
-      )
-    }
-
-    const data = await response.json()
     return NextResponse.json(data)
   } catch {
     return NextResponse.json(

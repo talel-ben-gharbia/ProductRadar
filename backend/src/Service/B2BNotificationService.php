@@ -7,8 +7,9 @@ use App\Entity\B2BAdsRequest;
 use App\Entity\B2BCompany;
 use App\Entity\B2BMarket;
 use App\Entity\B2BScrapingRequest;
-use App\Entity\B2BSubscription;
+use App\Entity\B2BSponsoredArticle;
 use App\Entity\Notification;
+use App\Entity\Subscription;
 use App\Entity\ProductListing;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
@@ -59,7 +60,7 @@ final class B2BNotificationService
         $this->notifyCompany(
             $company,
             'COMPETITOR_UNDERCUT',
-            sprintf('Competitor "%s" is now cheaper than you for product "%s" (Price: %s)', $competitorName, $listing->getProductName(), number_format($competitorPrice, 2)),
+            sprintf('Competitor "%s" is now cheaper than you for product "%s" (Price: %s)', $competitorName, $listing->getProduct()?->getName() ?? 'Unknown', number_format($competitorPrice, 2)),
             'HIGH',
             $listing
         );
@@ -85,11 +86,102 @@ final class B2BNotificationService
         );
     }
 
+    public function alertTrustDrop(B2BCompany $company, ProductListing $listing, float $oldScore, float $newScore, array $breakdownChanges): void
+    {
+        $productName = $listing->getProduct()?->getName() ?? 'Unknown';
+        $delta = $oldScore - $newScore;
+        $causes = [];
+        $labelMap = [
+            'price_stability' => 'Price stability',
+            'stock_reliability' => 'Stock reliability',
+            'anomaly_penalty' => 'Anomaly penalty',
+            'data_freshness' => 'Data freshness',
+            'seller_reliability' => 'Seller reliability',
+        ];
+        foreach ($breakdownChanges as $key => $change) {
+            if (is_numeric($change) && (float) $change < 0) {
+                $label = $labelMap[$key] ?? $key;
+                $causes[] = sprintf('%s (%.0fpts)', $label, abs((float) $change));
+            }
+        }
+        $causeStr = !empty($causes) ? ' Main causes: ' . implode(', ', $causes) : '';
+
+        $this->notifyCompany(
+            $company,
+            'COMPETITOR_TRUST_DROP',
+            sprintf('Trust score for "%s" dropped from %.0f to %.0f (-%.0f).%s', $productName, $oldScore, $newScore, $delta, $causeStr),
+            'HIGH',
+            $listing
+        );
+    }
+
+    public function notifySponsorshipApproved(B2BSponsoredArticle $article, Admin $admin): void
+    {
+        $company = $article->getCompany();
+        if (!$company) return;
+
+        $productName = $article->getProduct()?->getName() ?? $article->getTitle() ?? 'Unknown';
+        $endsAt = $article->getEndsAt()?->format('F j, Y') ?? 'N/A';
+        $message = sprintf('Your sponsorship for "%s" has been approved by admin %s and is now live until %s.', $productName, (string) $admin->getEmail(), $endsAt);
+        $this->notifyCompany($company, 'SPONSORSHIP_APPROVED', $message, 'SUCCESS');
+
+        $this->sendEmail(
+            $company,
+            sprintf('Your Sponsorship for "%s" is Live!', $productName),
+            sprintf(
+                "Hello %s,\n\nGreat news! Your sponsorship request for \"%s\" has been approved.\n\nYour product will appear as a sponsored item on our marketplace until %s.\n\nTrack your sponsorship performance from your dashboard.\n\nBest regards,\nProductRadar Team",
+                $company->getCompanyName() ?? 'Valued Partner',
+                $productName,
+                $endsAt,
+            )
+        );
+    }
+
+    public function notifySponsorshipRejected(B2BSponsoredArticle $article): void
+    {
+        $company = $article->getCompany();
+        if (!$company) return;
+
+        $productName = $article->getProduct()?->getName() ?? $article->getTitle() ?? 'Unknown';
+        $message = sprintf('Your sponsorship request for "%s" has been declined.', $productName);
+        $this->notifyCompany($company, 'SPONSORSHIP_REJECTED', $message);
+
+        $this->sendEmail(
+            $company,
+            sprintf('Update on Your Sponsorship Request for "%s"', $productName),
+            sprintf(
+                "Hello %s,\n\nUnfortunately, your sponsorship request for \"%s\" was not approved at this time.\n\nIf you have any questions, please contact our support team.\n\nBest regards,\nProductRadar Team",
+                $company->getCompanyName() ?? 'Valued Partner',
+                $productName,
+            )
+        );
+    }
+
+    public function notifySponsorshipExpired(B2BSponsoredArticle $article): void
+    {
+        $company = $article->getCompany();
+        if (!$company) return;
+
+        $productName = $article->getProduct()?->getName() ?? $article->getTitle() ?? 'Unknown';
+        $message = sprintf('Your sponsorship for "%s" has ended. Submit a new request to continue promoting your product.', $productName);
+        $this->notifyCompany($company, 'SPONSORSHIP_EXPIRED', $message, 'HIGH');
+
+        $this->sendEmail(
+            $company,
+            sprintf('Your Sponsorship for "%s" Has Ended', $productName),
+            sprintf(
+                "Hello %s,\n\nYour sponsorship for \"%s\" has ended.\n\nTo continue promoting your product on our marketplace, submit a new sponsorship request from your dashboard.\n\nBest regards,\nProductRadar Team",
+                $company->getCompanyName() ?? 'Valued Partner',
+                $productName,
+            )
+        );
+    }
+
     // ─────────────────────────────────────────────
     //  Email helpers
     // ─────────────────────────────────────────────
 
-    public function notifySubscriptionApproved(B2BSubscription $subscription, Admin $admin): void
+    public function notifySubscriptionApproved(Subscription $subscription, Admin $admin): void
     {
         $owner = $this->resolveOwner($subscription);
         if (!$owner) return;
@@ -111,7 +203,7 @@ final class B2BNotificationService
         );
     }
 
-    public function notifySubscriptionRejected(B2BSubscription $subscription): void
+    public function notifySubscriptionRejected(Subscription $subscription): void
     {
         $owner = $this->resolveOwner($subscription);
         if (!$owner) return;
@@ -220,7 +312,7 @@ final class B2BNotificationService
         $this->sendEmail($owner, 'Update on Your Scraping Request', $emailBody);
     }
 
-    public function notifySubscriptionRenewed(B2BSubscription $subscription): void
+    public function notifySubscriptionRenewed(Subscription $subscription): void
     {
         $owner = $this->resolveOwner($subscription);
         if (!$owner) return;
@@ -283,7 +375,7 @@ final class B2BNotificationService
         }
     }
 
-    public function notifySubscriptionExpiryWarning(B2BSubscription $subscription, int $daysLeft): void
+    public function notifySubscriptionExpiryWarning(Subscription $subscription, int $daysLeft): void
     {
         $owner = $this->resolveOwner($subscription);
         if (!$owner) return;
@@ -310,11 +402,25 @@ final class B2BNotificationService
     //  Internal helpers
     // ─────────────────────────────────────────────
 
-    private function resolveOwner(B2BSubscription|B2BScrapingRequest $entity): B2BCompany|B2BMarket|null
+    private function resolveOwner(Subscription|B2BScrapingRequest $entity): B2BCompany|B2BMarket|null
     {
-        if ($entity->getCompany() !== null) {
-            return $entity->getCompany();
+        if ($entity instanceof B2BScrapingRequest) {
+            if ($entity->getCompany() !== null) {
+                return $entity->getCompany();
+            }
+            return $entity->getMarket();
         }
-        return $entity->getMarket();
+
+        $ownerType = $entity->getOwnerType();
+        $ownerId = $entity->getOwnerId();
+
+        if ($ownerType === 'COMPANY' && $ownerId !== null) {
+            return $this->entityManager->find(B2BCompany::class, $ownerId);
+        }
+        if ($ownerType === 'MARKET' && $ownerId !== null) {
+            return $this->entityManager->find(B2BMarket::class, $ownerId);
+        }
+
+        return null;
     }
 }

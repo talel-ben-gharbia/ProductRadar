@@ -9,7 +9,9 @@ use App\Security\AdminApiGuard;
 use App\Service\ProductMergeService;
 use App\Service\ProductSplitService;
 use Doctrine\ORM\EntityManagerInterface;
+use Psr\Cache\CacheItemPoolInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Attribute\Route;
@@ -17,6 +19,14 @@ use Symfony\Component\Routing\Attribute\Route;
 #[Route('/admin/api/quality')]
 final class ProductQualityController extends AbstractController
 {
+    public function __construct(
+        #[Autowire(service: 'products.cache')]
+        private readonly CacheItemPoolInterface $productsCache,
+        #[Autowire(service: 'listings.cache')]
+        private readonly CacheItemPoolInterface $listingsCache,
+    ) {
+    }
+
     #[Route('/products/merge', name: 'admin_quality_products_merge', methods: ['POST'])]
     public function mergeProducts(
         Request $request,
@@ -99,6 +109,9 @@ final class ProductQualityController extends AbstractController
             ], 500);
         }
 
+        $this->productsCache->clear();
+        $this->listingsCache->clear();
+
         return $this->json([
             'primary_product_id' => $primaryId,
             'listing_conflict_strategy' => $listingConflictStrategy,
@@ -156,6 +169,9 @@ final class ProductQualityController extends AbstractController
         } catch (\InvalidArgumentException $exception) {
             return $this->json(['error' => $exception->getMessage()], 422);
         }
+
+        $this->productsCache->clear();
+        $this->listingsCache->clear();
 
         return $this->json([
             'message' => 'Listing split successfully.',

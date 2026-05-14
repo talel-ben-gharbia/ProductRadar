@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react"
 import { AlertCircle, CheckCircle2, Clock, Plus, Search, XCircle } from "lucide-react"
 
 import { useB2B } from "@/components/B2B/b2b-context"
+import { QuotaBar, getMonthlyLimit, getCurrentUsage } from "@/components/B2B/b2b-quota-bar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -11,41 +12,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 
-type ScrapingRequest = { id?: number; owner_type?: string; target_type?: string; target_url?: string; status?: string; notes?: string; is_duplicate?: boolean; duplicate_reason?: string; created_at?: string }
-
-function getMonthlyLimit(planType: string | null, type: "ads" | "scraping" | "reports"): number {
-  const isGold = planType != null && planType.toUpperCase().includes("GOLD")
-  const isSilver = planType != null && planType.toUpperCase().includes("SILVER")
-  if (isGold) return type === "ads" ? 50 : type === "scraping" ? 200 : 20
-  if (isSilver) return type === "ads" ? 20 : type === "scraping" ? 50 : 5
-  return type === "ads" ? 5 : type === "scraping" ? 10 : 2
-}
-
-function getCurrentUsage(usageJson: Record<string, unknown> | null | undefined, type: string): number {
-  if (!usageJson) return 0
-  const currentMonth = new Date().toISOString().slice(0, 7)
-  const monthData = usageJson[currentMonth] as Record<string, unknown> | undefined
-  if (!monthData) return 0
-  return typeof monthData[type] === "number" ? monthData[type] : 0
-}
-
-function QuotaBar({ usage, limit, label }: { usage: number; limit: number; label: string }) {
-  const pct = limit > 0 ? Math.min(100, Math.round((usage / limit) * 100)) : 0
-  const color = pct >= 90 ? "bg-red-500" : pct >= 70 ? "bg-amber-500" : "bg-emerald-500"
-  return (
-    <div className="rounded-xl border border-border/50 bg-muted/20 p-4">
-      <div className="mb-1.5 flex items-center justify-between text-xs">
-        <span className="font-medium text-muted-foreground">{label}</span>
-        <span className={`font-bold ${pct >= 90 ? "text-red-600" : pct >= 70 ? "text-amber-600" : "text-emerald-600"}`}>
-          {usage} / {limit} used
-        </span>
-      </div>
-      <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-        <div className={`h-full rounded-full transition-all duration-500 ${color}`} style={{ width: `${pct}%` }} />
-      </div>
-    </div>
-  )
-}
+import type { B2BScrapingRequest as ScrapingRequest } from "@/types/b2b"
 
 export default function ScrapingRequestsPage() {
   const { mode, planType, summary } = useB2B()
@@ -57,14 +24,17 @@ export default function ScrapingRequestsPage() {
   const [showForm, setShowForm] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [warning, setWarning] = useState<string | null>(null)
+  const [similarUrls, setSimilarUrls] = useState<Array<{ url?: string; product_name?: string; similarity_score?: number }>>([])
   const [form, setForm] = useState({ targetUrl: "", targetType: "PRODUCT", notes: "" })
 
   const fetchRequests = useCallback(async () => {
     setLoading(true)
+    setError(null)
     try {
       const res = await fetch(`/api/b2b/workspace?endpoint=scraping-requests`)
-      if (res.ok) { const data = await res.json(); setRequests(data.items ?? []) }
-    } catch { /* ignore */ }
+      if (res.ok) { const data = await res.json(); setRequests(data.items ?? []) } else { setError("Failed to load scraping requests") }
+    } catch { setError("Failed to load scraping requests") }
     setLoading(false)
   }, [])
 
@@ -73,6 +43,8 @@ export default function ScrapingRequestsPage() {
   const submitRequest = async () => {
     setSubmitting(true)
     setError(null)
+    setWarning(null)
+    setSimilarUrls([])
     try {
       const res = await fetch(`/api/b2b/workspace?endpoint=scraping-requests`, {
         method: "POST",
@@ -81,8 +53,13 @@ export default function ScrapingRequestsPage() {
       })
       const data = await res.json()
       if (res.ok) {
-        setShowForm(false)
-        setForm({ targetUrl: "", targetType: "PRODUCT", notes: "" })
+        if (data.warning) {
+          setWarning(data.warning)
+          setSimilarUrls(data.similar_urls ?? [])
+        } else {
+          setShowForm(false)
+          setForm({ targetUrl: "", targetType: "PRODUCT", notes: "" })
+        }
         fetchRequests()
         if (data.is_duplicate) setError(`Duplicate detected: ${data.duplicate_reason}`)
       } else {
@@ -122,6 +99,34 @@ export default function ScrapingRequestsPage() {
           New Request
         </Button>
       </div>
+
+      {warning && (
+        <Card className="border-amber-300 bg-amber-50/80 dark:border-amber-700 dark:bg-amber-950/30">
+          <CardContent className="p-4">
+            <div className="flex items-start gap-2">
+              <AlertCircle className="mt-0.5 size-4 shrink-0 text-amber-600" />
+              <div className="text-sm text-amber-800 dark:text-amber-300">
+                <p className="font-medium">{warning}</p>
+                {similarUrls.length > 0 && (
+                  <ul className="mt-2 space-y-1.5">
+                    {similarUrls.map((u, i) => (
+                      <li key={i} className="flex items-center gap-2 text-xs">
+                        <span className="rounded bg-amber-200/50 px-1.5 py-0.5 font-mono text-[10px] dark:bg-amber-800/40">
+                          {u.similarity_score != null ? `${(u.similarity_score * 100).toFixed(0)}%` : "?"}
+                        </span>
+                        <span className="truncate max-w-[400px]">{u.url ?? u.product_name ?? "Unknown"}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              <button onClick={() => { setWarning(null); setSimilarUrls([]) }} className="ml-auto shrink-0 text-amber-500 hover:text-amber-700" aria-label="Dismiss">
+                <XCircle className="size-4" />
+              </button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {error && (
         <Card className="border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/20">
@@ -169,7 +174,7 @@ export default function ScrapingRequestsPage() {
       <div className="space-y-3">
         {loading ? (
           Array.from({ length: 3 }).map((_, i) => <Card key={i} className="border-border/50"><CardContent className="p-4"><div className="h-16 animate-pulse rounded bg-muted" /></CardContent></Card>)
-        ) : requests.length === 0 ? (
+        ) : requests.length === 0 && !error ? (
           <Card className="border-border/50">
             <CardContent className="flex flex-col items-center gap-3 py-16">
               <Search className="size-10 text-muted-foreground/30" />

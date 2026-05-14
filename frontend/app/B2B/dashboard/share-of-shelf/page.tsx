@@ -12,7 +12,7 @@ const COLORS = ["#6366f1", "#8b5cf6", "#a78bfa", "#c4b5fd", "#818cf8", "#7c3aed"
 type ShelfItem = { category?: string; category_id?: number; brand_products?: number; total_products?: number; share_of_shelf?: number }
 
 export default function ShareOfShelfPage() {
-  const { summary } = useB2B()
+  const { summary, loading } = useB2B()
   const metrics = summary?.metrics as Record<string, unknown> | undefined
   const data = ((metrics?.share_of_shelf ?? []) as ShelfItem[])
 
@@ -24,7 +24,21 @@ export default function ShareOfShelfPage() {
   }))
 
   const avgShare = data.length > 0 ? data.reduce((s, d) => s + Number(d.share_of_shelf ?? 0), 0) / data.length : 0
-  const topCategory = data.sort((a, b) => Number(b.share_of_shelf ?? 0) - Number(a.share_of_shelf ?? 0))[0]
+  const topCategory = [...data].sort((a, b) => Number(b.share_of_shelf ?? 0) - Number(a.share_of_shelf ?? 0))[0]
+
+  if (loading && !summary) {
+    return (
+      <div className="space-y-6">
+        <div className="h-8 w-48 animate-pulse rounded-lg bg-muted/50" />
+        <div className="h-4 w-72 animate-pulse rounded bg-muted/30" />
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="h-32 animate-pulse rounded-xl bg-muted/40" />
+          ))}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">

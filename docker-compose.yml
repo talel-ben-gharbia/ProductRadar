@@ -17,6 +17,19 @@ services:
       retries: 10
       start_period: 10s
 
+  redis:
+    image: redis:7-alpine
+    container_name: productrdar-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
   backend:
     build:
       context: ./backend
@@ -26,8 +39,12 @@ services:
       APP_ENV: dev
       APP_SECRET: 1bfea173865bc97ebf26ffdf0bae218b
       DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:0000@db:5432/productRadar?serverVersion=18&charset=utf8}
+      REDIS_URL: redis://redis:6379
     ports:
       - "8001:8000"
+    depends_on:
+      redis:
+        condition: service_healthy
     command: >
       php -S 0.0.0.0:8000 -t public
 
@@ -39,6 +56,7 @@ services:
     environment:
       NEXT_PUBLIC_BACKEND_URL: http://localhost:8001
       BACKEND_INTERNAL_URL: http://backend:8000
+      REDIS_URL: redis://redis:6379
       ADMIN_SESSION_SECRET: dev-session-secret-change-in-production
       B2C_SESSION_SECRET: dev-b2c-session-secret-change-in-production
     ports:
@@ -49,3 +67,4 @@ services:
 
 volumes:
   pgdata:
+  redisdata:

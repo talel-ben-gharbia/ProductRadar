@@ -51,6 +51,8 @@ export type ScrapingWebhookPayload = {
   executed_at?: string | null
 }
 
+import { cachedFetch } from "@/lib/fetch-with-cache"
+
 function buildQuery(params: Record<string, string | number | undefined>): string {
   const searchParams = new URLSearchParams()
   for (const [key, value] of Object.entries(params)) {
@@ -68,26 +70,18 @@ async function parseJson(response: Response): Promise<unknown> {
 
 export async function getScrapingLogs(limit = 50): Promise<ScrapingLogsResponse> {
   const query = buildQuery({ limit })
-  const response = await fetch(`/api/admin/scraping-logs${query}`, { cache: 'no-store' })
-
-  const data = (await parseJson(response)) as { error?: string }
-  if (!response.ok) {
-    throw new Error(data.error || 'Failed to fetch scraping logs.')
-  }
-
-  return data as ScrapingLogsResponse
+  return cachedFetch<ScrapingLogsResponse>(`/api/admin/scraping-logs${query}`, {
+    cacheKey: `scraping_logs:list:l${limit}`,
+    cacheTtl: 300,
+  })
 }
 
 export async function getRecentScrapingLogs(limit = 5): Promise<ScrapingLogsResponse> {
   const query = buildQuery({ limit })
-  const response = await fetch(`/api/admin/scraping-logs/recent${query}`, { cache: 'no-store' })
-
-  const data = (await parseJson(response)) as { error?: string }
-  if (!response.ok) {
-    throw new Error(data.error || 'Failed to fetch recent scraping logs.')
-  }
-
-  return data as ScrapingLogsResponse
+  return cachedFetch<ScrapingLogsResponse>(`/api/admin/scraping-logs/recent${query}`, {
+    cacheKey: `scraping_logs:recent:l${limit}`,
+    cacheTtl: 300,
+  })
 }
 
 export async function getFilteredScrapingLogs(
@@ -101,30 +95,19 @@ export async function getFilteredScrapingLogs(
     days: filters.days,
   })
 
-  const response = await fetch(`/api/admin/scraping-logs/filtered${query}`, {
-    cache: 'no-store',
+  const cacheKey = `scraping_logs:filtered:${JSON.stringify(filters)}`
+
+  return cachedFetch<ScrapingLogsResponse>(`/api/admin/scraping-logs/filtered${query}`, {
+    cacheKey,
+    cacheTtl: 300,
   })
-
-  const data = (await parseJson(response)) as { error?: string }
-  if (!response.ok) {
-    throw new Error(data.error || 'Failed to fetch filtered scraping logs.')
-  }
-
-  return data as ScrapingLogsResponse
 }
 
 export async function getSourceHealth(sourceName: string): Promise<SourceHealth> {
-  const response = await fetch(
+  return cachedFetch<SourceHealth>(
     `/api/admin/scraping-logs/source/${encodeURIComponent(sourceName)}/health`,
-    { cache: 'no-store' },
+    { cacheKey: `scraping_logs:health:${sourceName}`, cacheTtl: 300 },
   )
-
-  const data = (await parseJson(response)) as { error?: string }
-  if (!response.ok) {
-    throw new Error(data.error || 'Failed to fetch source health.')
-  }
-
-  return data as SourceHealth
 }
 
 export async function downloadScrapingLogsCsv(): Promise<void> {

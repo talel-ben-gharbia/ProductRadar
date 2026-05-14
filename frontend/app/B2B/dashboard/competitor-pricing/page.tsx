@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
 import { ArrowDownRight, ArrowUpRight, BookmarkCheck, BookmarkPlus, Loader2, TrendingUp } from "lucide-react"
 
@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 
+import B2BErrorState from "@/components/B2B/b2b-error-state"
 import B2BPlanGate from "@/components/B2B/b2b-plan-gate"
 
 type CompetitorRow = {
@@ -33,27 +34,32 @@ export default function CompetitorPricingPage() {
   const [trackingLoading, setTrackingLoading] = useState<Record<number, boolean>>({})
   const [fetchingWatchlist, setFetchingWatchlist] = useState(true)
   const [trackError, setTrackError] = useState<string | null>(null)
+  const [watchlistError, setWatchlistError] = useState<string | null>(null)
+  const [untrackError, setUntrackError] = useState<string | null>(null)
+
+  const loadWatchlist = useCallback(async () => {
+    setFetchingWatchlist(true)
+    setWatchlistError(null)
+    try {
+      const res = await fetch("/api/b2b/workspace?endpoint=watchlist")
+      if (res.ok) {
+        const json = await res.json()
+        const map: Record<number, number> = {}
+        for (const item of json.items ?? []) {
+          if (item.product_id) map[item.product_id] = item.id
+        }
+        setTrackedProducts(map)
+      }
+    } catch {
+      setWatchlistError("Failed to load watchlist. Please try again.")
+    } finally {
+      setFetchingWatchlist(false)
+    }
+  }, [])
 
   useEffect(() => {
-    const fetchWatchlist = async () => {
-      setFetchingWatchlist(true)
-      try {
-        const res = await fetch("/api/b2b/workspace?endpoint=watchlist")
-        if (res.ok) {
-          const json = await res.json()
-          const map: Record<number, number> = {}
-          for (const item of json.items ?? []) {
-            if (item.product_id) map[item.product_id] = item.id
-          }
-          setTrackedProducts(map)
-        }
-      } catch {
-      } finally {
-        setFetchingWatchlist(false)
-      }
-    }
-    fetchWatchlist()
-  }, [])
+    loadWatchlist()
+  }, [loadWatchlist])
 
   const handleTrack = async (productId: number) => {
     setTrackError(null)
@@ -81,6 +87,7 @@ export default function CompetitorPricingPage() {
 
   const handleUntrack = async (productId: number, watchlistId: number) => {
     setTrackError(null)
+    setUntrackError(null)
     setTrackingLoading((prev) => ({ ...prev, [productId]: true }))
     try {
       const res = await fetch(`/api/b2b/workspace?endpoint=watchlist/${watchlistId}`, {
@@ -95,6 +102,7 @@ export default function CompetitorPricingPage() {
         refresh()
       }
     } catch {
+      setUntrackError("Failed to untrack product. Please try again.")
     } finally {
       setTrackingLoading((prev) => ({ ...prev, [productId]: false }))
     }
@@ -158,6 +166,9 @@ export default function CompetitorPricingPage() {
         )}
       </section>
 
+      {watchlistError && (
+        <B2BErrorState message={watchlistError} onRetry={() => { setWatchlistError(null); loadWatchlist() }} />
+      )}
       {!showContent && !fetchingWatchlist && (
         <Card className="border-border/50 shadow-sm">
           <CardContent className="flex flex-col items-center justify-center py-24">
@@ -184,6 +195,9 @@ export default function CompetitorPricingPage() {
         </Card>
       )}
 
+      {untrackError && (
+        <B2BErrorState message={untrackError} onRetry={() => setUntrackError(null)} />
+      )}
       {showContent && (
         <>
           <Card className="border-border/50 shadow-sm">

@@ -2,48 +2,78 @@
 
 namespace App\Controller;
 
+use App\Entity\Subscription;
 use App\Entity\User;
-use App\Repository\ProductListingRepository;
 use App\Repository\PriceHistoryRepository;
+use App\Repository\ProductListingRepository;
 use App\Repository\UserRepository;
+use App\Security\AdminApiGuard;
 use App\Service\BestTimeToBuyApiClient;
+use Psr\Cache\CacheItemPoolInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Attribute\Route;
 
 final class PriceHistoryController extends AbstractController
 {
+    use CachedResponseTrait;
+
+    private const CACHE_KEY_HISTORY_PREFIX = 'price_history.';
+    private const CACHE_KEY_BTTB_PREFIX = 'best_time_to_buy.';
+
+    public function __construct(
+        #[Autowire(service: 'general.cache')]
+        private readonly CacheItemPoolInterface $cache,
+    ) {
+    }
+
     #[Route('/price-history', name: 'get_price_history', methods: ['GET'])]
-    public function getPriceHistory(Request $request, PriceHistoryRepository $priceHistoryRepository): JsonResponse
+    public function getPriceHistory(Request $request, PriceHistoryRepository $priceHistoryRepository, UserRepository $userRepository, AdminApiGuard $adminApiGuard): JsonResponse
     {
+        $firebaseUid = trim((string) $request->headers->get('X-Firebase-Uid', ''));
+        if ($firebaseUid === '') {
+            $adminAuth = $adminApiGuard->assertAuthorized($request);
+            if ($adminAuth !== null) {
+                return $this->json(['error' => 'Authentication required.'], 401);
+            }
+        } else {
+            $user = $userRepository->findOneBy(['firebase_uid' => $firebaseUid]);
+            if (!$user instanceof User) {
+                return $this->json(['error' => 'User not found.'], 401);
+            }
+        }
+
         $productId = $request->query->getInt('productId', 0);
         $listingId = $request->query->getInt('listingId', 0);
 
-        $rows = $priceHistoryRepository->findHistoryRows(
-            $productId > 0 ? $productId : null,
-            $listingId > 0 ? $listingId : null,
-        );
+        $cacheKey = self::CACHE_KEY_HISTORY_PREFIX . "p{$productId}l{$listingId}";
 
-        $data = array_map(static function (array $row): array {
-            $recordedAt = $row['recordedAt'] ?? null;
-            $sellerFromHistory = $row['sellerFromHistory'] ?? null;
-            $sellerFromListing = $row['sellerFromListing'] ?? null;
-            $sellerFromListingName = $row['sellerFromListingName'] ?? null;
+        return $this->cachedGet($this->cache, $cacheKey, static function () use ($productId, $listingId, $priceHistoryRepository): array {
+            $rows = $priceHistoryRepository->findHistoryRows(
+                $productId > 0 ? $productId : null,
+                $listingId > 0 ? $listingId : null,
+            );
 
-            return [
-                'id' => $row['id'] ?? null,
-                'recorded_price' => $row['recordedPrice'] ?? null,
-                'recorded_at' => $recordedAt instanceof \DateTimeInterface ? $recordedAt->format(DATE_ATOM) : $recordedAt,
-                'out_of_stock' => $row['outOfStock'] ?? null,
-                'anomaly' => $row['anomaly'] ?? null,
-                'productListingId' => $row['listingId'] ?? null,
-                'sellerId' => $sellerFromHistory !== null ? (int) $sellerFromHistory : ($sellerFromListing !== null ? (int) $sellerFromListing : null),
-                'sellerName' => is_string($sellerFromListingName) && trim($sellerFromListingName) !== '' ? $sellerFromListingName : null,
-            ];
-        }, $rows);
+            return array_map(static function (array $row): array {
+                $recordedAt = $row['recordedAt'] ?? null;
+                $sellerFromHistory = $row['sellerFromHistory'] ?? null;
+                $sellerFromListing = $row['sellerFromListing'] ?? null;
+                $sellerFromListingName = $row['sellerFromListingName'] ?? null;
 
-        return $this->json($data);
+                return [
+                    'id' => $row['id'] ?? null,
+                    'recorded_price' => $row['recordedPrice'] ?? null,
+                    'recorded_at' => $recordedAt instanceof \DateTimeInterface ? $recordedAt->format(DATE_ATOM) : $recordedAt,
+                    'out_of_stock' => $row['outOfStock'] ?? null,
+                    'anomaly' => $row['anomaly'] ?? null,
+                    'productListingId' => $row['listingId'] ?? null,
+                    'sellerId' => $sellerFromHistory !== null ? (int) $sellerFromHistory : ($sellerFromListing !== null ? (int) $sellerFromListing : null),
+                    'sellerName' => is_string($sellerFromListingName) && trim($sellerFromListingName) !== '' ? $sellerFromListingName : null,
+                ];
+            }, $rows);
+        });
     }
 
     #[Route('/best-time-to-buy', name: 'get_best_time_to_buy', methods: ['GET'])]
@@ -72,6 +102,13 @@ final class PriceHistoryController extends AbstractController
                 'error' => 'Premium plan required.',
                 'message' => 'Best Time To Buy insights are available for premium users only.',
             ], 403);
+        }
+
+        $cacheKey = self::CACHE_KEY_BTTB_PREFIX . "p{$productId}l{$listingId}a{$alerterId}";
+
+        $cacheItem = $this->cache->getItem($cacheKey);
+        if ($cacheItem->isHit()) {
+            return $this->json($cacheItem->get());
         }
 
         $listing = null;
@@ -116,16 +153,22 @@ final class PriceHistoryController extends AbstractController
             $prediction['prediction_source'] = 'fallback';
         }
 
-        return $this->json([
+        $data = [
             'listingId' => $listingId,
             'prediction' => $prediction,
-        ]);
+        ];
+
+        $cacheItem->set($data);
+        $cacheItem->expiresAfter(300);
+        $this->cache->save($cacheItem);
+
+        return $this->json($data);
     }
 
     private function hasPremiumPriceInsightAccess(User $user): bool
     {
         $subscription = $user->getSubscription();
-        if ($subscription === null || !$subscription instanceof SubscriptionB2C || $subscription->isActive() !== true) {
+        if ($subscription === null || !$subscription instanceof Subscription || $subscription->isActive() !== true) {
             return false;
         }
 

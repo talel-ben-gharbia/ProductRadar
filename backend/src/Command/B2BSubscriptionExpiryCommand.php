@@ -2,7 +2,7 @@
 
 namespace App\Command;
 
-use App\Entity\B2BSubscription;
+use App\Entity\Subscription;
 use App\Service\B2BNotificationService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
@@ -41,7 +41,7 @@ final class B2BSubscriptionExpiryCommand extends Command
 
         $expiring = $this->entityManager->createQueryBuilder()
             ->select('sub')
-            ->from(B2BSubscription::class, 'sub')
+            ->from(Subscription::class, 'sub')
             ->where('sub.active = true')
             ->andWhere('sub.end_date IS NOT NULL')
             ->andWhere('sub.end_date <= :threshold')
@@ -63,9 +63,16 @@ final class B2BSubscriptionExpiryCommand extends Command
             if (!$endDate) continue;
 
             $daysLeft = (int) (new \DateTimeImmutable())->diff($endDate)->days;
-            $companyName = $subscription->getCompany()?->getCompanyName()
-                ?? $subscription->getMarket()?->getCompanyName()
-                ?? 'Unknown';
+            $companyName = 'Unknown';
+            $ownerId = $subscription->getOwnerId();
+            $ownerType = $subscription->getOwnerType();
+            if ($ownerType === 'COMPANY' && $ownerId !== null) {
+                $company = $this->entityManager->find(\App\Entity\B2BCompany::class, $ownerId);
+                $companyName = $company?->getCompanyName() ?? 'Unknown';
+            } elseif ($ownerType === 'MARKET' && $ownerId !== null) {
+                $market = $this->entityManager->find(\App\Entity\B2BMarket::class, $ownerId);
+                $companyName = $market?->getCompanyName() ?? 'Unknown';
+            }
 
             $io->text(sprintf(
                 '  • %s (plan: %s, expires in %d days)',

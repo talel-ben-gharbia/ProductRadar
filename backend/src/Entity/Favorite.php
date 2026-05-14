@@ -6,6 +6,7 @@ use App\Repository\FavoriteRepository;
 use Doctrine\ORM\Mapping as ORM;
 
 #[ORM\Entity(repositoryClass: FavoriteRepository::class)]
+#[ORM\UniqueConstraint(name: 'uq_favorite_client_listing', columns: ['client_id', 'product_listing_id'])]
 class Favorite
 {
     #[ORM\Id]

@@ -8,7 +8,9 @@ use App\Repository\SellerRepository;
 use App\Security\AdminApiGuard;
 use App\Service\ManualScrapeTriggerService;
 use Doctrine\ORM\EntityManagerInterface;
+use Psr\Cache\CacheItemPoolInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Attribute\Route;
@@ -16,6 +18,16 @@ use Symfony\Component\Routing\Attribute\Route;
 #[Route('/admin/api/scraping/manual')]
 final class ManualScrapingController extends AbstractController
 {
+    use CachedResponseTrait;
+
+    private const CACHE_KEY_DEFAULT_LINK = 'manual_scrape.default_link.';
+
+    public function __construct(
+        #[Autowire(service: 'general.cache')]
+        private readonly CacheItemPoolInterface $cache,
+    ) {
+    }
+
     #[Route('/default-link', name: 'admin_manual_scrape_default_link', methods: ['GET'])]
     public function defaultLink(
         Request $request,
@@ -34,12 +46,16 @@ final class ManualScrapingController extends AbstractController
             return $this->json(['error' => 'seller_id and category_id are required.'], 422);
         }
 
-        $link = $this->findCategoryLink($entityManager, $sellerId, $categoryId);
+        $cacheKey = self::CACHE_KEY_DEFAULT_LINK . "s{$sellerId}.c{$categoryId}";
 
-        return $this->json([
-            'exists' => $link !== null,
-            'link' => $link,
-        ]);
+        return $this->cachedGet($this->cache, $cacheKey, function () use ($entityManager, $sellerId, $categoryId): array {
+            $link = $this->findCategoryLink($entityManager, $sellerId, $categoryId);
+
+            return [
+                'exists' => $link !== null,
+                'link' => $link,
+            ];
+        });
     }
 
     #[Route('/trigger', name: 'admin_manual_scrape_trigger', methods: ['POST'])]
@@ -129,6 +145,8 @@ final class ManualScrapingController extends AbstractController
                 'status_code' => $result['statusCode'],
             ], 502);
         }
+
+        $this->invalidateCache($this->cache);
 
         return $this->json([
             'message' => 'Manual scraping job triggered successfully.',

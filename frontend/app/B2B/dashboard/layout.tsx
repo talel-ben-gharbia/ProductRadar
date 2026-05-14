@@ -27,7 +27,7 @@ export default async function B2BDashboardLayout({ children }: { children: React
   if (firebaseUid) {
     try {
       const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 5000)
+      const timeoutId = setTimeout(() => controller.abort(), 10000)
 
       const response = await fetch(
         `${BACKEND_URL}/api/b2b/workspace/${encodeURIComponent(firebaseUid)}/summary`,

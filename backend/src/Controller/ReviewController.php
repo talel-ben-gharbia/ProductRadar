@@ -10,7 +10,9 @@ use App\Service\AnalyticsService;
 use App\Service\AuditService;
 use App\Service\AutoModerationService;
 use Doctrine\ORM\EntityManagerInterface;
+use Psr\Cache\CacheItemPoolInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\ResponseHeaderBag;
 use Symfony\Component\HttpFoundation\Request;
@@ -20,6 +22,19 @@ use Symfony\Component\Routing\Attribute\Route;
 #[Route('/admin/api/reviews')]
 final class ReviewController extends AbstractController
 {
+    use CachedResponseTrait;
+
+    private const CACHE_KEY_LIST = 'reviews.list';
+    private const CACHE_KEY_DETAIL = 'reviews.detail.';
+    private const CACHE_KEY_ANALYTICS = 'reviews.analytics';
+    private const CACHE_KEY_AUTO_MODERATE = 'reviews.auto_moderate.';
+
+    public function __construct(
+        #[Autowire(service: 'general.cache')]
+        private readonly CacheItemPoolInterface $cache,
+    ) {
+    }
+
     #[Route('', name: 'admin_reviews_list', methods: ['GET'])]
     public function list(
         Request $request,
@@ -35,17 +50,20 @@ final class ReviewController extends AbstractController
         $offset = max(0, $request->query->getInt('offset', 0));
         $status = strtoupper(trim((string) $request->query->get('status', '')));
         $search = trim((string) $request->query->get('search', ''));
+        $cacheKey = self::CACHE_KEY_LIST . ".l{$limit}.o{$offset}." . md5($status) . '.' . md5($search);
 
-        $result = $reviewRepository->paginateForAdmin($limit, $offset, $status, $search);
+        return $this->cachedGet($this->cache, $cacheKey, function () use ($reviewRepository, $limit, $offset, $status, $search): array {
+            $result = $reviewRepository->paginateForAdmin($limit, $offset, $status, $search);
 
-        return $this->json([
-            'items' => array_map(fn (Review $review) => $this->serializeReview($review), $result['items']),
-            'pagination' => [
-                'limit' => $limit,
-                'offset' => $offset,
-                'total' => $result['total'],
-            ],
-        ]);
+            return [
+                'items' => array_map(fn (Review $review) => $this->serializeReview($review), $result['items']),
+                'pagination' => [
+                    'limit' => $limit,
+                    'offset' => $offset,
+                    'total' => $result['total'],
+                ],
+            ];
+        });
     }
 
     #[Route('/{id}', name: 'admin_reviews_detail', methods: ['GET'])]
@@ -60,12 +78,14 @@ final class ReviewController extends AbstractController
             return $authError;
         }
 
-        $review = $reviewRepository->find($id);
-        if (!$review instanceof Review) {
-            return $this->json(['error' => 'Review not found.'], 404);
-        }
+        return $this->cachedGet($this->cache, self::CACHE_KEY_DETAIL . $id, function () use ($id, $reviewRepository): array {
+            $review = $reviewRepository->find($id);
+            if (!$review instanceof Review) {
+                throw new \RuntimeException('Review not found.');
+            }
 
-        return $this->json($this->serializeReview($review));
+            return $this->serializeReview($review);
+        });
     }
 
     #[Route('/{id}/status', name: 'admin_reviews_status_update', methods: ['PATCH'])]
@@ -134,6 +154,8 @@ final class ReviewController extends AbstractController
 
         $entityManager->flush();
 
+        $this->invalidateCache($this->cache);
+
         return $this->json($this->serializeReview($review));
     }
 
@@ -148,11 +170,13 @@ final class ReviewController extends AbstractController
             return $authError;
         }
 
-        return $this->json([
-            'analytics' => $analyticsService->getReviewAnalytics(),
-            'rating_distribution' => $analyticsService->getRatingDistribution(),
-            'reviews_per_day' => $analyticsService->getReviewsPerDay(30),
-        ]);
+        return $this->cachedGet($this->cache, self::CACHE_KEY_ANALYTICS, function () use ($analyticsService): array {
+            return [
+                'analytics' => $analyticsService->getReviewAnalytics(),
+                'rating_distribution' => $analyticsService->getRatingDistribution(),
+                'reviews_per_day' => $analyticsService->getReviewsPerDay(30),
+            ];
+        });
     }
 
     #[Route('/export', name: 'admin_reviews_export', methods: ['GET'])]
@@ -278,6 +302,8 @@ final class ReviewController extends AbstractController
 
         $entityManager->flush();
 
+        $this->invalidateCache($this->cache);
+
         return $this->json([
             'message' => 'Batch operation completed.',
             'updated' => $updated,
@@ -298,17 +324,19 @@ final class ReviewController extends AbstractController
             return $authError;
         }
 
-        $review = $reviewRepository->find($id);
-        if (!$review instanceof Review) {
-            return $this->json(['error' => 'Review not found.'], 404);
-        }
+        return $this->cachedGet($this->cache, self::CACHE_KEY_AUTO_MODERATE . $id, function () use ($id, $reviewRepository, $autoModerationService): array {
+            $review = $reviewRepository->find($id);
+            if (!$review instanceof Review) {
+                throw new \RuntimeException('Review not found.');
+            }
 
-        $suggestion = $autoModerationService->getAutoModerationSuggestion($review);
+            $suggestion = $autoModerationService->getAutoModerationSuggestion($review);
 
-        return $this->json([
-            'review_id' => $id,
-            'suggestion' => $suggestion,
-        ]);
+            return [
+                'review_id' => $id,
+                'suggestion' => $suggestion,
+            ];
+        });
     }
 
     private function serializeReview(Review $review): array

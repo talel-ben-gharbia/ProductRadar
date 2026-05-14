@@ -4,15 +4,17 @@ import { useCallback, useState } from "react"
 import { AlertTriangle, CheckCircle2, Clock, Loader2, Shield, Star, Zap } from "lucide-react"
 
 import { useB2B } from "@/components/B2B/b2b-context"
+import B2BErrorState from "@/components/B2B/b2b-error-state"
 import { Button } from "@/components/ui/button"
 
 export default function B2BSubscriptionBanner() {
-  const { summary, planType, isGold, isSilver, refresh } = useB2B()
+  const { summary, planType, isGold, refresh } = useB2B()
   const sub = summary?.subscription
   const [renewing, setRenewing] = useState(false)
   const [upgrading, setUpgrading] = useState(false)
   const [renewDone, setRenewDone] = useState(false)
   const [upgradeDone, setUpgradeDone] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const requestRenewal = useCallback(async () => {
     setRenewing(true)
@@ -22,7 +24,7 @@ export default function B2BSubscriptionBanner() {
         setRenewDone(true)
         refresh()
       }
-    } catch { /* ignore */ }
+    } catch { setError("Failed to request renewal") }
     setRenewing(false)
   }, [refresh])
 
@@ -34,11 +36,15 @@ export default function B2BSubscriptionBanner() {
         setUpgradeDone(true)
         refresh()
       }
-    } catch { /* ignore */ }
+    } catch { setError("Failed to request upgrade") }
     setUpgrading(false)
   }, [refresh])
 
   if (!sub || sub.source === "none" || !planType) return null
+
+  if (error) {
+    return <B2BErrorState message={error} onRetry={() => setError(null)} />
+  }
 
   const daysRemaining = typeof sub.days_remaining === "number" ? sub.days_remaining : null
   const isExpired = sub.active === false
