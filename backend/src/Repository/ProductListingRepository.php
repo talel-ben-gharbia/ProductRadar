@@ -89,7 +89,7 @@ class ProductListingRepository extends ServiceEntityRepository
         return $this->enrichWithTrustScores($rows);
     }
 
-    
+
 
     /**
      * Return one best listing per seller for the target product.
@@ -196,14 +196,21 @@ class ProductListingRepository extends ServiceEntityRepository
 
         $conn = $this->getEntityManager()->getConnection();
 
-        $scoreRows = $conn->fetchAllAssociative(
-            'SELECT DISTINCT ON (listing_id) listing_id, score, breakdown
-             FROM trust_score_history
-             WHERE listing_id IN (:ids)
-             ORDER BY listing_id, created_at DESC',
-            ['ids' => $listingIds],
-            ['ids' => ArrayParameterType::INTEGER]
-        );
+        // Fetch only the latest trust_score_history row per listing using a
+        // grouped subquery joined back to the table. This avoids returning
+        // multiple history rows per listing and reduces PHP memory usage.
+        $sql = <<<'SQL'
+SELECT t.listing_id, t.score, t.breakdown
+FROM trust_score_history t
+INNER JOIN (
+  SELECT listing_id, MAX(created_at) AS max_created
+  FROM trust_score_history
+  WHERE listing_id IN (:ids)
+  GROUP BY listing_id
+) latest ON latest.listing_id = t.listing_id AND latest.max_created = t.created_at
+SQL;
+
+        $scoreRows = $conn->fetchAllAssociative($sql, ['ids' => $listingIds], ['ids' => ArrayParameterType::INTEGER]);
 
         $scoreMap = [];
         foreach ($scoreRows as $sr) {
