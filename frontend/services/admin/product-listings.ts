@@ -8,7 +8,9 @@ async function parseJson(response: Response): Promise<unknown> {
 
 async function fetchProductListingsFromApi(
   productId?: number,
-  sellerId?: number
+  sellerId?: number,
+  page?: number,
+  limit?: number
 ): Promise<ProductListing[]> {
   try {
     const params = new URLSearchParams()
@@ -17,6 +19,12 @@ async function fetchProductListingsFromApi(
     }
     if (sellerId !== undefined) {
       params.set("sellerId", String(sellerId))
+    }
+    if (page !== undefined) {
+      params.set("page", String(page))
+    }
+    if (limit !== undefined) {
+      params.set("limit", String(limit))
     }
 
     const query = params.toString()
@@ -29,7 +37,7 @@ async function fetchProductListingsFromApi(
           ? `/api/product-listings?${query}`
           : "/api/product-listings"
 
-    const cacheKey = `listings:p${productId ?? 0}:s${sellerId ?? 0}`
+    const cacheKey = `listings:p${productId ?? 0}:s${sellerId ?? 0}:p${page ?? 1}` + (limit !== undefined && limit > 0 ? `:l${limit}` : '')
 
     const productListings = await cachedFetch<ProductListing[]>(endpoint, {
       cacheKey,
@@ -47,10 +55,12 @@ async function fetchProductListingsFromApi(
 
 export async function getProductListings(
   productId?: number,
-  sellerId?: number
+  sellerId?: number,
+  page?: number,
+  limit?: number
 ): Promise<ProductListing[]> {
   try {
-    const productListings = await fetchProductListingsFromApi(productId, sellerId)
+    const productListings = await fetchProductListingsFromApi(productId, sellerId, page, limit)
     return productListings
   } catch (error) {
     if (error instanceof Error) {

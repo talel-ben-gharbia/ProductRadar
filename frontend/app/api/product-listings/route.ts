@@ -21,10 +21,14 @@ export async function GET(request: NextRequest) {
   try {
     const productId = request.nextUrl.searchParams.get("productId")
     const sellerId = request.nextUrl.searchParams.get("sellerId")
+    const page = request.nextUrl.searchParams.get("page")
+    const limit = request.nextUrl.searchParams.get("limit")
 
     const params = new URLSearchParams()
     if (productId) params.set("productId", productId)
     if (sellerId) params.set("sellerId", sellerId)
+    if (page) params.set("page", page)
+    if (limit) params.set("limit", limit)
 
     const query = params.toString()
     const endpoint = query
@@ -32,7 +36,7 @@ export async function GET(request: NextRequest) {
       : `${BACKEND_URL}/product-listings`
 
     const data = await cachedFetch<unknown>(endpoint, {
-      cacheKey: `listings:p${productId || "all"}:s${sellerId || "all"}`,
+      cacheKey: `listings:p${productId || "all"}:s${sellerId || "all"}:p${page || "1"}` + (limit ? `:l${limit}` : ''),
       cacheTtl: 60,
     })
     return NextResponse.json(data)

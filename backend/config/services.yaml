@@ -8,7 +8,7 @@
 # https://symfony.com/doc/current/best_practices.html#use-parameters-for-application-configuration
 parameters:
     app.best_time_to_buy_api_url: '%env(default:app.best_time_to_buy_api_url_default:BEST_TIME_TO_BUY_API_URL)%'
-    app.best_time_to_buy_api_url_default: 'http://localhost:8010'
+    app.best_time_to_buy_api_url_default: 'http://localhost:8002'
     app.best_time_to_buy_api_timeout: '%env(float:default:app.best_time_to_buy_api_timeout_default:BEST_TIME_TO_BUY_API_TIMEOUT)%'
     app.best_time_to_buy_api_timeout_default: 3
     app.b2b_notifications_from: '%env(B2B_NOTIFICATIONS_FROM)%'
@@ -27,7 +27,7 @@ services:
 
     App\Service\BestTimeToBuyApiClient:
         arguments:
-            $bestTimeToBuyApiUrl: '%app.best_time_to_buy_api_url%'
+            $bestTimeToBuyApiUrl: 'http://localhost:8002'
             $bestTimeToBuyApiTimeout: '%app.best_time_to_buy_api_timeout%'
 
     App\Service\B2BNotificationService:

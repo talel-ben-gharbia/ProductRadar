@@ -8,3 +8,8 @@
 /var/
 /vendor/
 ###< symfony/framework-bundle ###
+
+# Price recommendation microservice
+/PriceRecomendationModel/venv/
+/PriceRecomendationModel/__pycache__/
+/PriceRecomendationModel/*.pyc
