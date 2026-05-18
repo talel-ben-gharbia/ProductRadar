@@ -314,7 +314,10 @@ export default async function B2CProductDetailsPage({ params }: ProductDetailsPa
   let sellers: SellerWithLogo[] = []
   let categoryRows: CategoryRaw[] = []
   let bestTimePrediction: BestTimeToBuyPrediction | null = null
+<<<<<<< HEAD
   let sponsoredListingId: number | null = null
+=======
+>>>>>>> badbf85 (price recomendation model integration)
   let bestTimeFriendlyMessage: string | null = null
   let historyAccessMonths = 1
   let fetchError: string | null = null

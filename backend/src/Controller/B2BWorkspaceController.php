@@ -249,6 +249,19 @@ final class B2BWorkspaceController extends AbstractController
         $ownIds = $result['own_ids'] ?? [];
         $sharedIds = $result['shared_ids'] ?? [];
 
+        $ownSet = array_flip($ownIds);
+        $sharedSet = array_flip($sharedIds);
+        $exclusiveOwn = 0;
+        $sharedBoth = 0;
+        $exclusiveOther = 0;
+        foreach ($allIds as $pid) {
+            $isOwn = isset($ownSet[$pid]);
+            $isShared = isset($sharedSet[$pid]);
+            if ($isOwn && !$isShared) ++$exclusiveOwn;
+            elseif ($isOwn && $isShared) ++$sharedBoth;
+            elseif (!$isOwn && $isShared) ++$exclusiveOther;
+        }
+
         return $this->json([
             'brand_keywords' => [
                 'brand_id' => $user->getBrandEntity()?->getId(),
@@ -262,8 +275,9 @@ final class B2BWorkspaceController extends AbstractController
             'brand_summary' => $brandSummary,
             'stats' => [
                 'total_products' => count($allIds),
-                'own_count' => count($ownIds),
-                'shared_count' => count($sharedIds),
+                'own_count' => $exclusiveOwn,
+                'shared_count' => $sharedBoth,
+                'other_count' => $exclusiveOther,
             ],
         ]);
     }
@@ -436,12 +450,26 @@ final class B2BWorkspaceController extends AbstractController
             ];
         }, $products);
 
+        $ownSetS = array_flip($ownIds);
+        $sharedSetS = array_flip($sharedIds);
+        $exclOwn = 0;
+        $sharedB = 0;
+        $exclOther = 0;
+        foreach ($allIds as $pid) {
+            $iO = isset($ownSetS[$pid]);
+            $iS = isset($sharedSetS[$pid]);
+            if ($iO && !$iS) ++$exclOwn;
+            elseif ($iO && $iS) ++$sharedB;
+            elseif (!$iO && $iS) ++$exclOther;
+        }
+
         return $this->json([
             'products' => $result,
             'stats' => [
                 'total' => count($allIds),
-                'own' => count($ownIds),
-                'shared' => count($sharedIds),
+                'own' => $exclOwn,
+                'shared' => $sharedB,
+                'other' => $exclOther,
             ],
             'pagination' => [
                 'page' => $page,

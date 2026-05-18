@@ -2,15 +2,15 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import {
-  CheckCircle2, ChevronDown, ChevronRight,
-  Eye, Package, RefreshCw, Search,
-  Store, Tag, XCircle,
+  CheckCircle2, ChevronDown, ChevronRight, ChevronsUpDown,
+  Eye, Package, RefreshCw, Search, ArrowUpDown,
+  Store, Tag, XCircle, Shield,
 } from "lucide-react"
 
 import { useB2B } from "@/components/B2B/b2b-context"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -50,12 +50,12 @@ type BrandScopeResponse = {
     last_discovered_at: string | null
   }
   brand_summary: { brand: string; product_count: number; listing_count: number; avg_trust: number | null }[]
-  stats: { total_products: number; own_count: number; shared_count: number }
+  stats: { total_products: number; own_count: number; shared_count: number; other_count?: number }
 }
 
 type BrandProductsResponse = {
   products: BrandProduct[]
-  stats: { total: number; own: number; shared: number }
+  stats: { total: number; own: number; shared: number; other?: number }
   pagination: { page: number; perPage: number; total: number; totalPages: number }
 }
 
@@ -196,6 +196,8 @@ function ProductCard({ product, sellerId, currentFilter }: { product: BrandProdu
 
 const PER_PAGE = 20
 
+type SortKey = "name" | "price" | "sellers" | "trust"
+
 export default function BrandIntelligencePage() {
   const { firebaseUid } = useB2B()
 
@@ -208,6 +210,8 @@ export default function BrandIntelligencePage() {
   const [categoryFilter, setCategoryFilter] = useState("")
   const [page, setPage] = useState(1)
   const [searchInput, setSearchInput] = useState("")
+  const [sortKey, setSortKey] = useState<SortKey>("sellers")
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc")
 
   const brandName = brandScope?.brand_keywords?.brand_name
   const scopeStats = brandScope?.stats
@@ -215,6 +219,7 @@ export default function BrandIntelligencePage() {
 
   const loadProducts = useCallback(async (q: string) => {
     setLoading(true)
+    setPage(1)
     try {
       const params = new URLSearchParams({ endpoint: "brand-products", page: "1", perPage: "2000", filter: "all" })
       if (q) params.set("search", q)
@@ -288,6 +293,16 @@ export default function BrandIntelligencePage() {
     setPage(1)
   }, [])
 
+  const toggleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "desc" ? "asc" : "desc"))
+    } else {
+      setSortKey(key)
+      setSortDir(key === "name" ? "asc" : "desc")
+    }
+    setPage(1)
+  }
+
   const visibleProducts = useMemo(() => {
     let result = allProducts
     if (filter === "mine") result = allProducts.filter((p) => {
@@ -306,13 +321,32 @@ export default function BrandIntelligencePage() {
     if (categoryFilter) {
       result = result.filter((p) => p.category_name === categoryFilter)
     }
+    result = [...result]
+    result.sort((a, b) => {
+      let cmp = 0
+      if (sortKey === "name") cmp = a.name.localeCompare(b.name)
+      else if (sortKey === "price") cmp = (a.lowest_price ?? 99999) - (b.lowest_price ?? 99999)
+      else if (sortKey === "sellers") cmp = a.active_sellers - b.active_sellers
+      else if (sortKey === "trust") cmp = (a.avg_trust ?? 0) - (b.avg_trust ?? 0)
+      return sortDir === "desc" ? -cmp : cmp
+    })
     return result
-  }, [allProducts, filter, categoryFilter])
+  }, [allProducts, filter, categoryFilter, sortKey, sortDir])
 
   const totalPages = Math.max(1, Math.ceil(visibleProducts.length / PER_PAGE))
-  const safePage = Math.min(page, totalPages)
+  const safePage = page > totalPages ? totalPages : page
   const pageStart = (safePage - 1) * PER_PAGE
   const pageProducts = visibleProducts.slice(pageStart, pageStart + PER_PAGE)
+
+  const handlePrev = () => setPage(Math.max(1, safePage - 1))
+  const handleNext = () => setPage(Math.min(totalPages, safePage + 1))
+
+  const sortIcon = (key: SortKey) => {
+    if (sortKey !== key) return <ChevronsUpDown className="ml-1 size-3 opacity-30" />
+    return <ArrowUpDown className={`ml-1 size-3 ${sortDir === "desc" ? "text-indigo-500" : "text-indigo-500 rotate-180"}`} />
+  }
+
+  const brandBreakdown = brandScope?.brand_summary ?? []
 
   return (
     <div className="space-y-6">
@@ -367,11 +401,15 @@ export default function BrandIntelligencePage() {
                 <div className="flex flex-wrap gap-4 text-sm">
                   <div className="text-center">
                     <p className="text-2xl font-bold text-emerald-600">{scopeStats?.own_count ?? 0}</p>
-                    <p className="text-xs text-muted-foreground">Own Products</p>
+                    <p className="text-xs text-muted-foreground">Exclusive</p>
                   </div>
                   <div className="text-center">
                     <p className="text-2xl font-bold text-blue-600">{scopeStats?.shared_count ?? 0}</p>
-                    <p className="text-xs text-muted-foreground">Shared Products</p>
+                    <p className="text-xs text-muted-foreground">Shared</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-2xl font-bold text-amber-600">{scopeStats?.other_count ?? 0}</p>
+                    <p className="text-xs text-muted-foreground">Other Sellers</p>
                   </div>
                 </div>
               </div>
@@ -386,7 +424,7 @@ export default function BrandIntelligencePage() {
               All ({allProducts.length})
             </Button>
             <Button variant={filter === "mine" ? "default" : "outline"} size="sm" onClick={() => changeFilter("mine")}>
-              <Store className="mr-1 size-3.5" /> Mine
+              <Store className="mr-1 size-3.5" /> Exclusive
             </Button>
             <Button variant={filter === "shared" ? "default" : "outline"} size="sm" onClick={() => changeFilter("shared")}>
               <Tag className="mr-1 size-3.5" /> Shared
@@ -437,18 +475,47 @@ export default function BrandIntelligencePage() {
               </CardContent>
             </Card>
           ) : (
-            <div className="space-y-2">
-              {pageProducts.map((p) => <ProductCard key={p.id} product={p} sellerId={sellerId} currentFilter={filter} />)}
-            </div>
+            <>
+              {brandBreakdown.length > 0 && (
+                <Card className="border-border/50 shadow-sm">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="flex items-center gap-2 text-sm"><Shield className="size-3.5 text-indigo-500" />Brand Variants</CardTitle>
+                    <CardDescription className="text-xs">Products grouped by brand variant name.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="pb-3 pt-0">
+                    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                      {brandBreakdown.slice(0, 8).map((b) => (
+                        <div key={b.brand} className="rounded-lg border border-border/50 px-3 py-2">
+                          <p className="text-xs font-medium truncate">{b.brand}</p>
+                          <p className="text-lg font-bold">{b.product_count} <span className="text-xs font-normal text-muted-foreground">products</span></p>
+                          {b.avg_trust !== null && (
+                            <div className="flex items-center gap-1 mt-0.5">
+                              <div className="h-1 flex-1 overflow-hidden rounded-full bg-muted">
+                                <div className={`h-full rounded-full ${b.avg_trust >= 80 ? "bg-emerald-500" : b.avg_trust >= 50 ? "bg-amber-500" : "bg-red-500"}`} style={{ width: `${b.avg_trust}%` }} />
+                              </div>
+                              <span className="text-[10px] text-muted-foreground font-mono">{b.avg_trust.toFixed(0)}</span>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+              
+              <div className="space-y-2">
+                {pageProducts.map((p) => <ProductCard key={p.id} product={p} sellerId={sellerId} currentFilter={filter} />)}
+              </div>
+            </>
           )}
 
           {totalPages > 1 && (
             <div className="flex items-center justify-center gap-2 pt-4">
-              <Button variant="outline" size="sm" disabled={safePage <= 1} onClick={() => setPage(safePage - 1)}>Previous</Button>
+              <Button variant="outline" size="sm" disabled={safePage <= 1} onClick={handlePrev}>Previous</Button>
               <span className="text-xs text-muted-foreground">
                 Page {safePage} of {totalPages} ({visibleProducts.length} products)
               </span>
-              <Button variant="outline" size="sm" disabled={safePage >= totalPages} onClick={() => setPage(safePage + 1)}>Next</Button>
+              <Button variant="outline" size="sm" disabled={safePage >= totalPages} onClick={handleNext}>Next</Button>
             </div>
           )}
         </>
