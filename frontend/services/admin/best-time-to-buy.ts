@@ -6,12 +6,13 @@ interface BestTimeToBuyResponse {
   error?: string
   message?: string
   prediction?: BestTimeToBuyPrediction
+  friendly_message?: string
 }
 
 export async function getBestTimeToBuy(
   productId: number,
   alerterId: number,
-): Promise<BestTimeToBuyPrediction> {
+): Promise<BestTimeToBuyResponse> {
   const params = new URLSearchParams({
     productId: String(productId),
     alerterId: String(alerterId),
@@ -29,5 +30,5 @@ export async function getBestTimeToBuy(
     throw new Error("Prediction payload is missing")
   }
 
-  return data.prediction
+  return data
 }

@@ -1,0 +1,23 @@
+{
+  "features": [
+    "price_percentile_rank",
+    "pct_above_min",
+    "pct_below_max",
+    "price_zscore",
+    "price_change_pct",
+    "price_lag1",
+    "price_lag2",
+    "price_lag3",
+    "oos_rate_hist",
+    "was_oos_last",
+    "n_records_so_far",
+    "price_range_pct",
+    "is_new_low",
+    "is_new_high"
+  ],
+  "model_file": "model.xgb",
+  "threshold": 0.15,
+  "roc_auc": 0.9427,
+  "macro_f1": 0.8098,
+  "version": "2.0.0"
+}

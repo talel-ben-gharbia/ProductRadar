@@ -40,14 +40,8 @@ export type PriceHistoryEntry = {
 
 export type BestTimeToBuyPrediction = {
   action: "BUY_NOW" | "WAIT"
-  wait_probability: number
-  best_day_offset: number
-  predicted_best_price: number
   current_price: number
-  expected_drop_percent: number
   confidence: number
-  horizon_days: number
-  min_drop_ratio_to_wait: number
 }
 
 export type B2CAlert = {

@@ -168,12 +168,32 @@ class UserRepository extends ServiceEntityRepository
      */
     public function findOneWithSubscriptionByFirebaseUid(string $firebaseUid): ?User
     {
-        return $this->createQueryBuilder('u')
-            ->leftJoin('u.subscription', 's')
-            ->addSelect('s')
+        // Load the user entity first (no association exists for subscription because
+        // subscriptions are stored in a polymorphic table with owner_type/owner_id).
+        $user = $this->createQueryBuilder('u')
             ->andWhere('u.firebase_uid = :firebaseUid')
             ->setParameter('firebaseUid', $firebaseUid)
             ->getQuery()
             ->getOneOrNullResult();
+
+        if ($user === null) {
+            return null;
+        }
+
+        // Load active subscription for this user from the Subscription repository
+        // using the polymorphic owner fields and attach it to the user object.
+        try {
+            $em = $this->getEntityManager();
+            $subscription = $em->getRepository(\App\Entity\Subscription::class)
+                ->findOneBy([ 'owner_type' => 'USER', 'owner_id' => $user->getId(), 'active' => true ]);
+
+            if ($subscription !== null) {
+                $user->setSubscription($subscription);
+            }
+        } catch (\Throwable $e) {
+            // Fail silently and return the user without subscription if any issue occurs
+        }
+
+        return $user;
     }
 }

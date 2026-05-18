@@ -314,6 +314,8 @@ export default async function B2CProductDetailsPage({ params }: ProductDetailsPa
   let sellers: SellerWithLogo[] = []
   let categoryRows: CategoryRaw[] = []
   let bestTimePrediction: BestTimeToBuyPrediction | null = null
+  let bestTimeFriendlyMessage: string | null = null
+  let historyAccessMonths = 1
   let fetchError: string | null = null
 
   try {
@@ -333,9 +335,30 @@ export default async function B2CProductDetailsPage({ params }: ProductDetailsPa
 
     if (isAuthenticated && b2cSession) {
       try {
-        bestTimePrediction = await getBestTimeToBuy(productId, b2cSession.id)
+        const subscriptionResponse = await fetch(
+          `${BACKEND_URL}/api/b2c/subscription/${encodeURIComponent(b2cSession.firebase_uid)}`,
+          { cache: "no-store" },
+        )
+
+        if (subscriptionResponse.ok) {
+          const subscriptionData = (await subscriptionResponse.json()) as {
+            subscription?: { price_history_access?: number | null }
+          }
+
+          const access = Number(subscriptionData.subscription?.price_history_access ?? 1)
+          historyAccessMonths = Number.isFinite(access) && access >= 6 ? 6 : 1
+        }
+      } catch {}
+    }
+
+    if (isAuthenticated && b2cSession) {
+      try {
+        const res = await getBestTimeToBuy(productId, b2cSession.id)
+        bestTimePrediction = res.prediction ?? null
+        bestTimeFriendlyMessage = res.friendly_message ?? null
       } catch (error) {
         bestTimePrediction = null
+        bestTimeFriendlyMessage = null
       }
     }
   } catch (error) {
@@ -529,6 +552,8 @@ export default async function B2CProductDetailsPage({ params }: ProductDetailsPa
                         productId={product.id}
                         history={priceHistory}
                         bestTimePrediction={bestTimePrediction}
+                        friendlyMessage={bestTimeFriendlyMessage}
+                        historyAccessMonths={historyAccessMonths}
                       />
                     ) : (
                       <Card className="rounded-xl border">

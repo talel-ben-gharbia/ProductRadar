@@ -77,93 +77,48 @@ final class PriceHistoryController extends AbstractController
     }
 
     #[Route('/best-time-to-buy', name: 'get_best_time_to_buy', methods: ['GET'])]
-    public function getBestTimeToBuy(
-        Request $request,
-        PriceHistoryRepository $priceHistoryRepository,
-        ProductListingRepository $productListingRepository,
-        UserRepository $userRepository,
-        BestTimeToBuyApiClient $bestTimeToBuyApiClient,
-    ): JsonResponse {
+    public function getBestTimeToBuy(Request $request, PriceHistoryRepository $priceHistoryRepository, BestTimeToBuyApiClient $bestTimeToBuyApiClient): JsonResponse
+    {
         $productId = $request->query->getInt('productId', 0);
-        $listingId = $request->query->getInt('listingId', 0);
         $alerterId = $request->query->getInt('alerterId', 0);
 
-        if ($alerterId <= 0 || ($productId <= 0 && $listingId <= 0)) {
-            return $this->json(['error' => 'productId or listingId and alerterId are required.'], 400);
+        if ($productId <= 0) {
+            return $this->json(['error' => 'productId is required.'], 400);
         }
 
-        $user = $userRepository->find($alerterId);
-        if (!$user instanceof User) {
-            return $this->json(['error' => 'User not found.'], 404);
+        $rows = $priceHistoryRepository->findHistoryRows($productId, null);
+        if ($rows === []) {
+            return $this->json(['error' => 'No price history found for this product.'], 404);
         }
 
-        if (!$this->hasPremiumPriceInsightAccess($user)) {
-            return $this->json([
-                'error' => 'Premium plan required.',
-                'message' => 'Best Time To Buy insights are available for premium users only.',
-            ], 403);
-        }
+        $cacheKey = self::CACHE_KEY_BTTB_PREFIX . "p{$productId}a{$alerterId}";
 
-        $cacheKey = self::CACHE_KEY_BTTB_PREFIX . "p{$productId}l{$listingId}a{$alerterId}";
+        return $this->cachedGet($this->cache, $cacheKey, function () use ($rows, $bestTimeToBuyApiClient): array {
+            try {
+                $predictionResponse = $bestTimeToBuyApiClient->predict($rows);
 
-        $cacheItem = $this->cache->getItem($cacheKey);
-        if ($cacheItem->isHit()) {
-            return $this->json($cacheItem->get());
-        }
+                if (isset($predictionResponse['prediction']) && is_array($predictionResponse['prediction'])) {
+                    $predictionResponse['friendly_message'] = $this->buildFriendlyPredictionMessage($predictionResponse['prediction'], $predictionResponse['model_version'] ?? null);
+                    return $predictionResponse;
+                }
 
-        $listing = null;
-        if ($listingId > 0) {
-            $listing = $productListingRepository->find($listingId);
-            if ($listing === null) {
-                return $this->json(['error' => 'Listing not found.'], 404);
+                return [
+                    'prediction' => $predictionResponse,
+                    'message' => 'Prediction generated successfully.',
+                ];
+            } catch (\Throwable $throwable) {
+                $fallback = $this->buildFallbackPrediction($rows, null);
+                return [
+                    'prediction' => $fallback,
+                    'friendly_message' => $this->buildFriendlyPredictionMessage($fallback, null, true),
+                    'message' => 'Fallback prediction used because the ML API was unavailable.',
+                    'error' => $throwable->getMessage(),
+                ];
             }
-        }
-
-        $rows = $productId > 0
-            ? $priceHistoryRepository->findHistoryRows($productId, null)
-            : $priceHistoryRepository->findHistoryRows(null, $listingId);
-
-        $modelRows = [];
-        foreach ($rows as $row) {
-            $recordedPrice = $row['recordedPrice'] ?? null;
-            if (!is_numeric($recordedPrice) || (float) $recordedPrice <= 0) {
-                continue;
-            }
-
-            $modelRows[] = [
-                'recorded_price' => (float) $recordedPrice,
-                'anomaly' => (bool) ($row['anomaly'] ?? false),
-                'out_of_stock' => (bool) ($row['outOfStock'] ?? false),
-                'trust_score' => $listing?->getTrustScore(),
-            ];
-        }
-
-        if (count($modelRows) < 4) {
-            return $this->json([
-                'error' => 'Not enough history.',
-                'message' => 'At least 4 valid history points are required to generate predictions.',
-            ], 422);
-        }
-
-        try {
-            $prediction = $bestTimeToBuyApiClient->predict($modelRows, $listing?->getTrustScore());
-            $prediction['prediction_source'] = 'python';
-        } catch (\Throwable $exception) {
-            $prediction = $this->buildFallbackPrediction($modelRows, $listing?->getTrustScore());
-            $prediction['prediction_source'] = 'fallback';
-        }
-
-        $data = [
-            'listingId' => $listingId,
-            'prediction' => $prediction,
-        ];
-
-        $cacheItem->set($data);
-        $cacheItem->expiresAfter(300);
-        $this->cache->save($cacheItem);
-
-        return $this->json($data);
+        });
     }
+
+    
 
     private function hasPremiumPriceInsightAccess(User $user): bool
     {
@@ -230,18 +185,51 @@ final class PriceHistoryController extends AbstractController
         }
 
         $dropPercent = $currentPrice > 0 ? max(0.0, (($currentPrice - $bestPrice) / $currentPrice) * 100) : 0.0;
-        $waitProbability = min(0.95, max(0.05, $dropPercent / 12));
+        $action = $bestDayOffset > 0 && $dropPercent >= 2.0 ? 'WAIT' : 'BUY_NOW';
 
         return [
-            'action' => $bestDayOffset > 0 && $dropPercent >= 2.0 ? 'WAIT' : 'BUY_NOW',
-            'wait_probability' => round($waitProbability, 4),
-            'best_day_offset' => $bestDayOffset,
-            'predicted_best_price' => round($bestPrice, 2),
+            'action' => $action,
             'current_price' => round($currentPrice, 2),
-            'expected_drop_percent' => round($dropPercent, 2),
             'confidence' => round(min(1.0, max(0.25, (($trustScore ?? 50.0) / 100.0) * 0.7 + min(1.0, $count / 10) * 0.3)), 4),
-            'horizon_days' => $horizonDays,
-            'min_drop_ratio_to_wait' => 0.02,
         ];
     }
+
+        /**
+         * Build a human-friendly one-line summary of the prediction including confidence and important details.
+         *
+         * @param array<string, mixed> $prediction
+         */
+        private function buildFriendlyPredictionMessage(array $prediction, ?string $modelVersion = null, bool $isFallback = false): string
+        {
+            $action = isset($prediction['action']) ? (string) $prediction['action'] : 'UNKNOWN';
+            $currentPrice = isset($prediction['current_price']) ? (float) $prediction['current_price'] : null;
+            $confidence = isset($prediction['confidence']) ? (float) $prediction['confidence'] * 100.0 : null;
+
+            $parts = [];
+            if ($action === 'WAIT') {
+                $parts[] = 'Recommendation: WAIT — consider waiting before buying.';
+            } elseif ($action === 'BUY_NOW') {
+                $parts[] = 'Recommendation: BUY NOW.';
+            } else {
+                $parts[] = sprintf('Recommendation: %s.', $action);
+            }
+
+            if ($currentPrice !== null) {
+                $parts[] = sprintf('Current price: %s.', number_format($currentPrice, 2));
+            }
+
+            if ($confidence !== null) {
+                $parts[] = sprintf('Confidence: %.1f%%.', $confidence);
+            }
+
+            if ($modelVersion !== null) {
+                $parts[] = sprintf('Model version: %s.', $modelVersion);
+            }
+
+            if ($isFallback) {
+                $parts[] = 'Note: this prediction used fallback logic (model unavailable or failed).';
+            }
+
+            return implode(' ', $parts);
+        }
 }

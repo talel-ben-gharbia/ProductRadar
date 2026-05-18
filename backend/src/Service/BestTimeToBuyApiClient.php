@@ -22,15 +22,17 @@ final class BestTimeToBuyApiClient
         }
 
         $payloadRows = array_map(static function (array $row): array {
+            $recordedAt = $row['recordedAt'] ?? null;
+
             return [
-                'recorded_price' => isset($row['recorded_price']) && is_numeric($row['recorded_price'])
-                    ? (float) $row['recorded_price']
+                'recorded_price' => isset($row['recordedPrice']) && is_numeric($row['recordedPrice'])
+                    ? (float) $row['recordedPrice']
                     : 0.0,
                 'anomaly' => (bool) ($row['anomaly'] ?? false),
-                'out_of_stock' => (bool) ($row['out_of_stock'] ?? false),
-                'trust_score' => isset($row['trust_score']) && is_numeric($row['trust_score'])
-                    ? (float) $row['trust_score']
-                    : null,
+                'out_of_stock' => (bool) ($row['outOfStock'] ?? false),
+                'recorded_at' => $recordedAt instanceof \DateTimeInterface
+                    ? $recordedAt->format(\DATE_ATOM)
+                    : (is_string($recordedAt) ? $recordedAt : null),
             ];
         }, $rows);
 

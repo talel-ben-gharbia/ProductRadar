@@ -46,11 +46,13 @@ final class ProductListingController extends AbstractController
     {
         $productId = $request->query->getInt('productId', 0);
         $sellerId = $request->query->getInt('sellerId', 0);
+        $page = $request->query->getInt('page', 1);
+        $limit = $request->query->getInt('limit', 0);
 
         $normalizedProductId = $productId > 0 ? $productId : null;
         $normalizedSellerId = $sellerId > 0 ? $sellerId : null;
 
-        $cacheKey = $this->buildListingsCacheKey($normalizedProductId, $normalizedSellerId);
+        $cacheKey = $this->buildListingsCacheKey($normalizedProductId, $normalizedSellerId) . ".p{$page}" . ($limit > 0 ? ".l{$limit}" : "");
 
         $cacheItem = $this->listingsCache->getItem($cacheKey);
         if ($cacheItem->isHit()) {
@@ -60,6 +62,8 @@ final class ProductListingController extends AbstractController
         $rows = $productListingRepository->findListingRows(
             $normalizedProductId,
             $normalizedSellerId,
+            $page,
+            $limit,
         );
 
         $decodeBreakdown = function (mixed $value): mixed {
