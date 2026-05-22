@@ -29,7 +29,12 @@ final class CategoryController extends AbstractController
     public function getCategories(CategoryRepository $categoryRepository): JsonResponse
     {
         return $this->cachedGet($this->cache, self::CACHE_KEY_CATEGORIES, static function () use ($categoryRepository): array {
-            $categories = $categoryRepository->findBy([], ['name' => 'ASC']);
+            $categories = $categoryRepository->createQueryBuilder('c')
+                ->andWhere('SIZE(c.products) > 0 OR SIZE(c.children) > 0')
+                ->orderBy('c.name', 'ASC')
+                ->getQuery()
+                ->setCacheable(false)
+                ->getResult();
 
             return array_map(
                 static fn($category) => [

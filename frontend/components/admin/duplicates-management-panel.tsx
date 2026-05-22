@@ -52,6 +52,8 @@ type DuplicateGroup = {
   listingCount: number
   count: number
   items: DuplicateItem[]
+  matchingSpecKeys?: string[]
+  differingSpecKeys?: string[]
 }
 
 type DuplicatesManagementPanelProps = {
@@ -177,6 +179,16 @@ function GroupSection({
                         <span className={`rounded-full px-2 py-1 font-medium ${riskBadgeClass(group.riskLevel)}`}>
                           Risk: {group.riskLevel}
                         </span>
+                        {group.matchingSpecKeys && group.matchingSpecKeys.length > 0 ? (
+                          <span className="rounded-full bg-emerald-100 px-2 py-1 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300" title={group.matchingSpecKeys.join(', ')}>
+                            Matching: {group.matchingSpecKeys.length}
+                          </span>
+                        ) : null}
+                        {group.differingSpecKeys && group.differingSpecKeys.length > 0 ? (
+                          <span className="rounded-full bg-rose-100 px-2 py-1 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300" title={group.differingSpecKeys.join(', ')}>
+                            Conflicts: {group.differingSpecKeys.length}
+                          </span>
+                        ) : null}
                       </div>
                     </div>
                     <div className="text-right">
@@ -615,6 +627,11 @@ export default function DuplicatesManagementPanel({
     setModalOpen(true)
   }, [])
 
+  function getLevelInfo(key: string): { levelTitle: string; subtitle: string } {
+    if (key.startsWith("ref:")) return { levelTitle: "Level 1", subtitle: "Same Reference" }
+    return { levelTitle: "Level 2", subtitle: "Same Name + Description + Brand" }
+  }
+
   const openNextMergeGroup = useCallback(() => {
     if (orderedVisibleGroups.length === 0) {
       return
@@ -623,8 +640,7 @@ export default function DuplicatesManagementPanel({
     if (!activeContext) {
       const next = orderedVisibleGroups[0]
       openMergePopupFromGroup(next, {
-        levelTitle: next.key.startsWith("ref:") ? "Level 1" : "Level 2",
-        subtitle: next.key.startsWith("ref:") ? "Same Reference" : "Same Name + Description + Brand",
+        ...getLevelInfo(next.key),
         groupLabel: next.label,
         signal: next.signal,
         groupKey: next.key,
@@ -639,8 +655,7 @@ export default function DuplicatesManagementPanel({
     }
 
     openMergePopupFromGroup(nextGroup, {
-      levelTitle: nextGroup.key.startsWith("ref:") ? "Level 1" : "Level 2",
-      subtitle: nextGroup.key.startsWith("ref:") ? "Same Reference" : "Same Name + Description + Brand",
+      ...getLevelInfo(nextGroup.key),
       groupLabel: nextGroup.label,
       signal: nextGroup.signal,
       groupKey: nextGroup.key,

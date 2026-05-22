@@ -7,6 +7,7 @@ import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { mergeProducts } from "@/services/admin/quality"
+import { SPEC_LABELS } from "@/utils/types"
 
 type CompareItem = {
   productId: number
@@ -22,6 +23,7 @@ type ProductDetails = {
   description: string
   image_url?: string | null
   categoryId?: number | null
+  specs_json?: Record<string, string> | null
   listings?: ProductListingSummary[]
 }
 
@@ -46,6 +48,12 @@ type ListingOption = {
   listing: ProductListingSummary
 }
 
+type Category = {
+  id: number
+  name: string
+  parentId: number | null
+}
+
 type SellerCollisionGroup = {
   sellerId: number
   sellerName: string
@@ -61,6 +69,21 @@ type DuplicateCompareMergePanelProps = {
 
 function compactText(value: string | null | undefined): string {
   return (value ?? "").trim()
+}
+
+function getCategoryPath(catId: number | null | undefined, categories: Category[]): string {
+  if (!catId) return "-"
+  const cat = categories.find((c) => c.id === catId)
+  if (!cat) return `Category #${catId}`
+  const parts: string[] = [cat.name]
+  let current = cat
+  while (current.parentId !== null) {
+    const parent = categories.find((c) => c.id === current.parentId)
+    if (!parent) break
+    parts.unshift(parent.name)
+    current = parent
+  }
+  return parts.join(" > ")
 }
 
 function buildMergedDescription(primary: ProductDetails, duplicate: ProductDetails): string {
@@ -234,6 +257,12 @@ async function fetchProduct(id: number): Promise<ProductDetails> {
     }
   })
 
+  const rawSpecs = (data as Record<string, unknown>).specs_json
+  const specs_json: Record<string, string> | null =
+    rawSpecs && typeof rawSpecs === 'object' && !Array.isArray(rawSpecs)
+      ? (rawSpecs as Record<string, string>)
+      : null
+
   return {
     id: Number(data.id ?? id),
     name: String(data.name ?? ""),
@@ -241,6 +270,7 @@ async function fetchProduct(id: number): Promise<ProductDetails> {
     description: String(data.description ?? ""),
     image_url: (data.image_url ?? null) as string | null,
     categoryId: (data.categoryId ?? null) as number | null,
+    specs_json,
     listings,
   }
 }
@@ -250,6 +280,7 @@ export default function DuplicateCompareMergePanel({ items, onActionComplete }: 
     () => items.filter((item) => Number.isInteger(item.productId) && item.productId > 0),
     [items],
   )
+  const [categories, setCategories] = useState<Category[]>([])
   const [detailsById, setDetailsById] = useState<Record<number, ProductDetails>>({})
   const [loadingComparison, setLoadingComparison] = useState(false)
   const [primaryIdRaw, setPrimaryIdRaw] = useState(mergeCandidates[0] ? String(mergeCandidates[0].productId) : "")
@@ -417,6 +448,15 @@ export default function DuplicateCompareMergePanel({ items, onActionComplete }: 
   }, [mergeCandidates])
 
   useEffect(() => {
+    fetch("/api/categories")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data) => {
+        if (Array.isArray(data)) setCategories(data)
+      })
+      .catch(() => {})
+  }, [])
+
+  useEffect(() => {
     if (mergeCandidates.length < 2) {
       return
     }
@@ -461,19 +501,23 @@ export default function DuplicateCompareMergePanel({ items, onActionComplete }: 
         fetchProduct(duplicateId),
       ])
 
-      if (strategy !== "keep-primary") {
-        const updatePayload =
-          strategy === "keep-duplicate"
-            ? {
-                name: duplicateProduct.name || primaryProduct.name,
-                brand: duplicateProduct.brand ?? primaryProduct.brand,
-                description: duplicateProduct.description || primaryProduct.description,
-              }
-            : {
-                name: primaryProduct.name || duplicateProduct.name,
-                brand: primaryProduct.brand ?? duplicateProduct.brand,
-                description: buildMergedDescription(primaryProduct, duplicateProduct),
-              }
+      const primarySpecs = primaryProduct.specs_json ?? {}
+        const duplicateSpecs = duplicateProduct.specs_json ?? {}
+        const mergedSpecs = { ...duplicateSpecs, ...primarySpecs }
+
+        const updatePayload: Record<string, unknown> = {
+          specs_json: mergedSpecs,
+        }
+
+        if (strategy === "keep-duplicate") {
+          updatePayload.name = duplicateProduct.name || primaryProduct.name
+          updatePayload.brand = duplicateProduct.brand ?? primaryProduct.brand
+          updatePayload.description = duplicateProduct.description || primaryProduct.description
+        } else if (strategy === "keep-both") {
+          updatePayload.name = primaryProduct.name || duplicateProduct.name
+          updatePayload.brand = primaryProduct.brand ?? duplicateProduct.brand
+          updatePayload.description = buildMergedDescription(primaryProduct, duplicateProduct)
+        }
 
         const updateResponse = await fetch(`/api/products/${primaryId}`, {
           method: "PUT",
@@ -485,7 +529,6 @@ export default function DuplicateCompareMergePanel({ items, onActionComplete }: 
         if (!updateResponse.ok) {
           throw new Error(updateData.error || "Failed to apply keep strategy before merge.")
         }
-      }
 
       const result = await mergeProducts(primaryId, [duplicateId], "keep-duplicate", pairListingSurvivorBySeller)
       toast.success(
@@ -598,9 +641,11 @@ export default function DuplicateCompareMergePanel({ items, onActionComplete }: 
                   ))}
                 </tr>
                 <tr className="border-t">
-                  <td className="px-3 py-2 font-medium">Category ID</td>
+                  <td className="px-3 py-2 font-medium">Category</td>
                   {tableProducts.map((product) => (
-                    <td key={`category-${product.id}`} className="px-3 py-2">{product.categoryId ?? "-"}</td>
+                    <td key={`category-${product.id}`} className="px-3 py-2 text-xs whitespace-pre-wrap">
+                      {getCategoryPath(product.categoryId, categories)}
+                    </td>
                   ))}
                 </tr>
                 <tr className="border-t">
@@ -624,6 +669,28 @@ export default function DuplicateCompareMergePanel({ items, onActionComplete }: 
                             {listings.map((listing) => (
                               <p key={`listing-row-${product.id}-${listing.id}`} className="whitespace-pre-wrap break-words">
                                 {formatListingSummary(listing)}
+                              </p>
+                            ))}
+                          </div>
+                        )}
+                      </td>
+                    )
+                  })}
+                </tr>
+                <tr className="border-t align-top">
+                  <td className="px-3 py-2 font-medium">Specifications</td>
+                  {tableProducts.map((product) => {
+                    const specs = product.specs_json
+                    return (
+                      <td key={`specs-${product.id}`} className="px-3 py-2 text-muted-foreground">
+                        {!specs || Object.keys(specs).length === 0 ? (
+                          <span className="text-xs italic">No specs</span>
+                        ) : (
+                          <div className="space-y-1">
+                            {Object.entries(specs).map(([key, value]) => (
+                              <p key={`spec-${product.id}-${key}`} className="text-xs whitespace-pre-wrap break-words">
+                                <span className="font-medium text-foreground">{SPEC_LABELS[key as keyof typeof SPEC_LABELS] ?? key}:</span>{' '}
+                                {String(value)}
                               </p>
                             ))}
                           </div>

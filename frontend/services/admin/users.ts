@@ -174,7 +174,8 @@ export async function updateB2BStatus(
   reviewerNote?: string,
   sellerId?: number,
   planType?: string,
-  durationMonths?: number
+  durationMonths?: number,
+  brandName?: string
 ): Promise<AdminUser> {
   const response = await fetch(`/api/admin/users/b2b/${id}/status`, {
     method: "PATCH",
@@ -185,6 +186,7 @@ export async function updateB2BStatus(
       seller_id: sellerId,
       plan_type: planType,
       duration_months: durationMonths,
+      brand_name: brandName,
     }),
   })
 

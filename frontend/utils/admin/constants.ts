@@ -134,8 +134,8 @@ const SIDEBAR_CONSTANTS: SidebarItem[] = [
     icon: Briefcase,
     items: [
       {
-        title: "B2B Subscriptions",
-        url: "/admin/b2b-workflows/subscriptions",
+        title: "Sponsored Products",
+        url: "/admin/b2b/sponsored-products",
       },
       {
         title: "Renewal Requests",
@@ -152,6 +152,10 @@ const SIDEBAR_CONSTANTS: SidebarItem[] = [
       {
         title: "Business Reports",
         url: "/admin/b2b-workflows/reports",
+      },
+      {
+        title: "Brand Scope",
+        url: "/admin/b2b-management/brand-scope",
       },
     ],
   },

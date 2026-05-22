@@ -1,11 +1,13 @@
 "use client"
 
-import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
-import { MessageSquare, Star, ThumbsUp, TrendingDown } from "lucide-react"
+import { useMemo } from "react"
+import { Bar, BarChart, CartesianGrid, Cell, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
+import { MessageSquare, Star, ThumbsDown, ThumbsUp, TrendingDown } from "lucide-react"
 
 import { useB2B } from "@/components/B2B/b2b-context"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 import B2BPlanGate from "@/components/B2B/b2b-plan-gate"
 
@@ -13,9 +15,31 @@ const COLORS = ["#6366f1", "#8b5cf6", "#a78bfa", "#c4b5fd", "#818cf8"]
 
 type ReviewItem = { product_id?: number; product_name?: string; avg_rating?: number; review_count?: number; sentiment_score?: number; rating_gap_vs_competitors?: number; top_keywords?: string[] }
 
+function NssGauge({ nss }: { nss: number | null }) {
+  if (nss === null) return <span className="text-muted-foreground">N/A</span>
+  const color = nss >= 50 ? "text-emerald-600" : nss >= 0 ? "text-amber-600" : "text-red-600"
+  const bgColor = nss >= 50 ? "bg-emerald-100 dark:bg-emerald-950/40" : nss >= 0 ? "bg-amber-100 dark:bg-amber-950/40" : "bg-red-100 dark:bg-red-950/40"
+  return (
+    <div className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 ${bgColor}`}>
+      <span className={`text-3xl font-black ${color}`}>{nss > 0 ? "+" : ""}{nss}</span>
+      <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">NSS</span>
+    </div>
+  )
+}
+
 export default function ReviewsSentimentPage() {
-  const { summary, isGold, loading } = useB2B()
+  const { summary, isGold, loading, mode, brandFilter, setBrandFilter, refresh } = useB2B()
   const metrics = summary?.metrics as Record<string, unknown> | undefined
+
+  const brandOptions = useMemo(() => {
+    if (mode !== "market") return []
+    const brands = ((metrics?.competitor_brands ?? []) as Array<Record<string, unknown>>)
+      .map((b) => String(b.brand ?? ""))
+      .filter(Boolean)
+    return [...new Set(brands)]
+  }, [metrics, mode])
+
+  const reputation = (metrics?.reputation ?? metrics?.reviews_sentiment ?? metrics?.reviews ?? {}) as Record<string, unknown>
   const data = ((metrics?.reviews_sentiment ?? metrics?.reviews ?? []) as ReviewItem[])
 
   if (loading && !summary) {
@@ -36,22 +60,45 @@ export default function ReviewsSentimentPage() {
     return <B2BPlanGate featureName="Reviews & Sentiment" />
   }
 
+  const avgRating = reputation?.average_rating !== null && reputation?.average_rating !== undefined ? Number(reputation.average_rating) : 0
+  const totalReviews = Number(reputation?.total_reviews ?? 0)
+  const nss = reputation?.nss !== null && reputation?.nss !== undefined ? Number(reputation.nss) : null
+  const positiveCount = Number(reputation?.positive_count ?? 0)
+  const negativeCount = Number(reputation?.negative_count ?? 0)
+  const topPraises = (reputation?.top_praises ?? {}) as Record<string, number>
+  const topComplaints = (reputation?.top_complaints ?? {}) as Record<string, number>
+
   const chartData = data.slice(0, 10).map((item) => ({
     name: String(item.product_name ?? "Product").slice(0, 18),
     rating: Number(item.avg_rating ?? 0),
   }))
 
-  const avgRating = data.length > 0 ? data.reduce((s, d) => s + Number(d.avg_rating ?? 0), 0) / data.length : 0
-  const totalReviews = data.reduce((s, d) => s + Number(d.review_count ?? 0), 0)
-
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Reviews & Sentiment</h1>
-        <p className="text-sm text-muted-foreground">Monitor product ratings, review volume, and sentiment across your tracked brands.</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Reviews & Sentiment</h1>
+          <p className="text-sm text-muted-foreground">Net Sentiment Score (NSS%), praise/complaint analysis, and rating trends.</p>
+        </div>
+        {mode === "market" && brandOptions.length > 0 && (
+          <Select
+            value={brandFilter ?? "__all__"}
+            onValueChange={(v) => { setBrandFilter(v === "__all__" ? null : v); refresh() }}
+          >
+            <SelectTrigger className="h-9 w-44 text-sm">
+              <SelectValue placeholder="All Brands" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__">All Brands</SelectItem>
+              {brandOptions.map((b) => (
+                <SelectItem key={b} value={b}>{b}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
       </div>
 
-      <section className="grid gap-4 md:grid-cols-3">
+      <section className="grid gap-4 md:grid-cols-4">
         <Card className="border-border/50 shadow-sm">
           <CardContent className="flex items-center gap-4 p-5">
             <div className="flex size-12 items-center justify-center rounded-xl bg-amber-50 dark:bg-amber-950/40"><Star className="size-5 text-amber-600" /></div>
@@ -71,6 +118,12 @@ export default function ReviewsSentimentPage() {
           </CardContent>
         </Card>
         <Card className="border-border/50 shadow-sm">
+          <CardContent className="p-5">
+            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Net Sentiment</p>
+            <p className="mt-2"><NssGauge nss={nss} /></p>
+          </CardContent>
+        </Card>
+        <Card className="border-border/50 shadow-sm">
           <CardContent className="flex items-center gap-4 p-5">
             <div className="flex size-12 items-center justify-center rounded-xl bg-violet-50 dark:bg-violet-950/40"><ThumbsUp className="size-5 text-violet-600" /></div>
             <div>
@@ -80,6 +133,82 @@ export default function ReviewsSentimentPage() {
           </CardContent>
         </Card>
       </section>
+
+      {(() => {
+        const rawTrend = (metrics?.rating_trend ?? []) as Array<{ week: string; avg_rating: number; review_count: number }>
+        if (rawTrend.length < 2) return null
+        const lineData = rawTrend.map((r) => ({
+          week: r.week.slice(0, 10),
+          rating: r.avg_rating,
+          count: r.review_count,
+        }))
+        return (
+          <Card className="border-border/50 shadow-sm">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2"><TrendingDown className="size-4 text-indigo-500" />Rating Trend (12 Weeks)</CardTitle>
+              <CardDescription>Weekly average rating over the last 12 weeks.</CardDescription>
+            </CardHeader>
+            <CardContent className="h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={lineData} margin={{ top: 8, right: 16, bottom: 8, left: 8 }}>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-border/30" />
+                  <XAxis dataKey="week" tickLine={false} axisLine={false} fontSize={11} />
+                  <YAxis tickLine={false} axisLine={false} fontSize={11} domain={[0, 5]} />
+                  <Tooltip
+                    contentStyle={{ borderRadius: "12px", border: "1px solid hsl(var(--border))", fontSize: "12px" }}
+                    formatter={(val: number, name: string) => [name === "rating" ? `${val.toFixed(2)} / 5` : `${val}`, name === "rating" ? "Avg Rating" : "Reviews"]}
+                  />
+                  <Line type="monotone" dataKey="rating" stroke="#6366f1" strokeWidth={2} dot={{ fill: "#6366f1", r: 3 }} connectNulls />
+                </LineChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        )
+      })()}
+
+      <div className="grid gap-6 xl:grid-cols-2">
+        <Card className="border-border/50 shadow-sm">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-emerald-600"><ThumbsUp className="size-4" />Top Praises</CardTitle>
+            <CardDescription>Most frequently mentioned positive aspects from high-rated reviews.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {Object.keys(topPraises).length === 0 ? (
+              <p className="py-8 text-center text-sm text-muted-foreground">No positive keyword data yet</p>
+            ) : (
+              Object.entries(topPraises).slice(0, 7).map(([word, count], i) => (
+                <div key={i} className="flex items-center justify-between rounded-lg border border-emerald-200/50 bg-emerald-50/50 px-4 py-2.5 dark:border-emerald-900/30 dark:bg-emerald-950/20">
+                  <span className="text-sm font-medium capitalize">{word}</span>
+                  <Badge variant="outline" className="border-emerald-200 bg-white text-emerald-700 dark:border-emerald-800 dark:bg-black/20 dark:text-emerald-400">
+                    {count}x
+                  </Badge>
+                </div>
+              ))
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="border-border/50 shadow-sm">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-red-600"><ThumbsDown className="size-4" />Top Complaints</CardTitle>
+            <CardDescription>Most frequently mentioned issues from low-rated reviews.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {Object.keys(topComplaints).length === 0 ? (
+              <p className="py-8 text-center text-sm text-muted-foreground">No negative keyword data yet</p>
+            ) : (
+              Object.entries(topComplaints).slice(0, 7).map(([word, count], i) => (
+                <div key={i} className="flex items-center justify-between rounded-lg border border-red-200/50 bg-red-50/50 px-4 py-2.5 dark:border-red-900/30 dark:bg-red-950/20">
+                  <span className="text-sm font-medium capitalize">{word}</span>
+                  <Badge variant="outline" className="border-red-200 bg-white text-red-700 dark:border-red-800 dark:bg-black/20 dark:text-red-400">
+                    {count}x
+                  </Badge>
+                </div>
+              ))
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
       <Card className="border-border/50 shadow-sm">
         <CardHeader>
@@ -102,7 +231,6 @@ export default function ReviewsSentimentPage() {
             <div className="flex h-full flex-col items-center justify-center text-sm text-muted-foreground">
               <MessageSquare className="mb-2 size-8 opacity-30" />
               <span>No review data</span>
-              <span className="text-xs text-muted-foreground/70 mt-1">Review data will appear once product ratings are collected.</span>
             </div>
           )}
         </CardContent>
@@ -127,7 +255,6 @@ export default function ReviewsSentimentPage() {
                   <tr><td colSpan={5} className="px-4 py-16 text-center">
                     <MessageSquare className="mx-auto mb-3 size-10 text-muted-foreground/30" />
                     <p className="text-sm font-medium text-muted-foreground">No review data yet</p>
-                    <p className="text-xs text-muted-foreground/70 mt-1">Product reviews and sentiment scores will appear once tracked.</p>
                   </td></tr>
                 ) : (
                   data.map((item, i) => {
@@ -160,6 +287,34 @@ export default function ReviewsSentimentPage() {
                 )}
               </tbody>
             </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="border-border/50 shadow-sm">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><TrendingDown className="size-4 text-indigo-500" />Sentiment Summary</CardTitle>
+          <CardDescription>Aggregate sentiment metrics across all tracked products.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div className="rounded-xl border border-border/50 p-4 text-center">
+              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Positive Reviews</p>
+              <p className="mt-1 text-2xl font-bold text-emerald-600">{positiveCount}</p>
+              <p className="text-xs text-muted-foreground">{totalReviews > 0 ? ((positiveCount / totalReviews) * 100).toFixed(0) : 0}% of total</p>
+            </div>
+            <div className="rounded-xl border border-border/50 p-4 text-center">
+              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Negative Reviews</p>
+              <p className="mt-1 text-2xl font-bold text-red-600">{negativeCount}</p>
+              <p className="text-xs text-muted-foreground">{totalReviews > 0 ? ((negativeCount / totalReviews) * 100).toFixed(0) : 0}% of total</p>
+            </div>
+            <div className="rounded-xl border border-border/50 p-4 text-center">
+              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">NSS Range</p>
+              <p className={`mt-1 text-2xl font-bold ${nss !== null && nss >= 50 ? "text-emerald-600" : nss !== null && nss >= 0 ? "text-amber-600" : "text-red-600"}`}>
+                {nss !== null ? `${nss > 0 ? "+" : ""}${nss}` : "N/A"}
+              </p>
+              <p className="text-xs text-muted-foreground">Net Sentiment Score</p>
+            </div>
           </div>
         </CardContent>
       </Card>

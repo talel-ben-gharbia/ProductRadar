@@ -5,7 +5,6 @@ import { ShoppingBag, Star } from "lucide-react"
 import { useRouter } from "next/navigation"
 
 import { ListingFavoriteToggle } from "@/components/B2C/listing-favorite-toggle"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import type { Product } from "@/utils/types"
@@ -16,7 +15,6 @@ type ProductCardProps = {
   offersCount: number
   bestTrustScore?: number | null
   favoriteListingId?: number
-  isSponsored?: boolean
 }
 
 function formatTrustScore(value?: number | null): string {
@@ -27,7 +25,7 @@ function formatTrustScore(value?: number | null): string {
   return `${value.toFixed(2)}/100`
 }
 
-export function ProductCard({ product, bestPriceLabel, offersCount, bestTrustScore, favoriteListingId, isSponsored }: ProductCardProps) {
+export function ProductCard({ product, bestPriceLabel, offersCount, bestTrustScore, favoriteListingId }: ProductCardProps) {
   const router = useRouter()
 
   function openDetails() {
@@ -48,14 +46,6 @@ export function ProductCard({ product, bestPriceLabel, offersCount, bestTrustSco
       }}
     >
       <div className="relative mx-3 mt-3 overflow-hidden rounded-xl bg-[#f6f7fb]">
-        {isSponsored && (
-          <div className="absolute left-3 top-3 z-20">
-            <Badge className="flex items-center gap-1 bg-amber-400 text-xs text-amber-900 hover:bg-amber-400">
-              <Star className="size-3 fill-amber-900" />
-              Sponsored
-            </Badge>
-          </div>
-        )}
         {favoriteListingId ? (
           <div className="absolute right-3 top-3 z-20">
             <div onClick={(event) => event.stopPropagation()}>

@@ -56,7 +56,6 @@ const VENDOR_NAV: NavItem[] = [
   { href: "/B2B/demo/alerts", name: "Alerts", icon: Bell },
   { href: "/B2B/demo/reports", name: "Reports", icon: FileText },
   { href: "/B2B/demo/ads-requests", name: "Ads Requests", icon: Megaphone },
-  { href: "/B2B/demo/scraping-requests", name: "Scraping Requests", icon: Search },
   { href: "/B2B/demo/settings", name: "Settings", icon: Settings },
 ]
 
@@ -64,13 +63,11 @@ const MARKET_NAV: NavItem[] = [
   { href: "/B2B/demo", name: "Overview", icon: Home },
   { href: "/B2B/demo/share-of-shelf", name: "Share of Shelf", icon: BarChart3 },
   { href: "/B2B/demo/price-dispersion", name: "Price Dispersion", icon: LineChart },
-  { href: "/B2B/demo/competitors", name: "Competitors", icon: Layers },
-  { href: "/B2B/demo/stock-intelligence", name: "Stock Intelligence", icon: AlertTriangle, gold: true },
+
   { href: "/B2B/demo/reviews-sentiment", name: "Reviews & Sentiment", icon: MessageSquare, gold: true },
   { href: "/B2B/demo/demand-intelligence", name: "Demand Intelligence", icon: Zap, gold: true },
   { href: "/B2B/demo/alerts", name: "Alerts", icon: Bell },
   { href: "/B2B/demo/reports", name: "Reports", icon: FileText },
-  { href: "/B2B/demo/scraping-requests", name: "Scraping Requests", icon: Search },
   { href: "/B2B/demo/settings", name: "Settings", icon: Settings },
 ]
 
@@ -87,12 +84,11 @@ function DemoNavbar() {
     "/B2B/demo/alerts": "Alerts & Notifications",
     "/B2B/demo/reports": "Reports",
     "/B2B/demo/ads-requests": "Ads Requests",
-    "/B2B/demo/scraping-requests": "Scraping Requests",
     "/B2B/demo/settings": "Settings",
     "/B2B/demo/share-of-shelf": "Share of Shelf",
     "/B2B/demo/price-dispersion": "Price Dispersion",
-    "/B2B/demo/competitors": "Competitor Ranking",
-    "/B2B/demo/stock-intelligence": "Stock Intelligence",
+
+
     "/B2B/demo/reviews-sentiment": "Reviews & Sentiment",
     "/B2B/demo/demand-intelligence": "Demand Intelligence",
   }

@@ -6,7 +6,6 @@ use App\Entity\Admin;
 use App\Entity\B2BAdsRequest;
 use App\Entity\B2BCompany;
 use App\Entity\B2BMarket;
-use App\Entity\B2BScrapingRequest;
 use App\Entity\B2BSponsoredArticle;
 use App\Entity\Notification;
 use App\Entity\Subscription;
@@ -24,6 +23,89 @@ final class B2BNotificationService
         private readonly LoggerInterface $logger,
         private readonly string $fromEmail,
     ) {
+    }
+
+    public function notifyMarketBrandOOS(B2BMarket $market, string $brandName, string $productName, array $oosSellers, int $remainingSellers): void
+    {
+        $sellerList = implode(', ', array_slice($oosSellers, 0, 3));
+        $count = count($oosSellers);
+        $message = sprintf(
+            '%s %s is now out of stock at %s (%d major seller%s). Only %d seller%s remain%s in stock. Possible supply shortage.',
+            $brandName, $productName, $sellerList, $count, $count > 1 ? 's' : '',
+            $remainingSellers, $remainingSellers > 1 ? 's' : '', $remainingSellers > 0 ? '' : ' — COMPLETE STOCKOUT'
+        );
+        $this->notifyMarket($market, 'MARKET_BRAND_OOS', $message, 'HIGH');
+
+        $this->sendEmail(
+            $market,
+            sprintf('⚠ Stock Alert: %s %s OOS at %d Sellers', $brandName, $productName, $count),
+            sprintf(
+                "Hello %s,\n\n%s\n\nThis alert was triggered because a product you follow is now out of stock at multiple major sellers.\n\nCheck your dashboard for details.\n\nBest regards,\nProductRadar Team",
+                $market->getCompanyName() ?? 'Valued Partner',
+                $message
+            )
+        );
+    }
+
+    public function notifyMarketPriceSpike(B2BMarket $market, string $category, float $spikePct): void
+    {
+        $message = sprintf(
+            'Suspicious price spike detected in %s category. Average price up %.1f%% since yesterday across all sellers. This may indicate supply shortage or coordinated pricing.',
+            $category, $spikePct
+        );
+        $this->notifyMarket($market, 'MARKET_PRICE_SPIKE', $message, 'HIGH');
+
+        $this->sendEmail(
+            $market,
+            sprintf('⚠ Price Spike Alert: %s — Avg up %.0f%%', $category, $spikePct),
+            sprintf(
+                "Hello %s,\n\n%s\n\nInvestigate your dashboard to see which products are affected.\n\nBest regards,\nProductRadar Team",
+                $market->getCompanyName() ?? 'Valued Partner',
+                $message
+            )
+        );
+    }
+
+    public function notifyMarketShelfShareDrop(B2BMarket $market, string $brandName, string $category, float $oldShare, float $newShare, ?string $gainerBrand = null): void
+    {
+        $drop = $oldShare - $newShare;
+        $gainer = $gainerBrand ? sprintf(' — %s gained the difference.', $gainerBrand) : '';
+        $message = sprintf(
+            '%s shelf share in %s dropped from %.0f%% to %.0f%% this week (%.0f%% loss).%s',
+            $brandName, $category, $oldShare, $newShare, $drop, $gainer
+        );
+        $this->notifyMarket($market, 'MARKET_SHELF_DROP', $message, 'HIGH');
+
+        $this->sendEmail(
+            $market,
+            sprintf('⬇ Shelf Share Alert: %s lost %.0f%% in %s', $brandName, $drop, $category),
+            sprintf(
+                "Hello %s,\n\n%s\n\nReview your category performance on the dashboard.\n\nBest regards,\nProductRadar Team",
+                $market->getCompanyName() ?? 'Valued Partner',
+                $message
+            )
+        );
+    }
+
+    public function notifyMarketSentimentShift(B2BMarket $market, string $brandName, int $oldNss, int $newNss, string $topNewComplaint = ''): void
+    {
+        $drop = $oldNss - $newNss;
+        $complaint = $topNewComplaint ? sprintf(' Top new complaint: "%s".', $topNewComplaint) : '';
+        $message = sprintf(
+            '%s sentiment score dropped from %d to %d NSS (-%d pts).%s',
+            $brandName, $oldNss, $newNss, $drop, $complaint
+        );
+        $this->notifyMarket($market, 'MARKET_SENTIMENT_SHIFT', $message, 'MEDIUM');
+
+        $this->sendEmail(
+            $market,
+            sprintf('😐 Sentiment Shift: %s NSS dropped %d pts', $brandName, $drop),
+            sprintf(
+                "Hello %s,\n\n%s\n\nCheck the reviews & sentiment section for details.\n\nBest regards,\nProductRadar Team",
+                $market->getCompanyName() ?? 'Valued Partner',
+                $message
+            )
+        );
     }
 
     public function notifyCompany(B2BCompany $company, string $type, string $message, string $severity = 'INFO', ?ProductListing $listing = null): void
@@ -120,7 +202,7 @@ final class B2BNotificationService
         $company = $article->getCompany();
         if (!$company) return;
 
-        $productName = $article->getProduct()?->getName() ?? $article->getTitle() ?? 'Unknown';
+        $productName = $article->getProductListing()?->getProduct()?->getName() ?? $article->getTitle() ?? 'Unknown';
         $endsAt = $article->getEndsAt()?->format('F j, Y') ?? 'N/A';
         $message = sprintf('Your sponsorship for "%s" has been approved by admin %s and is now live until %s.', $productName, (string) $admin->getEmail(), $endsAt);
         $this->notifyCompany($company, 'SPONSORSHIP_APPROVED', $message, 'SUCCESS');
@@ -142,7 +224,7 @@ final class B2BNotificationService
         $company = $article->getCompany();
         if (!$company) return;
 
-        $productName = $article->getProduct()?->getName() ?? $article->getTitle() ?? 'Unknown';
+        $productName = $article->getProductListing()?->getProduct()?->getName() ?? $article->getTitle() ?? 'Unknown';
         $message = sprintf('Your sponsorship request for "%s" has been declined.', $productName);
         $this->notifyCompany($company, 'SPONSORSHIP_REJECTED', $message);
 
@@ -162,7 +244,7 @@ final class B2BNotificationService
         $company = $article->getCompany();
         if (!$company) return;
 
-        $productName = $article->getProduct()?->getName() ?? $article->getTitle() ?? 'Unknown';
+        $productName = $article->getProductListing()?->getProduct()?->getName() ?? $article->getTitle() ?? 'Unknown';
         $message = sprintf('Your sponsorship for "%s" has ended. Submit a new request to continue promoting your product.', $productName);
         $this->notifyCompany($company, 'SPONSORSHIP_EXPIRED', $message, 'HIGH');
 
@@ -226,7 +308,9 @@ final class B2BNotificationService
     public function notifyAdsRequestApproved(B2BAdsRequest $adsRequest, Admin $admin, array $campaignDetails): void
     {
         $company = $adsRequest->getCompany();
-        if (!$company) return;
+        $market = $adsRequest->getMarket();
+        $owner = $company ?? $market;
+        if (!$owner) return;
 
         $linkUrl = $adsRequest->getLinkUrl() ?? 'N/A';
         $dimensions = '';
@@ -235,14 +319,14 @@ final class B2BNotificationService
         }
         $duration = isset($campaignDetails['duration_days']) ? sprintf('%d days', $campaignDetails['duration_days']) : 'TBD';
         $message = sprintf('Your banner ads request #%d has been approved!', $adsRequest->getId());
-        $this->notifyCompany($company, 'ADS_REQUEST_APPROVED', $message);
+        $this->notifyOwner($owner, 'ADS_REQUEST_APPROVED', $message);
 
         $this->sendEmail(
-            $company,
+            $owner,
             'Your Advertising Campaign is Live!',
             sprintf(
                 "Hello %s,\n\nYour ads request #%d has been approved! Your campaign is now active.\n\nLanding page: %s\nDimensions: %s\nDuration: %s\n\nTrack your campaign performance from the dashboard.\n\nBest regards,\nProductRadar Team",
-                $company->getCompanyName() ?? 'Valued Partner',
+                $owner->getCompanyName() ?? 'Valued Partner',
                 $adsRequest->getId(),
                 $linkUrl,
                 $dimensions,
@@ -254,17 +338,19 @@ final class B2BNotificationService
     public function notifyAdsRequestRejected(B2BAdsRequest $adsRequest): void
     {
         $company = $adsRequest->getCompany();
-        if (!$company) return;
+        $market = $adsRequest->getMarket();
+        $owner = $company ?? $market;
+        if (!$owner) return;
 
         $message = sprintf('Your ads request #%d has been declined.', $adsRequest->getId());
-        $this->notifyCompany($company, 'ADS_REQUEST_REJECTED', $message);
+        $this->notifyOwner($owner, 'ADS_REQUEST_REJECTED', $message);
 
         $this->sendEmail(
-            $company,
+            $owner,
             'Update on Your Ads Request',
             sprintf(
                 "Hello %s,\n\nYour ads request #%d was not approved at this time.\n\nIf you have any questions, please reach out to our support team.\n\nBest regards,\nProductRadar Team",
-                $company->getCompanyName() ?? 'Valued Partner',
+                $owner->getCompanyName() ?? 'Valued Partner',
                 $adsRequest->getId(),
             )
         );
@@ -375,6 +461,12 @@ final class B2BNotificationService
 
             return false;
         }
+    }
+
+    public function notifyNewReseller(B2BMarket $market, string $brandName, string $productName, string $sellerName): void
+    {
+        $message = sprintf('New reseller detected for %s: "%s" is now selling "%s".', $brandName, $sellerName, $productName);
+        $this->notifyMarket($market, 'NEW_RESELLER', $message, 'INFO');
     }
 
     public function notifySubscriptionExpiryWarning(Subscription $subscription, int $daysLeft): void

@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button"
 import DuplicatesManagementPanel from "@/components/admin/duplicates-management-panel"
 import { getProductListings } from "@/services/admin/product-listings"
 import { getProducts } from "@/services/admin/products"
-import type { Product, ProductListing } from "@/utils/types"
+import { normalizeSpecs } from "@/utils/specs"
+import type { CanonicalSpecs, Product, ProductListing } from "@/utils/types"
 
 type DuplicateItem = {
   productId: number | null
@@ -24,10 +25,16 @@ type DuplicateGroup = {
   listingCount: number
   count: number
   items: DuplicateItem[]
+  matchingSpecKeys?: string[]
+  differingSpecKeys?: string[]
 }
 
 function normalize(value: string | null | undefined): string {
-  return (value ?? "").trim().toLowerCase().replace(/\s+/g, " ")
+  return (value ?? "")
+    .trim().toLowerCase()
+    .replace(/[\/\\()\[\]{},;:!?@#$%^&*+=<>~`'"]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
 }
 
 function buildGroupStats(productIds: number[], listingsByProductId: Map<number, ProductListing[]>): {
@@ -73,6 +80,7 @@ function deriveRiskLevel(confidenceScore: number, sellerCollisionCount: number):
 
   return "high"
 }
+
 
 function buildReferenceDuplicateGroups(
   listings: ProductListing[],
@@ -154,7 +162,12 @@ function buildNameDescBrandGroups(
       continue
     }
 
-    const key = `${name}|${description}|${brand}`
+    const rawSpecs = product.specs_json as Record<string, string> | null | undefined
+    const canonicalSpecs = normalizeSpecs(rawSpecs ?? null)
+    const specKeys = Object.keys(canonicalSpecs).sort()
+    const specStr = specKeys.map((k) => `${k}:${canonicalSpecs[k as keyof typeof canonicalSpecs]}`).join('|')
+
+    const key = `${name}|${description}|${brand}|${specStr}`
     const existing = groups.get(key)
     if (existing) {
       existing.push(product)
@@ -189,15 +202,45 @@ function buildNameDescBrandGroups(
         }
       }
 
+      const groupSpecs = new Map<number, CanonicalSpecs>()
+      for (const product of value) {
+        const raw = product.specs_json as Record<string, string> | null | undefined
+        groupSpecs.set(product.id, normalizeSpecs(raw ?? null))
+      }
+
+      const allSpecKeys = new Set<string>()
+      for (const specs of groupSpecs.values()) {
+        for (const k of Object.keys(specs)) {
+          allSpecKeys.add(k)
+        }
+      }
+
+      const matchingSpecKeys: string[] = []
+      const differingSpecKeys: string[] = []
+      for (const k of allSpecKeys) {
+        const values = new Set<string>()
+        for (const specs of groupSpecs.values()) {
+          const v = (specs as Record<string, string>)[k]
+          if (v) values.add(v)
+        }
+        if (values.size === 1) {
+          matchingSpecKeys.push(k)
+        } else if (values.size > 1) {
+          differingSpecKeys.push(k)
+        }
+      }
+
+      const hasSpecs = allSpecKeys.size > 0
+      const specBonus = hasSpecs ? 5 : 0
       const referenceOverlapBonus = refs.size > 0 && refs.size < Math.max(2, productIds.length * 2) ? 6 : 0
       const collisionPenalty = Math.min(10, stats.sellerCollisionCount * 2)
-      const confidenceScore = Math.max(55, Math.min(98, 78 + sameCategoryBonus + referenceOverlapBonus - collisionPenalty))
+      const confidenceScore = Math.max(55, Math.min(98, 78 + sameCategoryBonus + referenceOverlapBonus + specBonus - collisionPenalty))
       const riskLevel = deriveRiskLevel(confidenceScore, stats.sellerCollisionCount)
 
       return {
         key: `ndb:${key}`,
         label: sample.name,
-        signal: "same normalized name + description + brand",
+        signal: "same normalized name + description + brand" + (hasSpecs ? " + specs" : ""),
         confidenceScore,
         riskLevel,
         confidenceLabel: `${confidenceScore}% confidence`,
@@ -212,6 +255,8 @@ function buildNameDescBrandGroups(
             description: product.description,
           }))
           .sort((a, b) => a.name.localeCompare(b.name)),
+        matchingSpecKeys: matchingSpecKeys.length > 0 ? matchingSpecKeys : undefined,
+        differingSpecKeys: differingSpecKeys.length > 0 ? differingSpecKeys : undefined,
       }
     })
     .sort((a, b) => b.count - a.count)
@@ -291,7 +336,7 @@ export default async function DuplicatesPage({ searchParams }: DuplicatesPagePro
         <div className="space-y-1">
           <h1 className="text-2xl font-bold">Duplicate Finder</h1>
           <p className="text-sm text-muted-foreground">
-            Cascading duplicate detection: reference first, then name + description + brand.
+            Cascading duplicate detection: reference first, then name + description + brand + specifications.
           </p>
         </div>
         <Button asChild size="sm" variant="outline">
@@ -318,7 +363,7 @@ export default async function DuplicatesPage({ searchParams }: DuplicatesPagePro
           <div className="rounded-lg border bg-card p-4">
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Recommended Order</p>
             <p className="mt-1 text-lg font-semibold">Level 1, then Level 2</p>
-            <p className="mt-1 text-xs text-muted-foreground">Resolve exact reference matches first for safest cleanup.</p>
+            <p className="mt-1 text-xs text-muted-foreground">Resolve exact reference matches first for safest cleanup, then name+description+brand+specs groups.</p>
           </div>
 
           <div className="rounded-lg border bg-card p-4">

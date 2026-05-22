@@ -3,13 +3,11 @@
 namespace App\Entity;
 
 use App\Repository\B2BScrapingRequestRepository;
+use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 
 #[ORM\Entity(repositoryClass: B2BScrapingRequestRepository::class)]
-#[ORM\Table(name: 'b2b_scraping_request', indexes: [
-    new ORM\Index(name: 'idx_b2b_scraping_request_owner_type', columns: ['owner_type']),
-    new ORM\Index(name: 'idx_b2b_scraping_request_status', columns: ['status']),
-])]
+#[ORM\Table(name: 'b2b_scraping_request')]
 class B2BScrapingRequest
 {
     #[ORM\Id]
@@ -31,19 +29,19 @@ class B2BScrapingRequest
     #[ORM\Column(length: 20)]
     private ?string $target_type = null;
 
-    #[ORM\Column(type: 'text')]
+    #[ORM\Column(type: Types::TEXT)]
     private ?string $target_url = null;
 
     #[ORM\Column(length: 20)]
     private ?string $status = null;
 
-    #[ORM\Column(type: 'text', nullable: true)]
+    #[ORM\Column(type: Types::TEXT, nullable: true)]
     private ?string $notes = null;
 
     #[ORM\Column(nullable: true)]
     private ?bool $is_duplicate = null;
 
-    #[ORM\Column(type: 'text', nullable: true)]
+    #[ORM\Column(type: Types::TEXT, nullable: true)]
     private ?string $duplicate_reason = null;
 
     #[ORM\Column(nullable: true)]
@@ -65,7 +63,6 @@ class B2BScrapingRequest
     public function setOwnerType(string $ownerType): static
     {
         $this->owner_type = strtoupper($ownerType);
-
         return $this;
     }
 
@@ -77,7 +74,6 @@ class B2BScrapingRequest
     public function setCompany(?B2BCompany $company): static
     {
         $this->company = $company;
-
         return $this;
     }
 
@@ -89,7 +85,6 @@ class B2BScrapingRequest
     public function setMarket(?B2BMarket $market): static
     {
         $this->market = $market;
-
         return $this;
     }
 
@@ -100,8 +95,7 @@ class B2BScrapingRequest
 
     public function setTargetType(string $targetType): static
     {
-        $this->target_type = strtoupper($targetType);
-
+        $this->target_type = $targetType;
         return $this;
     }
 
@@ -113,7 +107,6 @@ class B2BScrapingRequest
     public function setTargetUrl(string $targetUrl): static
     {
         $this->target_url = $targetUrl;
-
         return $this;
     }
 
@@ -125,7 +118,6 @@ class B2BScrapingRequest
     public function setStatus(string $status): static
     {
         $this->status = strtoupper($status);
-
         return $this;
     }
 
@@ -137,11 +129,10 @@ class B2BScrapingRequest
     public function setNotes(?string $notes): static
     {
         $this->notes = $notes;
-
         return $this;
     }
 
-    public function isDuplicate(): ?bool
+    public function getIsDuplicate(): ?bool
     {
         return $this->is_duplicate;
     }
@@ -149,7 +140,6 @@ class B2BScrapingRequest
     public function setIsDuplicate(?bool $isDuplicate): static
     {
         $this->is_duplicate = $isDuplicate;
-
         return $this;
     }
 
@@ -161,7 +151,6 @@ class B2BScrapingRequest
     public function setDuplicateReason(?string $duplicateReason): static
     {
         $this->duplicate_reason = $duplicateReason;
-
         return $this;
     }
 
@@ -173,7 +162,6 @@ class B2BScrapingRequest
     public function setCreatedAt(?\DateTimeImmutable $createdAt): static
     {
         $this->created_at = $createdAt;
-
         return $this;
     }
 
@@ -185,7 +173,6 @@ class B2BScrapingRequest
     public function setUpdatedAt(?\DateTimeImmutable $updatedAt): static
     {
         $this->updated_at = $updatedAt;
-
         return $this;
     }
 }

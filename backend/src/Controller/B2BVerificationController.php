@@ -5,14 +5,17 @@ namespace App\Controller;
 use App\Entity\Activity;
 use App\Entity\B2BCompany;
 use App\Entity\B2BMarket;
+use App\Entity\Brand;
 use App\Entity\PartnerRequest;
 use App\Entity\Subscription;
 use App\Entity\User;
 use App\Repository\AdminRepository;
+use App\Repository\BrandRepository;
 use App\Repository\PartnerRequestRepository;
 use App\Repository\SellerRepository;
 use App\Repository\UserRepository;
 use App\Security\AdminApiGuard;
+use App\Service\BrandDiscoveryService;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Mailer\MailerInterface;
@@ -35,6 +38,8 @@ final class B2BVerificationController extends AbstractController
     public function __construct(
         #[Autowire(service: 'general.cache')]
         private readonly CacheItemPoolInterface $cache,
+        private readonly BrandDiscoveryService $brandDiscoveryService,
+        private readonly BrandRepository $brandRepository,
     ) {
     }
 
@@ -184,6 +189,7 @@ final class B2BVerificationController extends AbstractController
             $isMarketRequest = strtoupper((string) $partnerRequest->getAccountType()) === 'B2B_MARKET';
             $sellerId = $payload['seller_id'] ?? null;
             $seller = null;
+            $brandName = $isMarketRequest ? trim((string) ($payload['brand_name'] ?? '')) : '';
 
             // Seller integration applies to both B2B companies and B2B markets.
             if ($sellerId) {
@@ -206,7 +212,7 @@ final class B2BVerificationController extends AbstractController
 
             try {
                 $entityManager->wrapInTransaction(function (EntityManagerInterface $em) use (
-                    $existingUser, $partnerRequest, $seller, $payload, $plainPassword, $logger,
+                    $existingUser, $partnerRequest, $seller, $payload, $plainPassword, $logger, $brandName,
                     &$approvedUser, &$subscription, &$firebaseUid
                 ) {
                     if ($existingUser === null) {
@@ -222,6 +228,14 @@ final class B2BVerificationController extends AbstractController
 
                     if (($approvedUser instanceof B2BCompany || $approvedUser instanceof B2BMarket) && $seller !== null) {
                         $approvedUser->setSeller($seller);
+                    }
+
+                    if ($approvedUser instanceof B2BMarket && $brandName !== '') {
+                        $approvedUser->setBrandName($brandName);
+                        $brand = $this->brandRepository->findOneBy(['name' => $brandName]);
+                        if ($brand !== null) {
+                            $approvedUser->setBrandEntity($brand);
+                        }
                     }
 
                     // Persist user first so getId() returns a real ID for the subscription
@@ -256,6 +270,23 @@ final class B2BVerificationController extends AbstractController
                 }
 
                 return $this->json(['error' => 'Internal server error during B2B approval.'], 500);
+            }
+
+            // Trigger brand discovery for B2B Market accounts
+            if ($approvedUser instanceof B2BMarket && $brandName !== '') {
+                try {
+                    $this->brandDiscoveryService->discover($approvedUser);
+                    $logger->info('Brand discovery completed for B2B Market', [
+                        'market_id' => $approvedUser->getId(),
+                        'brand_name' => $brandName,
+                    ]);
+                } catch (\Throwable $e) {
+                    $logger->error('Brand discovery failed after approval', [
+                        'market_id' => $approvedUser->getId(),
+                        'brand_name' => $brandName,
+                        'exception' => $e->getMessage(),
+                    ]);
+                }
             }
         }
 

@@ -4,9 +4,13 @@ export type SubscriptionItem = {
   active: boolean
   start_date: string | null
   end_date: string | null
-  alerts_limit: number
-  favorites_limit: number
-  price_history_access: number
+  alerts_limit: number | null
+  favorites_limit: number | null
+  price_history_access: number | null
+  duration_months: number | null
+  owner_type: string | null
+  owner_id: number | null
+  owner_name: string | null
   client: {
     id: number
     email: string
@@ -27,6 +31,7 @@ export type SubscriptionsResponse = {
     total: number
     active: number
     premium: number
+    b2b: number
     free: number
   }
 }

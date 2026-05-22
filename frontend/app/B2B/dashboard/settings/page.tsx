@@ -12,9 +12,8 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 
-const OPERATIONS: { key: string; label: string; planKey: "ads" | "scraping" | "reports" | "sponsored" }[] = [
+const OPERATIONS: { key: string; label: string; planKey: "ads" | "reports" | "sponsored" }[] = [
   { key: "ads_requests", label: "Ads Requests", planKey: "ads" },
-  { key: "scraping_requests", label: "Scraping Requests", planKey: "scraping" },
   { key: "reports", label: "Reports Generated", planKey: "reports" },
   { key: "sponsored_products", label: "Sponsored Products", planKey: "sponsored" },
 ]

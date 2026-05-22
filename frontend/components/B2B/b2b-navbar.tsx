@@ -21,8 +21,7 @@ const PAGE_TITLES: Record<string, string> = {
   "/B2B/dashboard/settings": "Settings",
   "/B2B/dashboard/share-of-shelf": "Share of Shelf",
   "/B2B/dashboard/price-dispersion": "Price Dispersion",
-  "/B2B/dashboard/competitors": "Competitor Ranking",
-  "/B2B/dashboard/stock-intelligence": "Stock Intelligence",
+
   "/B2B/dashboard/reviews-sentiment": "Reviews & Sentiment",
   "/B2B/dashboard/demand-intelligence": "Demand Intelligence",
 }

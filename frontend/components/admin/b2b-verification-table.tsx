@@ -59,6 +59,7 @@ export default function B2BVerificationTable() {
   const [reviewTargetIds, setReviewTargetIds] = useState<number[]>([])
   const [reviewerNote, setReviewerNote] = useState("")
   const [sellerId, setSellerId] = useState("")
+  const [brandName, setBrandName] = useState("")
   const [planType, setPlanType] = useState("SILVER")
   const [durationMonths, setDurationMonths] = useState("3")
   const [sellers, setSellers] = useState<Seller[]>([])
@@ -176,7 +177,8 @@ export default function B2BVerificationTable() {
             reviewerNote.trim() || undefined,
             (sellerId && reviewAction === "APPROVED") ? parseInt(sellerId, 10) : undefined,
             reviewAction === "APPROVED" ? planType : undefined,
-            reviewAction === "APPROVED" ? parseInt(durationMonths, 10) : undefined
+            reviewAction === "APPROVED" ? parseInt(durationMonths, 10) : undefined,
+            reviewAction === "APPROVED" ? brandName.trim() || undefined : undefined
           )
           processedIds.push(id)
           successCount += 1
@@ -551,6 +553,23 @@ export default function B2BVerificationTable() {
                   </select>
                   <p className="text-[11px] leading-relaxed text-muted-foreground">
                     If selected, this B2B Company will be linked to the existing seller to display its listings. If left blank, a new seller will be automatically created using the company name.
+                  </p>
+                </div>
+
+                <div className="space-y-2 rounded-xl border bg-indigo-50/50 p-4 dark:bg-indigo-950/20">
+                  <label className="flex items-center gap-2 text-sm font-semibold text-indigo-800 dark:text-indigo-400">
+                    <Tag className="size-4" />
+                    Brand Name
+                  </label>
+                  <Input
+                    value={brandName}
+                    onChange={(e) => setBrandName(e.target.value)}
+                    placeholder="e.g. Apple, Samsung, Sony..."
+                    disabled={processing}
+                    className="focus-visible:ring-indigo-500"
+                  />
+                  <p className="text-[11px] leading-relaxed text-muted-foreground">
+                    Universal brand assigned to this market. All products of this brand will be discovered across all sellers. Required for B2B Market accounts.
                   </p>
                 </div>
 

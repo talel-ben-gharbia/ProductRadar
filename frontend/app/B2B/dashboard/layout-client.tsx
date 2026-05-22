@@ -1,146 +1,17 @@
 "use client"
 
-import { useState, type ReactNode } from "react"
-import Link from "next/link"
+import { useEffect, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
-import { Building2, Loader2, Lock, LogIn, Mail } from "lucide-react"
-import { signInWithEmailAndPassword } from "firebase/auth"
-
-import { auth } from "@/lib/firebase"
 import { B2BProvider, type B2BSummary } from "@/components/B2B/b2b-context"
 import B2BNavbar from "@/components/B2B/b2b-navbar"
 import B2BSidebar from "@/components/B2B/b2b-sidebar"
+import B2BAIAssistant from "@/components/B2B/b2b-ai-assistant"
 import { SidebarProvider } from "@/components/ui/sidebar"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 
-function B2BLoginScreen() {
+function B2BLoginRedirect() {
   const router = useRouter()
-  const [email, setEmail] = useState("")
-  const [password, setPassword] = useState("")
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  async function handleLogin(event: React.FormEvent) {
-    event.preventDefault()
-    setLoading(true)
-    setError(null)
-
-    try {
-      const credential = await signInWithEmailAndPassword(auth, email.trim(), password)
-      const idToken = await credential.user.getIdToken()
-
-      // Create session via B2C auth endpoint (shared with consumer auth)
-      const response = await fetch("/api/b2c/auth/google", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ idToken }),
-      })
-
-      const data = await response.json()
-      if (!response.ok || !data.success) {
-        throw new Error(data.error ?? "Authentication failed. Please check your credentials.")
-      }
-
-      router.refresh()
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Authentication failed."
-      if (msg.includes("auth/invalid-credential") || msg.includes("auth/wrong-password") || msg.includes("auth/user-not-found")) {
-        setError("Invalid email or password.")
-      } else if (msg.includes("auth/too-many-requests")) {
-        setError("Too many attempts. Please wait and try again.")
-      } else if (msg.includes("auth/network-request-failed")) {
-        setError("Unable to connect to the authentication server. Please check your internet connection.")
-      } else {
-        setError(msg)
-      }
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  return (
-    <div className="flex min-h-svh items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-900 p-4">
-      <Card className="w-full max-w-md border-border/30 bg-background/95 shadow-2xl backdrop-blur-sm">
-        <CardHeader className="text-center">
-          <div className="mx-auto mb-4 flex size-16 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-lg">
-            <Building2 className="size-8" />
-          </div>
-          <CardTitle className="text-2xl font-bold tracking-tight">B2B Dashboard</CardTitle>
-          <CardDescription>
-            Sign in with your B2B account credentials to access the business dashboard.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="b2b-email">Email</Label>
-              <div className="relative">
-                <Mail className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  id="b2b-email"
-                  type="email"
-                  required
-                  autoComplete="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="business@company.com"
-                  className="pl-10"
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="b2b-password">Password</Label>
-              <div className="relative">
-                <Lock className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  id="b2b-password"
-                  type="password"
-                  required
-                  autoComplete="current-password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Your password"
-                  className="pl-10"
-                />
-              </div>
-            </div>
-
-            <button type="button" onClick={() => window.location.href = "/B2B/forgot-password"} className="text-xs text-indigo-600 hover:text-indigo-800 dark:text-indigo-400">
-              Forgot password?
-            </button>
-
-            {error && (
-              <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400">
-                {error}
-              </div>
-            )}
-
-            <Button type="submit" disabled={loading} className="h-11 w-full gap-2 rounded-xl">
-              {loading ? <Loader2 className="size-4 animate-spin" /> : <LogIn className="size-4" />}
-              {loading ? "Signing in..." : "Sign in to Dashboard"}
-            </Button>
-          </form>
-
-          <div className="mt-6 space-y-2 border-t pt-4 text-center text-sm text-muted-foreground">
-            <p>
-              Don&apos;t have a B2B account?{" "}
-              <Link href="/B2B" className="font-medium text-indigo-600 hover:text-indigo-500 dark:text-indigo-400">
-                Apply as Partner
-              </Link>
-            </p>
-            <p>
-              <Link href="/" className="hover:text-foreground">
-                ← Back to homepage
-              </Link>
-            </p>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  )
+  useEffect(() => { router.replace("/") }, [router])
+  return null
 }
 
 export default function B2BDashboardLayoutClient({
@@ -152,9 +23,9 @@ export default function B2BDashboardLayoutClient({
   summary: B2BSummary | null
   firebaseUid: string | null
 }) {
-  // Show login screen if not authenticated
+  // Redirect to homepage if not authenticated
   if (!firebaseUid) {
-    return <B2BLoginScreen />
+    return <B2BLoginRedirect />
   }
 
   return (
@@ -178,6 +49,7 @@ export default function B2BDashboardLayoutClient({
           </div>
         </div>
       </SidebarProvider>
+      <B2BAIAssistant />
     </B2BProvider>
   )
 }

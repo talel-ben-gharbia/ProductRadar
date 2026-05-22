@@ -314,15 +314,19 @@ export default async function B2CProductDetailsPage({ params }: ProductDetailsPa
   let sellers: SellerWithLogo[] = []
   let categoryRows: CategoryRaw[] = []
   let bestTimePrediction: BestTimeToBuyPrediction | null = null
+  let sponsoredListingId: number | null = null
   let fetchError: string | null = null
 
   try {
-    const [allProducts, productListings, allSellers, history, fetchedCategories] = await Promise.all([
+    const [allProducts, productListings, allSellers, history, fetchedCategories, sponsoredRes] = await Promise.all([
       getProducts(),
       getProductListings(productId),
       getSellers().then((rows) => rows as SellerWithLogo[]).catch(() => []),
       isAuthenticated ? getPriceHistory(productId).catch(() => []) : Promise.resolve([]),
       getRawCategories().catch(() => [] as CategoryRaw[]),
+      fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/b2b/b2c/sponsored-products?product_id=${productId}`, { cache: "no-store" })
+        .then((res) => res.ok ? res.json() : { items: [] })
+        .catch(() => ({ items: [] })),
     ])
 
     product = allProducts.find((item) => item.id === productId) ?? null
@@ -330,6 +334,10 @@ export default async function B2CProductDetailsPage({ params }: ProductDetailsPa
     sellers = allSellers
     priceHistory = history
     categoryRows = fetchedCategories
+
+    if (sponsoredRes?.items?.[0]?.listing_id) {
+      sponsoredListingId = sponsoredRes.items[0].listing_id
+    }
 
     if (isAuthenticated && b2cSession) {
       try {
@@ -361,6 +369,8 @@ export default async function B2CProductDetailsPage({ params }: ProductDetailsPa
       return true
     })
     .sort((a, b) => {
+      if (a.id === sponsoredListingId) return -1
+      if (b.id === sponsoredListingId) return 1
       if (a.price === null && b.price === null) return a.id - b.id
       if (a.price === null) return 1
       if (b.price === null) return -1

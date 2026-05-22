@@ -129,6 +129,7 @@ class ProductListingRepository extends ServiceEntityRepository
             ->addSelect('p.name AS productName')
             ->addSelect('p.brand AS productBrand')
             ->addSelect('p.image_url AS productImageUrl')
+            ->addSelect('IDENTITY(p.brandEntity) AS brandId')
             ->addSelect('c.id AS categoryId')
             ->addSelect('c.name AS categoryName')
             ->addSelect('s.id AS sellerId')

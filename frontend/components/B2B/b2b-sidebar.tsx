@@ -12,6 +12,7 @@ import {
   Eye,
   FileText,
   Globe,
+  Grid3x3,
   Home,
   Layers,
   LineChart,
@@ -22,6 +23,7 @@ import {
   Search,
   Settings,
   Shield,
+  ShoppingBag,
   Star,
   TrendingUp,
   User,
@@ -60,22 +62,25 @@ const VENDOR_NAV: NavItem[] = [
   { href: "/B2B/dashboard/alerts", name: "Alerts", icon: Bell },
   { href: "/B2B/dashboard/reports", name: "Reports", icon: FileText },
   { href: "/B2B/dashboard/ads-requests", name: "Ads Requests", icon: Megaphone },
+  { href: "/B2B/dashboard/scraping-requests", name: "Scraping Requests", icon: Globe },
   { href: "/B2B/dashboard/sponsored-products", name: "Sponsored Products", icon: TrendingUp },
-  { href: "/B2B/dashboard/scraping-requests", name: "Scraping Requests", icon: Search },
   { href: "/B2B/dashboard/settings", name: "Settings", icon: Settings },
 ]
 
 const MARKET_NAV: NavItem[] = [
   { href: "/B2B/dashboard", name: "Overview", icon: Home },
+  { href: "/B2B/dashboard/brand-intelligence", name: "Brand Intelligence", icon: Shield },
+  { href: "/B2B/dashboard/product-compare", name: "Product Comparison", icon: ShoppingBag },
   { href: "/B2B/dashboard/share-of-shelf", name: "Share of Shelf", icon: BarChart3 },
   { href: "/B2B/dashboard/price-dispersion", name: "Price Dispersion", icon: LineChart },
-  { href: "/B2B/dashboard/competitors", name: "Competitors", icon: Layers },
-  { href: "/B2B/dashboard/stock-intelligence", name: "Stock Intelligence", icon: AlertTriangle, gold: true },
+  { href: "/B2B/dashboard/distribution-coverage", name: "Distribution", icon: Grid3x3 },
+
   { href: "/B2B/dashboard/reviews-sentiment", name: "Reviews & Sentiment", icon: MessageSquare, gold: true },
+  { href: "/B2B/dashboard/sentiment-compare", name: "Sentiment Compare", icon: BarChart3, gold: true },
   { href: "/B2B/dashboard/demand-intelligence", name: "Demand Intelligence", icon: Zap, gold: true },
+  { href: "/B2B/dashboard/scraping-requests", name: "Scraping Requests", icon: Globe },
   { href: "/B2B/dashboard/alerts", name: "Alerts", icon: Bell },
   { href: "/B2B/dashboard/reports", name: "Reports", icon: FileText },
-  { href: "/B2B/dashboard/scraping-requests", name: "Scraping Requests", icon: Search },
   { href: "/B2B/dashboard/settings", name: "Settings", icon: Settings },
 ]
 

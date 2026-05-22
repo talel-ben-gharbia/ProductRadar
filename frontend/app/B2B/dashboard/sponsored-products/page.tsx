@@ -105,7 +105,7 @@ export default function SponsoredProductsPage() {
       const res = await fetch(`/api/b2b/workspace?endpoint=${encodeURIComponent("sponsored")}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ product_id: selectedProduct.product_id }),
+        body: JSON.stringify({ listing_id: selectedProduct.listing_id }),
       })
       const body = await res.json()
       if (res.ok) {

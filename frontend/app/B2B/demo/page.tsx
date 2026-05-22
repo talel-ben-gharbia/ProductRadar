@@ -587,7 +587,7 @@ export default function DemoOverviewPage() {
           return [
             { title: "Reports", desc: undercutCount > 0 ? `${undercutCount} products need pricing review` : "Generate and download business reports", href: "/B2B/demo/reports", icon: FileText, color: "text-violet-500", bgHover: "hover:bg-violet-50/80 dark:hover:bg-violet-950/30" },
             { title: mode === "market" ? "Share of Shelf" : "Competitor Pricing", desc: mode === "market" ? "Category shelf analysis" : "Price comparison analysis", href: mode === "market" ? "/B2B/demo/share-of-shelf" : "/B2B/demo/competitor-pricing", icon: TrendingUp, color: "text-indigo-500", bgHover: "hover:bg-indigo-50/80 dark:hover:bg-indigo-950/30" },
-            { title: mode === "market" ? "Stock Intelligence" : "Stock Monitoring", desc: stockAlertCount > 0 ? `${stockAlertCount} stock alerts to review` : "Availability and stock-out tracking", href: mode === "market" ? "/B2B/demo/stock-intelligence" : "/B2B/demo/stock-monitoring", icon: AlertTriangle, color: "text-amber-500", bgHover: "hover:bg-amber-50/80 dark:hover:bg-amber-950/30" },
+            { title: "Stock Monitoring", desc: stockAlertCount > 0 ? `${stockAlertCount} stock alerts to review` : "Availability and stock-out tracking", href: "/B2B/demo/stock-monitoring", icon: AlertTriangle, color: "text-amber-500", bgHover: "hover:bg-amber-50/80 dark:hover:bg-amber-950/30" },
             { title: "Watchlist", desc: "Follow and monitor competitor products", href: "/B2B/demo/watchlist", icon: ShoppingCart, color: "text-emerald-500", bgHover: "hover:bg-emerald-50/80 dark:hover:bg-emerald-950/30" },
           ].map((action) => (
             <Card key={action.title} className={`border-border/50 shadow-sm ${action.bgHover}`}>

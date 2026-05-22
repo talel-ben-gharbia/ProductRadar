@@ -48,6 +48,19 @@ export async function updateProduct(
   return data as { id?: number }
 }
 
+export async function deleteProduct(id: number): Promise<{ success?: boolean }> {
+  const response = await fetch(`/api/products/${id}`, {
+    method: "DELETE",
+  })
+
+  const data = (await response.json().catch(() => ({}))) as { error?: string }
+  if (!response.ok) {
+    throw new Error(data.error || "Failed to delete product.")
+  }
+
+  return data as { success?: boolean }
+}
+
 export async function getProducts(categoryId?: number): Promise<Product[]> {
   try {
     const products = await fetchProductsFromApi(categoryId)

@@ -110,7 +110,7 @@ export default function B2BOverviewPage() {
     }
   }, [])
 
-  const competitiveTypes = new Set(["COMPETITOR_UNDERCUT", "STOCK_SHORTAGE", "COMPETITOR_TRUST_DROP", "DISPERSION_ANOMALY", "NEW_COMPETITOR", "STOCK_OPPORTUNITY", "COMPETITOR_OOS", "TRUST_DROP"])
+  const competitiveTypes = new Set(["COMPETITOR_UNDERCUT", "STOCK_SHORTAGE", "COMPETITOR_TRUST_DROP", "DISPERSION_ANOMALY", "NEW_COMPETITOR", "STOCK_OPPORTUNITY", "COMPETITOR_OOS", "TRUST_DROP", "MARKET_BRAND_OOS", "MARKET_PRICE_SPIKE", "MARKET_SHELF_DROP", "MARKET_SENTIMENT_SHIFT"])
 
   const metrics = summary?.metrics as Record<string, unknown> | undefined
 
@@ -230,18 +230,28 @@ export default function B2BOverviewPage() {
 
         {/* At-a-glance metrics row */}
         <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {[
-            { label: "Products", value: productsCount, sub: newProductsThisWeek > 0 ? `+${newProductsThisWeek} this week` : null, color: "text-indigo-300" },
-            { label: "Listings", value: listingsCount, sub: null, color: "text-violet-300" },
-            { label: "Avg Trust Score", value: avgTrust, sub: "out of 100", color: "text-emerald-300" },
-            { label: "Active Alerts", value: notificationsCount, sub: notificationsCount > 0 ? `${notifications.filter((n) => !n.is_read).length} unread` : "needs attention", color: notificationsCount > 0 ? "text-amber-300" : "text-emerald-300" },
-          ].map((item) => (
-            <div key={item.label} className="rounded-xl bg-white/5 px-4 py-3 ring-1 ring-white/10">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-indigo-200/60">{item.label}</p>
-              <p className={`mt-0.5 text-2xl font-black tracking-tight ${item.color}`}>{fmt(item.value)}</p>
-              {item.sub && <p className="text-[10px] text-indigo-200/50">{item.sub}</p>}
-            </div>
-          ))}
+          {(() => {
+            const shelfData = ((metrics?.share_of_shelf ?? []) as Array<Record<string, unknown>>)
+            const avgDelta = shelfData.length > 0
+              ? shelfData.reduce((s, c) => s + (Number(c.delta ?? 0)), 0) / shelfData.length
+              : 0
+            const trustTrend = trustScoreTrend.length >= 2
+              ? (Number(trustScoreTrend[trustScoreTrend.length - 1]?.avg_score ?? 0) - Number(trustScoreTrend[0]?.avg_score ?? 0))
+              : 0
+            const kpiItems = [
+              { label: "Products", value: productsCount, sub: newProductsThisWeek > 0 ? `+${newProductsThisWeek} this week` : null, color: "text-indigo-300" },
+              { label: "Listings", value: listingsCount, sub: null, color: "text-violet-300" },
+              { label: "Avg Trust Score", value: avgTrust, sub: trustTrend !== 0 ? `${trustTrend > 0 ? "▲" : "▼"} ${Math.abs(trustTrend).toFixed(1)} pts` : "out of 100", color: "text-emerald-300" },
+              { label: mode === "market" ? "Avg Shelf Share" : "Active Alerts", value: mode === "market" ? (shelfData.length > 0 ? shelfData.reduce((s, c) => s + Number(c.share_of_shelf ?? 0), 0) / shelfData.length : 0) : notificationsCount, sub: mode === "market" ? (avgDelta !== 0 ? `${avgDelta > 0 ? "▲" : "▼"} ${Math.abs(avgDelta).toFixed(1)}% vs last week` : "per category") : (notificationsCount > 0 ? `${notifications.filter((n) => !n.is_read).length} unread` : "needs attention"), color: mode === "market" ? "text-indigo-300" : (notificationsCount > 0 ? "text-amber-300" : "text-emerald-300") },
+            ]
+            return kpiItems.map((item) => (
+              <div key={item.label} className="rounded-xl bg-white/5 px-4 py-3 ring-1 ring-white/10">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-indigo-200/60">{item.label}</p>
+                <p className={`mt-0.5 text-2xl font-black tracking-tight ${item.color}`}>{fmt(item.value)}</p>
+                {item.sub && <p className="text-[10px] text-indigo-200/50">{item.sub}</p>}
+              </div>
+            ))
+          })()}
         </div>
       </section>
 
@@ -656,8 +666,12 @@ export default function B2BOverviewPage() {
                 const isAds = nType.includes("ADS")
                 const isScraping = nType.includes("SCRAPING")
                 const isSub = nType.includes("SUBSCRIPTION")
-                const FeedIcon = isUndercut ? TrendingDown : isTrustDrop ? TrendingDown : isStockShortage ? AlertTriangle : isNewCompetitor ? Zap : isStockOpportunity ? CheckCircle2 : isCompetitorOos ? XCircle : isDispersion ? BarChart3 : isAds ? DollarSign : isScraping ? Package : isSub ? Shield : Bell
-                const feedColor = isUndercut ? "text-red-500 bg-red-50 dark:bg-red-950/30" : isStockShortage ? "text-amber-500 bg-amber-50 dark:bg-amber-950/30" : isTrustDrop ? "text-orange-500 bg-orange-50 dark:bg-orange-950/30" : isNewCompetitor ? "text-blue-500 bg-blue-50 dark:bg-blue-950/30" : isStockOpportunity ? "text-emerald-500 bg-emerald-50 dark:bg-emerald-950/30" : isCompetitorOos ? "text-slate-500 bg-slate-50 dark:bg-slate-950/30" : isDispersion ? "text-violet-500 bg-violet-50 dark:bg-violet-950/30" : isAds ? "text-emerald-500 bg-emerald-50 dark:bg-emerald-950/30" : "text-indigo-500 bg-indigo-50 dark:bg-indigo-950/30"
+                const isMarketBrandOOS = nType === "MARKET_BRAND_OOS"
+                const isMarketPriceSpike = nType === "MARKET_PRICE_SPIKE"
+                const isMarketShelfDrop = nType === "MARKET_SHELF_DROP"
+                const isMarketSentimentShift = nType === "MARKET_SENTIMENT_SHIFT"
+                const FeedIcon = isUndercut ? TrendingDown : isTrustDrop ? TrendingDown : isStockShortage ? AlertTriangle : isNewCompetitor ? Zap : isStockOpportunity ? CheckCircle2 : isCompetitorOos ? XCircle : isDispersion ? BarChart3 : isAds ? DollarSign : isScraping ? Package : isSub ? Shield : isMarketBrandOOS ? XCircle : isMarketPriceSpike ? TrendingUp : isMarketShelfDrop ? TrendingDown : isMarketSentimentShift ? TrendingDown : Bell
+                const feedColor = isUndercut ? "text-red-500 bg-red-50 dark:bg-red-950/30" : isStockShortage ? "text-amber-500 bg-amber-50 dark:bg-amber-950/30" : isTrustDrop ? "text-orange-500 bg-orange-50 dark:bg-orange-950/30" : isNewCompetitor ? "text-blue-500 bg-blue-50 dark:bg-blue-950/30" : isStockOpportunity ? "text-emerald-500 bg-emerald-50 dark:bg-emerald-950/30" : isCompetitorOos ? "text-slate-500 bg-slate-50 dark:bg-slate-950/30" : isDispersion ? "text-violet-500 bg-violet-50 dark:bg-violet-950/30" : isAds ? "text-emerald-500 bg-emerald-50 dark:bg-emerald-950/30" : isMarketBrandOOS ? "text-red-500 bg-red-50 dark:bg-red-950/30" : isMarketPriceSpike ? "text-orange-500 bg-orange-50 dark:bg-orange-950/30" : isMarketShelfDrop ? "text-rose-500 bg-rose-50 dark:bg-rose-950/30" : isMarketSentimentShift ? "text-amber-500 bg-amber-50 dark:bg-amber-950/30" : "text-indigo-500 bg-indigo-50 dark:bg-indigo-950/30"
                 const nid = Number(n.id)
                 return (
                   <div key={String(n.id ?? n.created_at)} className="flex items-start gap-3 rounded-xl border border-border/50 bg-card p-3">
@@ -678,6 +692,26 @@ export default function B2BOverviewPage() {
                         >
                           <Eye className="size-3" />
                           {isUndercut ? "Compare prices" : isTrustDrop ? "View trust details" : isNewCompetitor ? "View competitor" : "View listing"}
+                        </Link>
+                      )}
+                      {isMarketBrandOOS && (
+                        <Link href="/B2B/dashboard/distribution-coverage" className="mt-1 inline-flex items-center gap-0.5 text-[10px] text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300">
+                          <Eye className="size-3" /> View stock
+                        </Link>
+                      )}
+                      {isMarketPriceSpike && (
+                        <Link href="/B2B/dashboard/price-dispersion" className="mt-1 inline-flex items-center gap-0.5 text-[10px] text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300">
+                          <Eye className="size-3" /> View dispersion
+                        </Link>
+                      )}
+                      {isMarketShelfDrop && (
+                        <Link href="/B2B/dashboard/share-of-shelf" className="mt-1 inline-flex items-center gap-0.5 text-[10px] text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300">
+                          <Eye className="size-3" /> View shelf
+                        </Link>
+                      )}
+                      {isMarketSentimentShift && (
+                        <Link href="/B2B/dashboard/reviews-sentiment" className="mt-1 inline-flex items-center gap-0.5 text-[10px] text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300">
+                          <Eye className="size-3" /> View sentiment
                         </Link>
                       )}
                     </div>
@@ -835,11 +869,11 @@ export default function B2BOverviewPage() {
       )}
 
       {/* Quick Action Cards — context-aware */}
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <section className={`grid gap-4 sm:grid-cols-2 ${mode === "market" ? "xl:grid-cols-4 2xl:grid-cols-5" : "xl:grid-cols-4"}`}>
         {(() => {
           const undercutCount = notifications.filter((n) => String(n.type ?? "") === "COMPETITOR_UNDERCUT").length
           const stockAlertCount = notifications.filter((n) => String(n.type ?? "") === "STOCK_SHORTAGE").length
-          const baseCards = [
+          const cards = [
             {
               title: "Reports",
               desc: undercutCount > 0 ? `${undercutCount} products need pricing review` : "Generate and download business reports",
@@ -857,9 +891,9 @@ export default function B2BOverviewPage() {
               bgHover: "hover:bg-indigo-50/80 dark:hover:bg-indigo-950/30",
             },
             {
-              title: mode === "market" ? "Stock Intelligence" : "Stock Monitoring",
-              desc: stockAlertCount > 0 ? `${stockAlertCount} stock alerts to review` : "Availability and stock-out tracking",
-              href: mode === "market" ? "/B2B/dashboard/stock-intelligence" : "/B2B/dashboard/stock-monitoring",
+              title: mode === "market" ? "Stock & Distribution" : "Stock Monitoring",
+              desc: stockAlertCount > 0 ? `${stockAlertCount} stock alerts to review` : "Coverage, OOS rates, and stock-out tracking",
+              href: mode === "market" ? "/B2B/dashboard/distribution-coverage" : "/B2B/dashboard/stock-monitoring",
               icon: AlertTriangle,
               color: "text-amber-500",
               bgHover: "hover:bg-amber-50/80 dark:hover:bg-amber-950/30",
@@ -872,8 +906,44 @@ export default function B2BOverviewPage() {
               color: "text-emerald-500",
               bgHover: "hover:bg-emerald-50/80 dark:hover:bg-emerald-950/30",
             },
+            ...(mode === "market"
+              ? [
+                  {
+                    title: "Brand Intelligence",
+                    desc: "Explore brands, products, and seller distribution",
+                    href: "/B2B/dashboard/brand-intelligence",
+                    icon: Eye,
+                    color: "text-blue-500",
+                    bgHover: "hover:bg-blue-50/80 dark:hover:bg-blue-950/30",
+                  },
+                  {
+                    title: "Product Comparison",
+                    desc: "Compare 2-3 products head-to-head",
+                    href: "/B2B/dashboard/product-compare",
+                    icon: BarChart3,
+                    color: "text-pink-500",
+                    bgHover: "hover:bg-pink-50/80 dark:hover:bg-pink-950/30",
+                  },
+                  {
+                    title: "Price Competitiveness",
+                    desc: "How your prices compare to market averages",
+                    href: "/B2B/dashboard/price-competitiveness",
+                    icon: TrendingUp,
+                    color: "text-cyan-500",
+                    bgHover: "hover:bg-cyan-50/80 dark:hover:bg-cyan-950/30",
+                  },
+                  {
+                    title: "Price Dispersion",
+                    desc: "Price spread analysis across sellers",
+                    href: "/B2B/dashboard/price-dispersion",
+                    icon: TrendingUp,
+                    color: "text-violet-500",
+                    bgHover: "hover:bg-violet-50/80 dark:hover:bg-violet-950/30",
+                  },
+                ]
+              : []),
           ]
-          return baseCards.map((action) => (
+          return cards.map((action) => (
             <Card key={action.title} className={`border-border/50 shadow-sm ${action.bgHover}`}>
               <CardContent className="flex flex-col items-start p-6">
                 <div className="mb-4 rounded-2xl bg-background/80 p-3.5 shadow-sm ring-1 ring-border/50 backdrop-blur-sm">

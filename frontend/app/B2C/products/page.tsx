@@ -50,7 +50,7 @@ type ProductWithBestPrice = {
   bestListingId?: number
   bestTrustScore?: number | null
   offersCount: number
-  isSponsored?: boolean
+  discountPercent: number
 }
 
 type RootCategoryMenu = {
@@ -296,6 +296,7 @@ export default async function B2CProductsPage({ searchParams }: ProductsPageProp
     let bestListingIdByProduct = new Map<number, number>()
     let bestTrustScoreByProduct = new Map<number, number | null>()
     let offersCountByProduct = new Map<number, number>()
+    let discountByProduct = new Map<number, number>()
     let refsByProduct = new Map<number, string[]>()
     try {
       const listings = await getProductListings()
@@ -317,6 +318,16 @@ export default async function B2CProductsPage({ searchParams }: ProductsPageProp
         return acc
       }, new Map<number, number>())
 
+      discountByProduct = listings.reduce((acc, listing) => {
+        if (listing.productId === null || listing.price === null || listing.price === 0) return acc
+        if (listing.old_price !== null && listing.old_price > listing.price) {
+          const disc = Math.round(((listing.old_price - listing.price) / listing.old_price) * 100)
+          const current = acc.get(listing.productId) ?? 0
+          if (disc > current) acc.set(listing.productId, disc)
+        }
+        return acc
+      }, new Map<number, number>())
+
       refsByProduct = listings.reduce((acc, listing) => {
         if (listing.productId === null || !listing.ref) {
           return acc
@@ -331,24 +342,9 @@ export default async function B2CProductsPage({ searchParams }: ProductsPageProp
       bestPriceByProduct = new Map<number, number>()
       bestTrustScoreByProduct = new Map<number, number | null>()
       offersCountByProduct = new Map<number, number>()
+      discountByProduct = new Map<number, number>()
       refsByProduct = new Map<number, string[]>()
     }
-
-    // Fetch sponsored products
-    let sponsoredProductIds = new Set<number>()
-    try {
-      const sponsoredRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/b2b/b2c/sponsored-products`, {
-        cache: "no-store",
-      })
-      if (sponsoredRes.ok) {
-        const sponsoredData = await sponsoredRes.json()
-        if (sponsoredData?.items) {
-          for (const sp of sponsoredData.items) {
-            if (sp.product_id) sponsoredProductIds.add(sp.product_id)
-          }
-        }
-      }
-    } catch { /* ignore */ }
 
     products = [...deduped.values()].map((product) => ({
       product,
@@ -356,7 +352,7 @@ export default async function B2CProductsPage({ searchParams }: ProductsPageProp
       bestListingId: bestListingIdByProduct.get(product.id),
       bestTrustScore: bestTrustScoreByProduct.get(product.id) ?? null,
       offersCount: offersCountByProduct.get(product.id) ?? 0,
-      isSponsored: sponsoredProductIds.has(product.id),
+      discountPercent: discountByProduct.get(product.id) ?? 0,
     }))
 
     if (selectedBrand) {
@@ -402,10 +398,6 @@ export default async function B2CProductsPage({ searchParams }: ProductsPageProp
     }
 
     products.sort((a, b) => {
-      // Sponsored products always come first
-      if (a.isSponsored && !b.isSponsored) return -1
-      if (!a.isSponsored && b.isSponsored) return 1
-
       if (selectedSort === "name-asc") {
         return a.product.name.localeCompare(b.product.name)
       }
@@ -415,6 +407,10 @@ export default async function B2CProductsPage({ searchParams }: ProductsPageProp
         if (a.bestPrice === undefined) return 1
         if (b.bestPrice === undefined) return -1
         return b.bestPrice - a.bestPrice
+      }
+
+      if (selectedSort === "discount") {
+        return b.discountPercent - a.discountPercent
       }
 
       if (a.bestPrice === undefined && b.bestPrice === undefined) {
@@ -750,6 +746,9 @@ export default async function B2CProductsPage({ searchParams }: ProductsPageProp
 
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-sm text-muted-foreground">Trier par :</span>
+                  <Button asChild size="sm" variant={selectedSort === "discount" ? "default" : "outline"}>
+                    <Link href={buildHref({ sort: "discount" })}>Meilleures offres</Link>
+                  </Button>
                   <Button asChild size="sm" variant={selectedSort === "price-asc" ? "default" : "outline"}>
                     <Link href={buildHref({ sort: "price-asc" })}>Prix croissants</Link>
                   </Button>
@@ -812,15 +811,14 @@ export default async function B2CProductsPage({ searchParams }: ProductsPageProp
               </Card>
             ) : (
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                {paginatedProducts.map(({ product, bestPrice, bestListingId, bestTrustScore, offersCount, isSponsored }) => (
+                {paginatedProducts.map(({ product, bestPrice, bestListingId, bestTrustScore, offersCount }) => (
                   <ProductCard
                     key={product.id}
                     product={product}
-                    bestPriceLabel={bestPrice !== undefined ? formatPrice(bestPrice) : "No available price"}
+                    bestPriceLabel={bestPrice !== undefined ? formatPrice(bestPrice) : offersCount > 0 ? "Épuisé" : "No available price"}
                     offersCount={offersCount}
                     bestTrustScore={bestTrustScore}
                     favoriteListingId={bestListingId}
-                    isSponsored={isSponsored}
                   />
                 ))}
               </div>

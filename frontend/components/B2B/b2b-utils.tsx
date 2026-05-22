@@ -116,6 +116,11 @@ export function timeAgo(dateStr: string | undefined | null): string {
 }
 
 // ---------------------------------------------------------------------------
+// normalizeSpecs — re-exported from shared utility
+// ---------------------------------------------------------------------------
+export { normalizeSpecs, SPEC_KEY_MAP } from "@/utils/specs"
+
+// ---------------------------------------------------------------------------
 // RankBadge
 // ---------------------------------------------------------------------------
 export function RankBadge({

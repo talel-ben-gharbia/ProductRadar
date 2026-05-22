@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { Bell, Check, Filter } from "lucide-react"
 import B2BErrorState from "@/components/B2B/b2b-error-state"
 
@@ -8,11 +8,22 @@ import { useB2B } from "@/components/B2B/b2b-context"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 import type { B2BNotification as Notification } from "@/types/b2b"
 
 export default function AlertsPage() {
-  const { firebaseUid } = useB2B()
+  const { firebaseUid, summary, mode, brandFilter, setBrandFilter, refresh } = useB2B()
+  const metrics = summary?.metrics as Record<string, unknown> | undefined
+
+  const brandOptions = useMemo(() => {
+    if (mode !== "market") return []
+    const brands = ((metrics?.competitor_brands ?? []) as Array<Record<string, unknown>>)
+      .map((b) => String(b.brand ?? ""))
+      .filter(Boolean)
+    return [...new Set(brands)]
+  }, [metrics, mode])
+
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<"all" | "unread">("all")
@@ -75,6 +86,22 @@ export default function AlertsPage() {
           <p className="text-sm text-muted-foreground">{unreadCount} unread notification{unreadCount !== 1 ? "s" : ""}</p>
         </div>
         <div className="flex items-center gap-2">
+          {mode === "market" && brandOptions.length > 0 && (
+            <Select
+              value={brandFilter ?? "__all__"}
+              onValueChange={(v) => { setBrandFilter(v === "__all__" ? null : v); refresh() }}
+            >
+              <SelectTrigger className="h-9 w-44 text-sm">
+                <SelectValue placeholder="All Brands" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">All Brands</SelectItem>
+                {brandOptions.map((b) => (
+                  <SelectItem key={b} value={b}>{b}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
           <Button variant={filter === "all" ? "default" : "outline"} size="sm" onClick={() => { setFilter("all"); fetchNotifications(0) }}>All</Button>
           <Button variant={filter === "unread" ? "default" : "outline"} size="sm" onClick={() => { setFilter("unread"); fetchNotifications(0) }}>
             Unread ({unreadCount})

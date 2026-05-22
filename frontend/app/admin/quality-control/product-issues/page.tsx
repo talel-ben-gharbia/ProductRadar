@@ -35,10 +35,20 @@ type InactiveItem = {
   isActive: boolean | null
 }
 
+type ZeroListingItem = {
+  productId: number
+  name: string
+  brand: string | null
+  description: string
+  imageUrl: string | null
+  categoryId: number | null
+}
+
 function buildData(): Promise<{
   noBrandProducts: NoBrandItem[]
   zeroPriceListings: ZeroPriceItem[]
   inactiveListings: InactiveItem[]
+  zeroListingProducts: ZeroListingItem[]
   totalProducts: number
   totalListings: number
   fetchError: string | null
@@ -84,10 +94,24 @@ function buildData(): Promise<{
         }))
         .sort((a, b) => a.productName.localeCompare(b.productName))
 
+      const listedProductIds = new Set(listings.map((l) => l.productId).filter((id): id is number => id !== null))
+      const zeroListingProducts: ZeroListingItem[] = products
+        .filter((p) => !listedProductIds.has(p.id))
+        .map((p) => ({
+          productId: p.id,
+          name: p.name,
+          brand: p.brand,
+          description: p.description,
+          imageUrl: p.image_url,
+          categoryId: p.categoryId,
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name))
+
       return {
         noBrandProducts,
         zeroPriceListings,
         inactiveListings,
+        zeroListingProducts,
         totalProducts: products.length,
         totalListings: listings.length,
         fetchError: null,
@@ -97,6 +121,7 @@ function buildData(): Promise<{
       noBrandProducts: [],
       zeroPriceListings: [],
       inactiveListings: [],
+      zeroListingProducts: [],
       totalProducts: 0,
       totalListings: 0,
       fetchError: error instanceof Error ? error.message : "Unable to load product issues.",
@@ -104,7 +129,7 @@ function buildData(): Promise<{
 }
 
 export default async function ProductIssuesQualityPage() {
-  const { noBrandProducts, zeroPriceListings, inactiveListings, totalProducts, totalListings, fetchError } = await buildData()
+  const { noBrandProducts, zeroPriceListings, inactiveListings, zeroListingProducts, totalProducts, totalListings, fetchError } = await buildData()
 
   return (
     <section className="w-full max-w-none space-y-4">
@@ -145,6 +170,7 @@ export default async function ProductIssuesQualityPage() {
             noBrandProducts={noBrandProducts}
             zeroPriceListings={zeroPriceListings}
             inactiveListings={inactiveListings}
+            zeroListingProducts={zeroListingProducts}
           />
 
           {noBrandProducts.length === 0 && zeroPriceListings.length === 0 && inactiveListings.length === 0 ? (
