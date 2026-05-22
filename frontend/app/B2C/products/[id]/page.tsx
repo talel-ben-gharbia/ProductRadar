@@ -6,6 +6,7 @@ import { cookies } from "next/headers"
 import { notFound } from "next/navigation"
 
 import { B2CNavbar } from "@/components/B2C/b2c-navbar"
+import { CustomerReviewsSection } from "@/components/B2C/customer-reviews-section"
 import { ListingFavoriteToggle } from "@/components/B2C/listing-favorite-toggle"
 import ProductPriceHistoryLinearChart from "@/components/B2C/product-price-history-linear-chart"
 import { Badge } from "@/components/ui/badge"
@@ -714,6 +715,10 @@ export default async function B2CProductDetailsPage({ params }: ProductDetailsPa
                   </div>
                 </CardContent>
               </Card>
+            </section>
+
+            <section>
+              <CustomerReviewsSection productId={product.id} isAuthenticated={isAuthenticated} />
             </section>
           </>
         ) : null}
