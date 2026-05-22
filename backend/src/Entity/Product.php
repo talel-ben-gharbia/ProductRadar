@@ -51,10 +51,17 @@ class Product
     #[ORM\OneToMany(targetEntity: Alert::class, mappedBy: 'product', orphanRemoval: true)]
     private Collection $alerts;
 
+    /**
+     * @var Collection<int, Review>
+     */
+    #[ORM\OneToMany(targetEntity: Review::class, mappedBy: 'product')]
+    private Collection $reviews;
+
     public function __construct()
     {
         $this->productListings = new ArrayCollection();
         $this->alerts = new ArrayCollection();
+        $this->reviews = new ArrayCollection();
     }
 
     public function getId(): ?int
@@ -200,6 +207,35 @@ class Product
             // set the owning side to null (unless already changed)
             if ($alert->getProduct() === $this) {
                 $alert->setProduct(null);
+            }
+        }
+
+        return $this;
+    }
+
+    /**
+     * @return Collection<int, Review>
+     */
+    public function getReviews(): Collection
+    {
+        return $this->reviews;
+    }
+
+    public function addReview(Review $review): static
+    {
+        if (!$this->reviews->contains($review)) {
+            $this->reviews->add($review);
+            $review->setProduct($this);
+        }
+
+        return $this;
+    }
+
+    public function removeReview(Review $review): static
+    {
+        if ($this->reviews->removeElement($review)) {
+            if ($review->getProduct() === $this) {
+                $review->setProduct(null);
             }
         }
 

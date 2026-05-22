@@ -199,8 +199,7 @@ final class ReviewController extends AbstractController
             fputcsv($output, ['id', 'status', 'rating', 'comment', 'moderation_note', 'customer_email', 'product_name', 'created_at', 'updated_at']);
 
             foreach ($reviews as $review) {
-                $productListing = $review->getProductListing();
-                $product = $productListing?->getProduct();
+                $product = $review->getProduct();
 
                 fputcsv($output, [
                     $review->getId(),
@@ -341,8 +340,7 @@ final class ReviewController extends AbstractController
 
     private function serializeReview(Review $review): array
     {
-        $productListing = $review->getProductListing();
-        $product = $productListing?->getProduct();
+        $product = $review->getProduct();
 
         return [
             'id' => $review->getId(),
@@ -357,8 +355,8 @@ final class ReviewController extends AbstractController
                 'email' => $review->getClient()?->getEmail(),
             ],
             'product_listing' => [
-                'id' => $productListing?->getId(),
-                'price' => $productListing?->getPrice(),
+                'id' => null,
+                'price' => null,
             ],
             'product' => [
                 'id' => $product?->getId(),

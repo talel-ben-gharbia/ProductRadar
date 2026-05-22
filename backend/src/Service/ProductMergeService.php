@@ -140,7 +140,6 @@ final class ProductMergeService
                 if ($listing !== $survivorListing) {
                     $this->mergeListingFields($survivorListing, $listing);
                     $movedPriceHistories += $this->moveListingRelations($listing, $survivorListing);
-                    $movedReviews += $this->moveReviews($listing, $survivorListing);
                     $movedFavorites += $this->moveFavorites($listing, $survivorListing);
                     $movedAlerts += $this->moveNotifications($listing, $survivorListing);
 
@@ -161,6 +160,8 @@ final class ProductMergeService
         }
 
         foreach ($duplicates as $duplicate) {
+            $movedReviews += $this->moveProductReviews($duplicate, $primary);
+
             $alerts = $duplicate->getAlerts()->toArray();
             foreach ($alerts as $alert) {
                 $alert->setProduct($primary);
@@ -266,21 +267,21 @@ final class ProductMergeService
         return $changedCount;
     }
 
-    private function moveReviews(ProductListing $source, ProductListing $target): int
+    private function moveProductReviews(Product $source, Product $target): int
     {
         $reviewCount = (int) $this->entityManager->createQueryBuilder()
             ->select('COUNT(r.id)')
             ->from('App\\Entity\\Review', 'r')
-            ->andWhere('r.productListing = :listing')
-            ->setParameter('listing', $source)
+            ->andWhere('r.product = :source')
+            ->setParameter('source', $source)
             ->getQuery()
             ->getSingleScalarResult();
 
         if ($reviewCount > 0) {
             $this->entityManager->createQueryBuilder()
                 ->update('App\\Entity\\Review', 'r')
-                ->set('r.productListing', ':target')
-                ->where('r.productListing = :source')
+                ->set('r.product', ':target')
+                ->where('r.product = :source')
                 ->setParameter('target', $target)
                 ->setParameter('source', $source)
                 ->getQuery()

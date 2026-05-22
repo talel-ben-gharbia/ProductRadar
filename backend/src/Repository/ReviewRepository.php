@@ -25,9 +25,7 @@ class ReviewRepository extends ServiceEntityRepository
         $qb = $this->createQueryBuilder('r')
             ->leftJoin('r.client', 'u')
             ->addSelect('u')
-            ->leftJoin('r.productListing', 'pl')
-            ->addSelect('pl')
-            ->leftJoin('pl.product', 'p')
+            ->leftJoin('r.product', 'p')
             ->addSelect('p')
             ->orderBy('r.created_at', 'DESC')
             ->addOrderBy('r.id', 'DESC')
@@ -36,8 +34,7 @@ class ReviewRepository extends ServiceEntityRepository
 
         $countQb = $this->createQueryBuilder('r')
             ->leftJoin('r.client', 'u')
-            ->leftJoin('r.productListing', 'pl')
-            ->leftJoin('pl.product', 'p')
+            ->leftJoin('r.product', 'p')
             ->select('COUNT(r.id)');
 
         if ($status !== '') {
@@ -70,9 +67,7 @@ class ReviewRepository extends ServiceEntityRepository
         $qb = $this->createQueryBuilder('r')
             ->leftJoin('r.client', 'u')
             ->addSelect('u')
-            ->leftJoin('r.productListing', 'pl')
-            ->addSelect('pl')
-            ->leftJoin('pl.product', 'p')
+            ->leftJoin('r.product', 'p')
             ->addSelect('p')
             ->orderBy('r.created_at', 'DESC')
             ->addOrderBy('r.id', 'DESC');
@@ -192,5 +187,108 @@ class ReviewRepository extends ServiceEntityRepository
             ],
             $rows,
         );
+    }
+
+    /**
+     * @return array{items: Review[], total: int}
+     */
+    public function paginateApprovedForProduct(int $productId, int $limit = 20, int $offset = 0): array
+    {
+        $safeLimit = max(1, min(100, $limit));
+        $safeOffset = max(0, $offset);
+
+        $qb = $this->createQueryBuilder('r')
+            ->leftJoin('r.client', 'u')
+            ->addSelect('u')
+            ->leftJoin('r.product', 'p')
+            ->addSelect('p')
+            ->andWhere('p.id = :productId')
+            ->andWhere('r.status = :status')
+            ->setParameter('productId', $productId)
+            ->setParameter('status', 'APPROVED')
+            ->orderBy('r.created_at', 'DESC')
+            ->addOrderBy('r.id', 'DESC')
+            ->setFirstResult($safeOffset)
+            ->setMaxResults($safeLimit);
+
+        $countQb = $this->createQueryBuilder('r')
+            ->leftJoin('r.product', 'p')
+            ->select('COUNT(r.id)')
+            ->andWhere('p.id = :productId')
+            ->andWhere('r.status = :status')
+            ->setParameter('productId', $productId)
+            ->setParameter('status', 'APPROVED');
+
+        /** @var Review[] $items */
+        $items = $qb->getQuery()->getResult();
+
+        return [
+            'items' => $items,
+            'total' => (int) $countQb->getQuery()->getSingleScalarResult(),
+        ];
+    }
+
+    /**
+     * @return array{average_rating: float, total_reviews: int}
+     */
+    public function getApprovedSummaryForProduct(int $productId): array
+    {
+        $row = $this->createQueryBuilder('r')
+            ->select('AVG(r.rating) AS average_rating, COUNT(r.id) AS total_reviews')
+            ->leftJoin('r.product', 'p')
+            ->andWhere('p.id = :productId')
+            ->andWhere('r.status = :status')
+            ->setParameter('productId', $productId)
+            ->setParameter('status', 'APPROVED')
+            ->getQuery()
+            ->getOneOrNullResult();
+
+        $average = is_array($row) ? (float) ($row['average_rating'] ?? 0.0) : 0.0;
+        $total = is_array($row) ? (int) ($row['total_reviews'] ?? 0) : 0;
+
+        return [
+            'average_rating' => round($average, 1),
+            'total_reviews' => $total,
+        ];
+    }
+
+    /**
+     * @return array<int, int>
+     */
+    public function getApprovedRatingDistributionForProduct(int $productId): array
+    {
+        $rows = $this->createQueryBuilder('r')
+            ->select('r.rating AS rating, COUNT(r.id) AS count')
+            ->leftJoin('r.product', 'p')
+            ->andWhere('p.id = :productId')
+            ->andWhere('r.status = :status')
+            ->setParameter('productId', $productId)
+            ->setParameter('status', 'APPROVED')
+            ->groupBy('r.rating')
+            ->getQuery()
+            ->getResult();
+
+        $distribution = [
+            1 => 0,
+            2 => 0,
+            3 => 0,
+            4 => 0,
+            5 => 0,
+        ];
+
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+
+            $rating = (int) ($row['rating'] ?? 0);
+            if ($rating < 1 || $rating > 5) {
+                continue;
+            }
+
+            $distribution[$rating] = (int) ($row['count'] ?? 0);
+        }
+
+        return $distribution;
     }
 }

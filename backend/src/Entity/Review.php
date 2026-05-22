@@ -21,7 +21,7 @@ class Review
 
     #[ORM\ManyToOne]
     #[ORM\JoinColumn(nullable: true, onDelete: 'SET NULL')]
-    private ?ProductListing $productListing = null;
+    private ?Product $product = null;
 
     #[ORM\Column]
     private ?int $rating = null;
@@ -58,14 +58,14 @@ class Review
         return $this;
     }
 
-    public function getProductListing(): ?ProductListing
+    public function getProduct(): ?Product
     {
-        return $this->productListing;
+        return $this->product;
     }
 
-    public function setProductListing(?ProductListing $productListing): static
+    public function setProduct(?Product $product): static
     {
-        $this->productListing = $productListing;
+        $this->product = $product;
 
         return $this;
     }
