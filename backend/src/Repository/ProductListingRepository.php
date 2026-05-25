@@ -60,6 +60,35 @@ class ProductListingRepository extends ServiceEntityRepository
         return $this->enrichWithTrustScores($rows);
     }
 
+    public function findListingRowsByBrandId(int $brandId, ?int $marketSellerId = null, int $page = 1, int $limit = 0): array
+    {
+        $queryBuilder = $this->createBaseRowsQueryBuilder();
+
+        $queryBuilder
+            ->andWhere('b.id = :brandId')
+            ->setParameter('brandId', $brandId);
+
+        if ($marketSellerId !== null && $marketSellerId > 0) {
+            $queryBuilder
+                ->orWhere('s.id = :sellerId')
+                ->setParameter('sellerId', $marketSellerId);
+        }
+
+        $query = $queryBuilder->orderBy('pl.id', 'DESC')->getQuery();
+
+        // Normalize page/limit; limit=0 means no limit
+        $page = max(1, $page);
+        if ($limit > 0) {
+            $limit = min(5000, $limit);
+            $offset = ($page - 1) * $limit;
+            $query->setFirstResult($offset)->setMaxResults($limit);
+        }
+
+        $rows = $query->setCacheable(true)->setLifetime(300)->getArrayResult();
+
+        return $this->enrichWithTrustScores($rows);
+    }
+
     
 
     /**
@@ -142,7 +171,7 @@ class ProductListingRepository extends ServiceEntityRepository
             ->addSelect('pl.is_active AS is_active')
             ->addSelect('p.id AS productId')
             ->addSelect('p.name AS productName')
-            ->addSelect('p.brand AS productBrand')
+            ->addSelect('COALESCE(b.name, p.brand) AS productBrand')
             ->addSelect('p.image_url AS productImageUrl')
             ->addSelect('IDENTITY(p.brandEntity) AS brandId')
             ->addSelect('c.id AS categoryId')
@@ -150,6 +179,7 @@ class ProductListingRepository extends ServiceEntityRepository
             ->addSelect('s.id AS sellerId')
             ->addSelect('s.name AS sellerName')
             ->leftJoin('pl.product', 'p')
+            ->leftJoin('p.brandEntity', 'b')
             ->leftJoin('p.category', 'c')
             ->leftJoin('pl.seller', 's');
     }
@@ -166,21 +196,14 @@ class ProductListingRepository extends ServiceEntityRepository
 
         $conn = $this->getEntityManager()->getConnection();
 
-        // Fetch only the latest trust_score_history row per listing using a
-        // grouped subquery joined back to the table. This avoids returning
-        // multiple history rows per listing and reduces PHP memory usage.
-        $sql = <<<'SQL'
-SELECT t.listing_id, t.score, t.breakdown
-FROM trust_score_history t
-INNER JOIN (
-  SELECT listing_id, MAX(created_at) AS max_created
-  FROM trust_score_history
-  WHERE listing_id IN (:ids)
-  GROUP BY listing_id
-) latest ON latest.listing_id = t.listing_id AND latest.max_created = t.created_at
-SQL;
-
-        $scoreRows = $conn->fetchAllAssociative($sql, ['ids' => $listingIds], ['ids' => ArrayParameterType::INTEGER]);
+        $scoreRows = $conn->fetchAllAssociative(
+            'SELECT DISTINCT ON (listing_id) listing_id, score, breakdown
+             FROM trust_score_history
+             WHERE listing_id IN (:ids)
+             ORDER BY listing_id, created_at DESC',
+            ['ids' => $listingIds],
+            ['ids' => ArrayParameterType::INTEGER]
+        );
 
         $scoreMap = [];
         foreach ($scoreRows as $sr) {
@@ -226,7 +249,8 @@ SQL;
     {
         return $this->createQueryBuilder('pl')
             ->join('pl.product', 'p')
-            ->where('LOWER(p.brand) = :brand')
+            ->leftJoin('p.brandEntity', 'b')
+            ->where('LOWER(COALESCE(b.name, p.brand)) = :brand')
             ->setParameter('brand', mb_strtolower(trim($brandName)))
             ->getQuery()
             ->getResult();

@@ -1,10 +1,11 @@
 "use client"
 
-import React, { useState, useEffect } from "react"
+import React, { useMemo, useState, useEffect } from "react"
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts"
 import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Clock, DollarSign, Filter, Package, Search, Shield, Store, XCircle, Zap } from "lucide-react"
 
 import { useB2B } from "@/components/B2B/b2b-context"
+import B2BErrorState from "@/components/B2B/b2b-error-state"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -33,7 +34,7 @@ function RiskBadge({ rate }: { rate: number }) {
 }
 
 export default function StockMonitoringPage() {
-  const { summary, loading } = useB2B()
+  const { summary, loading, error, refresh } = useB2B()
   const metrics = summary?.metrics as Record<string, unknown> | undefined
   const data = ((metrics?.stock_monitoring ?? []) as StockItem[])
   const inStock = Number(metrics?.in_stock_count ?? 0)
@@ -52,9 +53,11 @@ export default function StockMonitoringPage() {
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc")
   const ITEMS_PER_PAGE = 20
 
-  const categories = [...new Set(data.map((d) => d.category ?? d.product_name?.split(" ")[0] ?? "General"))]
+  const categories = useMemo(() =>
+    [...new Set(data.map((d) => d.category ?? d.product_name?.split(" ")[0] ?? "General"))],
+    [data])
 
-  const filtered = data.filter((item) => {
+  const filtered = useMemo(() => data.filter((item) => {
     const name = String(item.product_name ?? "").toLowerCase()
     const matchesSearch = !search || name.includes(search.toLowerCase())
     const matchesCategory = !categoryFilter || (item.category ?? "").toLowerCase() === categoryFilter.toLowerCase()
@@ -71,22 +74,26 @@ export default function StockMonitoringPage() {
     const valA = sortBy === "trust_score" ? Number(a.trust_score ?? 0) : Number(a.out_of_stock_rate ?? 0)
     const valB = sortBy === "trust_score" ? Number(b.trust_score ?? 0) : Number(b.out_of_stock_rate ?? 0)
     return sortOrder === "asc" ? valA - valB : valB - valA
-  })
+  }), [data, search, categoryFilter, riskFilter, sortBy, sortOrder])
 
-  const totalPages = Math.ceil(filtered.length / ITEMS_PER_PAGE)
-  const paginatedData = filtered.slice(
+  const totalPages = useMemo(() => Math.ceil(filtered.length / ITEMS_PER_PAGE), [filtered])
+  const paginatedData = useMemo(() => filtered.slice(
     (page - 1) * ITEMS_PER_PAGE,
     page * ITEMS_PER_PAGE,
-  )
+  ), [filtered, page])
+
+  const pieData = useMemo(() => [
+    { name: "In Stock", value: inStock, color: "#22c55e" },
+    { name: "Out of Stock", value: outOfStock, color: "#ef4444" },
+  ].filter((d) => d.value > 0), [inStock, outOfStock])
 
   useEffect(() => {
     setPage(1)
   }, [search, categoryFilter, riskFilter])
 
-  const pieData = [
-    { name: "In Stock", value: inStock, color: "#22c55e" },
-    { name: "Out of Stock", value: outOfStock, color: "#ef4444" },
-  ].filter((d) => d.value > 0)
+  if (error && !summary) {
+    return <B2BErrorState message={error} onRetry={refresh} />
+  }
 
   if (loading && !summary) {
     return (

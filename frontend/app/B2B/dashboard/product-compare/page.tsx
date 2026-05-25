@@ -14,6 +14,7 @@ import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YA
 import { toast } from "sonner"
 
 import { useB2B } from "@/components/B2B/b2b-context"
+import B2BPlanGate from "@/components/B2B/b2b-plan-gate"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -118,6 +119,10 @@ export default function ProductComparePage() {
   const [progressText, setProgressText] = useState<string | null>(null)
   const COOLDOWN_MS = 5000
   const lastClickRef = useRef(0)
+  const { mode, isGold } = useB2B()
+  const fetchedRef = useRef(false)
+
+  if (!isGold) return <B2BPlanGate featureName="Multi-Product AI Comparison" />
 
   const fetchCategories = useCallback(async () => {
     try {
@@ -130,9 +135,6 @@ export default function ProductComparePage() {
       console.error("Failed to fetch categories")
     }
   }, [])
-
-  const { mode } = useB2B()
-  const fetchedRef = useRef(false)
 
   useEffect(() => {
     fetchCategories()

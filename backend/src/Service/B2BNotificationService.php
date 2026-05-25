@@ -205,7 +205,7 @@ final class B2BNotificationService
         $productName = $article->getProductListing()?->getProduct()?->getName() ?? $article->getTitle() ?? 'Unknown';
         $endsAt = $article->getEndsAt()?->format('F j, Y') ?? 'N/A';
         $message = sprintf('Your sponsorship for "%s" has been approved by admin %s and is now live until %s.', $productName, (string) $admin->getEmail(), $endsAt);
-        $this->notifyCompany($company, 'SPONSORSHIP_APPROVED', $message, 'SUCCESS');
+        $this->notifyCompany($company, 'SPONSORSHIP_APPROVED', $message, 'INFO');
 
         $this->sendEmail(
             $company,
@@ -356,49 +356,6 @@ final class B2BNotificationService
         );
     }
 
-    public function notifyScrapingRequestApproved(B2BScrapingRequest $scrapingRequest): void
-    {
-        $owner = $this->resolveOwner($scrapingRequest);
-        if (!$owner) return;
-
-        $targetDesc = sprintf('%s — %s', $scrapingRequest->getTargetType() ?? 'N/A', $scrapingRequest->getTargetUrl() ?? 'N/A');
-        $message = sprintf('Your scraping request for "%s" has been approved and is being processed.', $targetDesc);
-        $this->notifyOwner($owner, 'SCRAPING_REQUEST_APPROVED', $message);
-
-        $this->sendEmail(
-            $owner,
-            'Your Data Scraping Request is Approved!',
-            sprintf(
-                "Hello %s,\n\nYour scraping request has been approved and is now being processed.\n\nTarget: %s\n\nYou will receive a notification once the data is ready.\n\nBest regards,\nProductRadar Team",
-                $owner->getCompanyName() ?? 'Valued Partner',
-                $targetDesc,
-            )
-        );
-    }
-
-    public function notifyScrapingRequestRejected(B2BScrapingRequest $scrapingRequest, string $reason = ''): void
-    {
-        $owner = $this->resolveOwner($scrapingRequest);
-        if (!$owner) return;
-
-        $message = sprintf('Your scraping request #%d has been declined.', $scrapingRequest->getId());
-        if ($reason !== '') {
-            $message .= sprintf(' Reason: %s', $reason);
-        }
-        $this->notifyOwner($owner, 'SCRAPING_REQUEST_REJECTED', $message);
-
-        $emailBody = sprintf(
-            "Hello %s,\n\nYour scraping request #%d was not approved at this time.",
-            $owner->getCompanyName() ?? 'Valued Partner',
-            $scrapingRequest->getId(),
-        );
-        if ($reason !== '') {
-            $emailBody .= sprintf("\n\nReason given: %s", $reason);
-        }
-        $emailBody .= "\n\nIf you have any questions, please contact our support team.\n\nBest regards,\nProductRadar Team";
-
-        $this->sendEmail($owner, 'Update on Your Scraping Request', $emailBody);
-    }
 
     public function notifySubscriptionRenewed(Subscription $subscription): void
     {
@@ -408,7 +365,7 @@ final class B2BNotificationService
         $planLabel = ucfirst(strtolower((string) $subscription->getPlanType()));
         $endDate = $subscription->getEndDate()?->format('F j, Y') ?? 'N/A';
         $message = sprintf('Your %s subscription has been renewed. New expiry: %s.', $planLabel, $endDate);
-        $this->notifyOwner($owner, 'SUBSCRIPTION_RENEWED', $message, 'SUCCESS');
+        $this->notifyOwner($owner, 'SUBSCRIPTION_RENEWED', $message, 'INFO');
 
         $this->sendEmail(
             $owner,
@@ -496,15 +453,8 @@ final class B2BNotificationService
     //  Internal helpers
     // ─────────────────────────────────────────────
 
-    private function resolveOwner(Subscription|B2BScrapingRequest $entity): B2BCompany|B2BMarket|null
+    private function resolveOwner(Subscription $entity): B2BCompany|B2BMarket|null
     {
-        if ($entity instanceof B2BScrapingRequest) {
-            if ($entity->getCompany() !== null) {
-                return $entity->getCompany();
-            }
-            return $entity->getMarket();
-        }
-
         $ownerType = $entity->getOwnerType();
         $ownerId = $entity->getOwnerId();
 

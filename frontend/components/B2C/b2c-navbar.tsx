@@ -60,6 +60,8 @@ export function B2CNavbar({
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [sessionType, setSessionType] = useState<SessionType>(null)
+  const [firebaseUid, setFirebaseUid] = useState<string | null>(null)
+  const [b2bUnreadCount, setB2bUnreadCount] = useState(0)
   const containerRef = useRef<HTMLDivElement | null>(null)
   const notificationsRef = useRef<HTMLDivElement | null>(null)
   const abortRef = useRef<AbortController | null>(null)
@@ -155,7 +157,7 @@ export function B2CNavbar({
 
     fetch("/api/b2c/auth/me", { cache: "no-store" })
       .then((response) => response.json())
-      .then((data: { customer?: { id?: number; type?: SessionType } | null }) => {
+      .then((data: { customer?: { id?: number; type?: SessionType; firebase_uid?: string } | null }) => {
         if (cancelled) {
           return
         }
@@ -163,6 +165,7 @@ export function B2CNavbar({
         const authenticated = Boolean(data.customer?.id)
         setIsAuthenticated(authenticated)
         setSessionType(authenticated ? (data.customer?.type ?? null) : null)
+        setFirebaseUid(data.customer?.firebase_uid ?? null)
 
         if (authenticated) {
           loadNotifications(true)
@@ -190,6 +193,29 @@ export function B2CNavbar({
   }, [loadNotifications, notificationsOpen, isAuthenticated])
 
   const isB2BSession = sessionType === "b2b_company" || sessionType === "b2b_market"
+
+  useEffect(() => {
+    if (!isB2BSession || !firebaseUid) {
+      setB2bUnreadCount(0)
+      return
+    }
+
+    let cancelled = false
+
+    fetch(`/api/b2b/workspace?endpoint=notifications&limit=50&offset=0&userId=${firebaseUid}`, { cache: "no-store" })
+      .then((res) => res.json())
+      .then((data: { items?: Array<{ is_read?: boolean }> }) => {
+        if (!cancelled) {
+          const items = data.items ?? []
+          setB2bUnreadCount(items.filter((n) => !n.is_read).length)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setB2bUnreadCount(0)
+      })
+
+    return () => { cancelled = true }
+  }, [isB2BSession, firebaseUid])
 
   const unreadCount = notifications.filter((item) => !item.is_read).length
 
@@ -309,99 +335,112 @@ export function B2CNavbar({
         </div>
 
         <div className="order-2 flex items-center gap-3 sm:order-3">
-          <div className="relative" ref={notificationsRef}>
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              className="relative h-9 w-9 rounded-full"
-              onClick={() => setNotificationsOpen((value) => !value)}
-              aria-label="Open notifications"
-            >
-              <Bell className="h-4 w-4" />
-              {unreadCount > 0 ? (
-                <span className="absolute -right-1 -top-1 inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-[11px] font-semibold text-white">
-                  {unreadCount > 99 ? "99+" : unreadCount}
-                </span>
-              ) : null}
-            </Button>
+          {!isB2BSession ? (
+            <div className="relative" ref={notificationsRef}>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="relative h-9 w-9 rounded-full"
+                onClick={() => setNotificationsOpen((value) => !value)}
+                aria-label="Open notifications"
+              >
+                <Bell className="h-4 w-4" />
+                {unreadCount > 0 ? (
+                  <span className="absolute -right-1 -top-1 inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-[11px] font-semibold text-white">
+                    {unreadCount > 99 ? "99+" : unreadCount}
+                  </span>
+                ) : null}
+              </Button>
 
-            {notificationsOpen ? (
-              <div className="absolute right-0 z-50 mt-2 w-88 overflow-hidden rounded-xl border bg-white shadow-lg">
-                <div className="flex items-center justify-between border-b px-4 py-2">
-                  <p className="text-sm font-semibold">Notifications</p>
-                  <span className="text-xs text-muted-foreground">{unreadCount} unread</span>
-                </div>
+              {notificationsOpen ? (
+                <div className="absolute right-0 z-50 mt-2 w-88 overflow-hidden rounded-xl border bg-white shadow-lg">
+                  <div className="flex items-center justify-between border-b px-4 py-2">
+                    <p className="text-sm font-semibold">Notifications</p>
+                    <span className="text-xs text-muted-foreground">{unreadCount} unread</span>
+                  </div>
 
-                {notificationsLoading ? (
-                  <p className="px-4 py-3 text-sm text-muted-foreground">Loading notifications...</p>
-                ) : !isAuthenticated ? (
-                  <p className="px-4 py-3 text-sm text-muted-foreground">Login to view notifications.</p>
-                ) : notifications.length === 0 ? (
-                  <p className="px-4 py-3 text-sm text-muted-foreground">No notifications yet.</p>
-                ) : (
-                  <ul className="max-h-96 divide-y overflow-auto">
-                    {notifications.map((notification) => (
-                      <li key={notification.id}>
-                        <button
-                          type="button"
-                          onClick={() => handleNotificationClick(notification)}
-                          className={`flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/60 ${notification.is_read ? "bg-white" : "bg-blue-50/60"}`}
-                        >
-                          <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-[#f7f9ff]">
-                            {notification.productImageUrl ? (
-                              <Image
-                                src={notification.productImageUrl}
-                                alt={notification.productName || "Notification product"}
-                                width={40}
-                                height={40}
-                                className="h-full w-full object-contain"
-                                unoptimized
-                              />
-                            ) : (
-                              <BellRing className="h-4 w-4 text-muted-foreground" />
-                            )}
-                          </div>
+                  {notificationsLoading ? (
+                    <p className="px-4 py-3 text-sm text-muted-foreground">Loading notifications...</p>
+                  ) : !isAuthenticated ? (
+                    <p className="px-4 py-3 text-sm text-muted-foreground">Login to view notifications.</p>
+                  ) : notifications.length === 0 ? (
+                    <p className="px-4 py-3 text-sm text-muted-foreground">No notifications yet.</p>
+                  ) : (
+                    <ul className="max-h-96 divide-y overflow-auto">
+                      {notifications.map((notification) => (
+                        <li key={notification.id}>
+                          <button
+                            type="button"
+                            onClick={() => handleNotificationClick(notification)}
+                            className={`flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/60 ${notification.is_read ? "bg-white" : "bg-blue-50/60"}`}
+                          >
+                            <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-[#f7f9ff]">
+                              {notification.productImageUrl ? (
+                                <Image
+                                  src={notification.productImageUrl}
+                                  alt={notification.productName || "Notification product"}
+                                  width={40}
+                                  height={40}
+                                  className="h-full w-full object-contain"
+                                  unoptimized
+                                />
+                              ) : (
+                                <BellRing className="h-4 w-4 text-muted-foreground" />
+                              )}
+                            </div>
 
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-medium text-foreground">
-                              {notification.productName || "Product update"}
-                            </p>
-                            <p className="line-clamp-2 text-xs text-muted-foreground">
-                              {notification.message || "A new update is available for this listing."}
-                            </p>
-                            {notification.productPrice !== null ? (
-                              <p className="mt-0.5 text-xs font-medium text-emerald-700">
-                                {notification.productPrice.toFixed(2)} DT
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-sm font-medium text-foreground">
+                                {notification.productName || "Product update"}
                               </p>
-                            ) : null}
-                          </div>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            ) : null}
-          </div>
+                              <p className="line-clamp-2 text-xs text-muted-foreground">
+                                {notification.message || "A new update is available for this listing."}
+                              </p>
+                              {notification.productPrice !== null ? (
+                                <p className="mt-0.5 text-xs font-medium text-emerald-700">
+                                  {notification.productPrice.toFixed(2)} DT
+                                </p>
+                              ) : null}
+                            </div>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
 
-          <Button asChild variant="outline" size="sm" className="h-9 rounded-full px-4">
-            <Link href="/B2C/profile/favorites" className="inline-flex items-center gap-2">
-              <Heart className="h-4 w-4" />
-              <span>Favorites</span>
-            </Link>
-          </Button>
+          {!isB2BSession ? (
+            <Button asChild variant="outline" size="sm" className="h-9 rounded-full px-4">
+              <Link href="/B2C/profile/favorites" className="inline-flex items-center gap-2">
+                <Heart className="h-4 w-4" />
+                <span>Favorites</span>
+              </Link>
+            </Button>
+          ) : null}
 
-          <Button asChild variant="outline" size="sm" className="h-9 rounded-full px-4">
-            <Link href="/B2C/profile/alerts" className="inline-flex items-center gap-2">
-              <BellRing className="h-4 w-4" />
-              <span>My alerts</span>
-            </Link>
-          </Button>
+          {!isB2BSession ? (
+            <Button asChild variant="outline" size="sm" className="h-9 rounded-full px-4">
+              <Link href="/B2C/profile/alerts" className="inline-flex items-center gap-2">
+                <BellRing className="h-4 w-4" />
+                <span>My alerts</span>
+              </Link>
+            </Button>
+          ) : null}
 
           {isB2BSession ? (
-            <Button asChild variant="outline" size="sm" className="h-9 rounded-full px-4">
-              <Link href="/B2B/dashboard">Dashboard</Link>
+            <Button asChild variant="outline" size="sm" className="relative h-9 rounded-full px-4">
+              <Link href="/B2B/dashboard">
+                Dashboard
+                {b2bUnreadCount > 0 ? (
+                  <span className="absolute -right-2 -top-2 inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-[11px] font-semibold text-white">
+                    {b2bUnreadCount > 99 ? "99+" : b2bUnreadCount}
+                  </span>
+                ) : null}
+              </Link>
             </Button>
           ) : null}
 

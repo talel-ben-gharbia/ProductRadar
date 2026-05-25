@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import {
   AlertTriangle,
   BarChart3,
@@ -62,23 +62,19 @@ const VENDOR_NAV: NavItem[] = [
   { href: "/B2B/dashboard/alerts", name: "Alerts", icon: Bell },
   { href: "/B2B/dashboard/reports", name: "Reports", icon: FileText },
   { href: "/B2B/dashboard/ads-requests", name: "Ads Requests", icon: Megaphone },
-  { href: "/B2B/dashboard/scraping-requests", name: "Scraping Requests", icon: Globe },
   { href: "/B2B/dashboard/sponsored-products", name: "Sponsored Products", icon: TrendingUp },
   { href: "/B2B/dashboard/settings", name: "Settings", icon: Settings },
 ]
 
 const MARKET_NAV: NavItem[] = [
   { href: "/B2B/dashboard", name: "Overview", icon: Home },
-  { href: "/B2B/dashboard/brand-intelligence", name: "Brand Intelligence", icon: Shield },
-  { href: "/B2B/dashboard/product-compare", name: "Product Comparison", icon: ShoppingBag },
-  { href: "/B2B/dashboard/share-of-shelf", name: "Share of Shelf", icon: BarChart3 },
-  { href: "/B2B/dashboard/price-dispersion", name: "Price Dispersion", icon: LineChart },
+  { href: "/B2B/dashboard/brand-intelligence", name: "Brand Intelligence", icon: Shield, gold: true },
+  { href: "/B2B/dashboard/product-compare", name: "Product Comparison", icon: ShoppingBag, gold: true },
+  { href: "/B2B/dashboard/share-of-shelf", name: "Share of Shelf", icon: BarChart3, gold: true },
+  { href: "/B2B/dashboard/price-dispersion", name: "Price Dispersion", icon: LineChart, gold: true },
   { href: "/B2B/dashboard/distribution-coverage", name: "Distribution", icon: Grid3x3 },
-
+  { href: "/B2B/dashboard/watchlist", name: "Watchlist", icon: Star },
   { href: "/B2B/dashboard/reviews-sentiment", name: "Reviews & Sentiment", icon: MessageSquare, gold: true },
-  { href: "/B2B/dashboard/sentiment-compare", name: "Sentiment Compare", icon: BarChart3, gold: true },
-  { href: "/B2B/dashboard/demand-intelligence", name: "Demand Intelligence", icon: Zap, gold: true },
-  { href: "/B2B/dashboard/scraping-requests", name: "Scraping Requests", icon: Globe },
   { href: "/B2B/dashboard/alerts", name: "Alerts", icon: Bell },
   { href: "/B2B/dashboard/reports", name: "Reports", icon: FileText },
   { href: "/B2B/dashboard/settings", name: "Settings", icon: Settings },
@@ -89,10 +85,10 @@ function B2BSidebar() {
   const { summary, mode, planType, isGold, logout } = useB2B()
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement | null>(null)
-  const notifications = (summary?.notifications ?? []) as Array<Record<string, unknown>>
-  const unreadCount = notifications.filter((n) => !n.is_read).length
+  const notifications = useMemo(() => (summary?.notifications ?? []) as Array<Record<string, unknown>>, [summary?.notifications])
 
-  const navItems = mode === "market" ? MARKET_NAV : VENDOR_NAV
+  const navItems = useMemo(() => mode === "market" ? MARKET_NAV : VENDOR_NAV, [mode])
+  const unreadCount = useMemo(() => notifications.filter((n) => !n.is_read).length, [notifications])
   const companyName = summary?.user?.company_name ?? "B2B Workspace"
   const email = summary?.user?.email ?? ""
 

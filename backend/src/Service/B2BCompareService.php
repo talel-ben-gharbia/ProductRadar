@@ -5,6 +5,7 @@ namespace App\Service;
 use Doctrine\DBAL\ArrayParameterType;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Cache\CacheItemPoolInterface;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 
 class B2BCompareService
@@ -102,8 +103,8 @@ class B2BCompareService
 
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
-        #[Autowire(service: 'general.cache')]
         private readonly CacheItemPoolInterface $cache,
+        private readonly LoggerInterface $logger,
     ) {
     }
 
@@ -532,12 +533,13 @@ SQL;
     private function callN8n(string $payload): ?array
     {
         $webhookUrl = trim((string) (
-            $_ENV['N8N_COMPARE_WEBHOOK_URL']
-            ?? $_SERVER['N8N_COMPARE_WEBHOOK_URL']
+            $_SERVER['N8N_COMPARE_WEBHOOK_URL']
+            ?? $_ENV['N8N_COMPARE_WEBHOOK_URL']
             ?? ''
         ));
 
         if ($webhookUrl === '' || filter_var($webhookUrl, FILTER_VALIDATE_URL) === false) {
+            $this->logger->warning('B2BCompareService: N8N webhook URL not configured or invalid.');
             return null;
         }
 
@@ -553,11 +555,17 @@ SQL;
 
         $body = @file_get_contents($webhookUrl, false, $context);
         if ($body === false) {
+            $this->logger->error('B2BCompareService: Failed to call N8N webhook.', ['url' => $webhookUrl]);
             return null;
         }
 
         $decoded = json_decode($body, true);
-        return is_array($decoded) ? $decoded : null;
+        if (!is_array($decoded)) {
+            $this->logger->warning('B2BCompareService: N8N returned non-JSON response.', ['body' => substr((string) $body, 0, 500)]);
+            return [];
+        }
+
+        return $decoded;
     }
 
     private function parseResponse(?array $response): array

@@ -104,7 +104,7 @@ async function fetchProductDetails(id: number): Promise<ProductDetails> {
     name: String(data.name ?? ""),
     brand: (data.brand ?? null) as string | null,
     description: String(data.description ?? ""),
-    specs_json: (data.specs_json ?? null) as Record<string, unknown> | null,
+    specs_json: (data.specs_json ?? null) as Record<string, string> | null,
     image_url: (data.image_url ?? null) as string | null,
     categoryId: (data.categoryId ?? null) as number | null,
     listings: Array.isArray(data.listings) ? data.listings : [],

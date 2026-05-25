@@ -76,7 +76,6 @@ final class SubscriptionContextResolver
                 'b2c_fallback' => $this->serializeB2CSubscription($b2cSub),
                 'effective_limits' => $this->computeEffectiveLimits($b2bSub, $b2cSub),
                 'can_create_ads_requests' => $this->canCreateAdsRequests($b2bSub),
-                'can_scrape_urls' => $this->canScrapeUrls($b2bSub),
                 'can_generate_reports' => $this->canGenerateReports($b2bSub),
             ];
         }
@@ -90,7 +89,6 @@ final class SubscriptionContextResolver
             'b2c_subscription' => $this->serializeB2CSubscription($b2cSub),
             'effective_limits' => $this->computeB2CLimits($b2cSub),
             'can_create_ads_requests' => $b2cSub?->isActive() ?? false,
-            'can_scrape_urls' => false,
             'can_generate_reports' => $b2cSub?->isActive() ?? false,
         ];
     }
@@ -123,7 +121,6 @@ final class SubscriptionContextResolver
         $limits = $context['effective_limits'];
         $fieldName = match ($operationType) {
             'ads_requests' => 'ads_requests_per_month',
-            'scraping_requests' => 'scraping_requests_per_month',
             'reports' => 'reports_per_month',
             'sponsored_products' => 'sponsored_products_per_month',
             default => null,
@@ -167,7 +164,6 @@ final class SubscriptionContextResolver
         if (!isset($usageJson[$currentMonth])) {
             $usageJson[$currentMonth] = [
                 'ads_requests' => 0,
-                'scraping_requests' => 0,
                 'reports' => 0,
                 'sponsored_products' => 0,
             ];
@@ -175,7 +171,6 @@ final class SubscriptionContextResolver
 
         match ($operationType) {
             'ads_requests' => $usageJson[$currentMonth]['ads_requests'] += $quantity,
-            'scraping_requests' => $usageJson[$currentMonth]['scraping_requests'] += $quantity,
             'reports' => $usageJson[$currentMonth]['reports'] += $quantity,
             'sponsored_products' => $usageJson[$currentMonth]['sponsored_products'] += $quantity,
             default => null,
@@ -192,14 +187,12 @@ final class SubscriptionContextResolver
         $b2bLimits = match ($b2bSub->getPlanType()) {
             'B2B_GOLD' => [
                 'ads_requests_per_month' => 50,
-                'scraping_requests_per_month' => 200,
                 'reports_per_month' => 20,
                 'max_watchlist_items' => 15,
                 'sponsored_products_per_month' => 20,
             ],
             'B2B_SILVER' => [
                 'ads_requests_per_month' => 20,
-                'scraping_requests_per_month' => 50,
                 'reports_per_month' => 5,
                 'max_watchlist_items' => 5,
                 'sponsored_products_per_month' => 5,
@@ -215,7 +208,6 @@ final class SubscriptionContextResolver
         if (!$sub instanceof Subscription) {
             return [
                 'ads_requests_per_month' => 0,
-                'scraping_requests_per_month' => 0,
                 'reports_per_month' => 0,
             ];
         }
@@ -223,17 +215,14 @@ final class SubscriptionContextResolver
         return match ($sub->getPlanType()) {
             'PREMIUM' => [
                 'ads_requests_per_month' => 10,
-                'scraping_requests_per_month' => 5,
                 'reports_per_month' => 2,
             ],
             'SILVER' => [
                 'ads_requests_per_month' => 3,
-                'scraping_requests_per_month' => 1,
                 'reports_per_month' => 1,
             ],
             default => [
                 'ads_requests_per_month' => 0,
-                'scraping_requests_per_month' => 0,
                 'reports_per_month' => 0,
             ],
         };
@@ -244,12 +233,7 @@ final class SubscriptionContextResolver
         return $sub->isActive() && in_array($sub->getPlanType(), ['B2B_GOLD', 'B2B_SILVER']);
     }
 
-    private function canScrapeUrls(Subscription $sub): bool
-    {
-        return $sub->isActive() && in_array($sub->getPlanType(), ['B2B_GOLD', 'B2B_SILVER']);
-    }
-
-    private function canGenerateReports(Subscription $sub): bool
+private function canGenerateReports(Subscription $sub): bool
     {
         return $sub->isActive() && in_array($sub->getPlanType(), ['B2B_GOLD', 'B2B_SILVER']);
     }
@@ -283,7 +267,6 @@ final class SubscriptionContextResolver
             'active' => false,
             'effective_limits' => [
                 'ads_requests_per_month' => 0,
-                'scraping_requests_per_month' => 0,
                 'reports_per_month' => 0,
             ],
         ];

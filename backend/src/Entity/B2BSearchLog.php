@@ -9,6 +9,7 @@ use Doctrine\ORM\Mapping as ORM;
 #[ORM\Table(name: 'b2b_search_log', indexes: [
     new ORM\Index(name: 'idx_b2b_search_log_owner_type', columns: ['owner_type']),
     new ORM\Index(name: 'idx_b2b_search_log_created', columns: ['created_at']),
+    new ORM\Index(name: 'idx_b2b_search_log_owner_created', columns: ['owner_type', 'created_at']),
 ])]
 class B2BSearchLog
 {

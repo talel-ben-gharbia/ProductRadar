@@ -45,7 +45,7 @@ final class ProductController extends AbstractController
             static fn($product) => [
                 'id' => $product->getId(),
                 'name' => $product->getName(),
-                'brand' => $product->getBrand(),
+                'brand' => $product->getBrand() ?? $product->getBrandEntity()?->getName(),
                 'description' => $product->getDescription(),
                 'specs_json' => $product->getSpecsJson(),
                 'image_url' => $product->getImageUrl(),
@@ -79,7 +79,7 @@ final class ProductController extends AbstractController
         $data = [
             'id' => $product->getId(),
             'name' => $product->getName(),
-            'brand' => $product->getBrand(),
+            'brand' => $product->getBrand() ?? $product->getBrandEntity()?->getName(),
             'description' => $product->getDescription(),
             'specs_json' => $product->getSpecsJson(),
             'image_url' => $product->getImageUrl(),
@@ -146,7 +146,7 @@ final class ProductController extends AbstractController
         return $this->json([
             'id' => $product->getId(),
             'name' => $product->getName(),
-            'brand' => $product->getBrand(),
+            'brand' => $product->getBrand() ?? $product->getBrandEntity()?->getName(),
             'description' => $product->getDescription(),
             'specs_json' => $product->getSpecsJson(),
             'image_url' => $product->getImageUrl(),
@@ -193,7 +193,7 @@ final class ProductController extends AbstractController
         return $this->json([
             'id' => $product->getId(),
             'name' => $product->getName(),
-            'brand' => $product->getBrand(),
+            'brand' => $product->getBrand() ?? $product->getBrandEntity()?->getName(),
             'description' => $product->getDescription(),
             'image_url' => $product->getImageUrl(),
             'categoryId' => $product->getCategory()?->getId(),

@@ -2,7 +2,6 @@
 
 import { FormEvent, useMemo, useRef, useState } from "react"
 import Image from "next/image"
-import { useRouter } from "next/navigation"
 import { Loader2, LogIn, Lock, Mail, User, UserPlus } from "lucide-react"
 import {
   createUserWithEmailAndPassword,
@@ -66,7 +65,6 @@ function getFriendlyAuthErrorMessage(error: unknown, fallback: string) {
 }
 
 export function B2CAuthDialogTrigger() {
-  const router = useRouter()
   const { isOpen, setIsOpen, openAuthDialog } = useAuthDialog()
   const [pendingAction, setPendingAction] = useState<PendingAction>("none")
   const [mode, setMode] = useState<AuthMode>("signin")
@@ -104,15 +102,16 @@ export function B2CAuthDialogTrigger() {
     if (!response.ok || !data.success) {
       throw new Error(data.error || "Unable to authenticate.")
     }
+
+    return data
   }
 
   async function completeLogin(idToken: string, fullNameOverride?: string) {
-    await createSessionFromIdToken(idToken, fullNameOverride)
+    const data = await createSessionFromIdToken(idToken, fullNameOverride)
+    const isB2B = data.customer?.type === "b2b_company" || data.customer?.type === "b2b_market"
     toast.success("Welcome !")
     setIsOpen(false)
-    router.push("/")
-    router.refresh()
-    window.location.reload()
+    window.location.href = isB2B ? "/B2B/dashboard" : "/"
   }
 
   async function handleGoogleAuth() {

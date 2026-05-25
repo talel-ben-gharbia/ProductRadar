@@ -4,8 +4,8 @@ import { useState, type ReactNode, createContext, useContext } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
-  AlertTriangle, BarChart3, Bell, Building2, ChevronsUpDown, Eye, FileText, Globe, Home, Layers, LineChart,
-  LogOut, Megaphone, MessageSquare, Package, Search, Settings, Shield, Star, TrendingUp, User, Zap,
+  AlertTriangle, BarChart3, Bell, Building2, ChevronsUpDown, Eye, FileText, Globe, Grid3x3, Home, Layers, LineChart,
+  LogOut, Megaphone, MessageSquare, Package, Search, Settings, Shield, ShoppingBag, Star, TrendingUp, User, Zap,
 } from "lucide-react"
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -61,11 +61,13 @@ const VENDOR_NAV: NavItem[] = [
 
 const MARKET_NAV: NavItem[] = [
   { href: "/B2B/demo", name: "Overview", icon: Home },
-  { href: "/B2B/demo/share-of-shelf", name: "Share of Shelf", icon: BarChart3 },
-  { href: "/B2B/demo/price-dispersion", name: "Price Dispersion", icon: LineChart },
-
+  { href: "/B2B/demo/brand-intelligence", name: "Brand Intelligence", icon: Shield, gold: true },
+  { href: "/B2B/demo/product-compare", name: "Product Comparison", icon: ShoppingBag, gold: true },
+  { href: "/B2B/demo/share-of-shelf", name: "Share of Shelf", icon: BarChart3, gold: true },
+  { href: "/B2B/demo/price-dispersion", name: "Price Dispersion", icon: LineChart, gold: true },
+  { href: "/B2B/demo/distribution-coverage", name: "Distribution", icon: Grid3x3 },
+  { href: "/B2B/demo/watchlist", name: "Watchlist", icon: Star },
   { href: "/B2B/demo/reviews-sentiment", name: "Reviews & Sentiment", icon: MessageSquare, gold: true },
-  { href: "/B2B/demo/demand-intelligence", name: "Demand Intelligence", icon: Zap, gold: true },
   { href: "/B2B/demo/alerts", name: "Alerts", icon: Bell },
   { href: "/B2B/demo/reports", name: "Reports", icon: FileText },
   { href: "/B2B/demo/settings", name: "Settings", icon: Settings },
@@ -90,7 +92,6 @@ function DemoNavbar() {
 
 
     "/B2B/demo/reviews-sentiment": "Reviews & Sentiment",
-    "/B2B/demo/demand-intelligence": "Demand Intelligence",
   }
 
   const pageTitle = PAGE_TITLES[pathname] ?? pathname.split("/").filter(Boolean).at(-1)?.replace(/-/g, " ").replace(/\b\w/g, (l) => l.toUpperCase()) ?? "Demo"

@@ -17,13 +17,16 @@ const PAGE_TITLES: Record<string, string> = {
   "/B2B/dashboard/alerts": "Alerts & Notifications",
   "/B2B/dashboard/reports": "Reports",
   "/B2B/dashboard/ads-requests": "Ads Requests",
-  "/B2B/dashboard/scraping-requests": "Scraping Requests",
   "/B2B/dashboard/settings": "Settings",
+  "/B2B/dashboard/brand-intelligence": "Brand Intelligence",
+  "/B2B/dashboard/product-compare": "Product Comparison",
   "/B2B/dashboard/share-of-shelf": "Share of Shelf",
   "/B2B/dashboard/price-dispersion": "Price Dispersion",
+  "/B2B/dashboard/price-competitiveness": "Price Competitiveness",
+  "/B2B/dashboard/distribution-coverage": "Distribution Coverage",
+  "/B2B/dashboard/watchlist": "Watchlist",
 
   "/B2B/dashboard/reviews-sentiment": "Reviews & Sentiment",
-  "/B2B/dashboard/demand-intelligence": "Demand Intelligence",
 }
 
 function B2BNavbar() {

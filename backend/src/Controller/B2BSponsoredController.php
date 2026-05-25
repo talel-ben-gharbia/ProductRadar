@@ -50,9 +50,10 @@ final class B2BSponsoredController extends AbstractController
         }
 
         $qb = $entityManager->createQueryBuilder()
-            ->select('pl.id AS listing_id, p.id AS product_id, p.name AS product_name, p.brand AS product_brand, pl.ref')
+            ->select('pl.id AS listing_id, p.id AS product_id, p.name AS product_name, COALESCE(b.name, p.brand) AS product_brand, pl.ref')
             ->from(ProductListing::class, 'pl')
             ->join('pl.product', 'p')
+            ->leftJoin('p.brandEntity', 'b')
             ->where('pl.seller = :sellerId')
             ->andWhere('pl.is_active = true')
             ->setParameter('sellerId', $sellerId);
@@ -425,7 +426,7 @@ final class B2BSponsoredController extends AbstractController
                 'product_id' => $product->getId(),
                 'product_name' => $product->getName(),
                 'product_image' => $product->getImageUrl(),
-                'product_brand' => $product->getBrand(),
+                'product_brand' => $product->getBrand() ?? $product->getBrandEntity()?->getName(),
                 'price' => $listing->getPrice(),
                 'seller_name' => $seller?->getName(),
                 'seller_id' => $seller?->getId(),
@@ -515,7 +516,7 @@ final class B2BSponsoredController extends AbstractController
             'listing_id' => $listing?->getId(),
             'product_id' => $product?->getId(),
             'product_name' => $product?->getName() ?? $a->getTitle(),
-            'product_brand' => $product?->getBrand(),
+            'product_brand' => $product?->getBrand() ?? $product?->getBrandEntity()?->getName(),
             'product_image' => $product?->getImageUrl(),
             'price' => $listing?->getPrice(),
             'seller_id' => $listing?->getSeller()?->getId(),

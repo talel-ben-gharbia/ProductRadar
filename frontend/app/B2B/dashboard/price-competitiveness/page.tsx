@@ -5,6 +5,7 @@ import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Scatter, Scatt
 import { BarChart3, TrendingDown, TrendingUp, ScatterChart as ScatterIcon } from "lucide-react"
 
 import { useB2B } from "@/components/B2B/b2b-context"
+import B2BPlanGate from "@/components/B2B/b2b-plan-gate"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -22,7 +23,7 @@ type CompetitivenessItem = {
 const COLORS = ["#6366f1", "#8b5cf6", "#a78bfa", "#c4b5fd", "#818cf8", "#7c3aed"]
 
 export default function PriceCompetitivenessPage() {
-  const { summary, loading } = useB2B()
+  const { summary, loading, isGold } = useB2B()
   const [brands, setBrands] = useState<string[]>([])
   const [selectedBrand, setSelectedBrand] = useState<string>("")
   const [products, setProducts] = useState<CompetitivenessItem[]>([])
@@ -81,6 +82,8 @@ export default function PriceCompetitivenessPage() {
       </div>
     )
   }
+
+  if (!isGold) return <B2BPlanGate featureName="Price Competitiveness" />
 
   return (
     <div className="space-y-6">

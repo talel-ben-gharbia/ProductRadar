@@ -1,13 +1,15 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
+import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip as ReTooltip, XAxis, YAxis } from "recharts"
 import {
   CheckCircle2, ChevronDown, ChevronRight, ChevronsUpDown,
   Eye, Package, RefreshCw, Search, ArrowUpDown,
-  Store, Tag, XCircle, Shield,
+  Store, Tag, XCircle, TrendingUp,
 } from "lucide-react"
 
 import { useB2B } from "@/components/B2B/b2b-context"
+import B2BPlanGate from "@/components/B2B/b2b-plan-gate"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -199,7 +201,7 @@ const PER_PAGE = 20
 type SortKey = "name" | "price" | "sellers" | "trust"
 
 export default function BrandIntelligencePage() {
-  const { firebaseUid } = useB2B()
+  const { firebaseUid, isGold } = useB2B()
 
   const [brandScope, setBrandScope] = useState<BrandScopeResponse | null>(null)
   const [scopeLoading, setScopeLoading] = useState(true)
@@ -212,6 +214,8 @@ export default function BrandIntelligencePage() {
   const [searchInput, setSearchInput] = useState("")
   const [sortKey, setSortKey] = useState<SortKey>("sellers")
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc")
+
+  if (!isGold) return <B2BPlanGate featureName="Brand Intelligence" />
 
   const brandName = brandScope?.brand_keywords?.brand_name
   const scopeStats = brandScope?.stats
@@ -346,7 +350,35 @@ export default function BrandIntelligencePage() {
     return <ArrowUpDown className={`ml-1 size-3 ${sortDir === "desc" ? "text-indigo-500" : "text-indigo-500 rotate-180"}`} />
   }
 
-  const brandBreakdown = brandScope?.brand_summary ?? []
+  const sellerChartData = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const p of allProducts) {
+      for (const s of p.sellers) {
+        map.set(s.seller_name, (map.get(s.seller_name) ?? 0) + 1)
+      }
+    }
+    return Array.from(map.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([name, count]) => ({
+        name: name.length > 10 ? name.slice(0, 10) + "..." : name,
+        products: count,
+      }))
+  }, [allProducts])
+
+  const chartTrustData = useMemo(() => {
+    const buckets = { "0-20": 0, "21-40": 0, "41-60": 0, "61-80": 0, "81-100": 0 }
+    for (const p of allProducts) {
+      if (p.avg_trust != null) {
+        if (p.avg_trust <= 20) buckets["0-20"]++
+        else if (p.avg_trust <= 40) buckets["21-40"]++
+        else if (p.avg_trust <= 60) buckets["41-60"]++
+        else if (p.avg_trust <= 80) buckets["61-80"]++
+        else buckets["81-100"]++
+      }
+    }
+    return Object.entries(buckets).map(([name, count]) => ({ name, count }))
+  }, [allProducts])
 
   return (
     <div className="space-y-6">
@@ -476,33 +508,56 @@ export default function BrandIntelligencePage() {
             </Card>
           ) : (
             <>
-              {brandBreakdown.length > 0 && (
+              <div className="grid gap-4 lg:grid-cols-2">
                 <Card className="border-border/50 shadow-sm">
                   <CardHeader className="pb-3">
-                    <CardTitle className="flex items-center gap-2 text-sm"><Shield className="size-3.5 text-indigo-500" />Brand Variants</CardTitle>
-                    <CardDescription className="text-xs">Products grouped by brand variant name.</CardDescription>
+                    <CardTitle className="flex items-center gap-2 text-sm"><Store className="size-3.5 text-indigo-500" />Top Sellers by Product Count</CardTitle>
                   </CardHeader>
-                  <CardContent className="pb-3 pt-0">
-                    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                      {brandBreakdown.slice(0, 8).map((b) => (
-                        <div key={b.brand} className="rounded-lg border border-border/50 px-3 py-2">
-                          <p className="text-xs font-medium truncate">{b.brand}</p>
-                          <p className="text-lg font-bold">{b.product_count} <span className="text-xs font-normal text-muted-foreground">products</span></p>
-                          {b.avg_trust !== null && (
-                            <div className="flex items-center gap-1 mt-0.5">
-                              <div className="h-1 flex-1 overflow-hidden rounded-full bg-muted">
-                                <div className={`h-full rounded-full ${b.avg_trust >= 80 ? "bg-emerald-500" : b.avg_trust >= 50 ? "bg-amber-500" : "bg-red-500"}`} style={{ width: `${b.avg_trust}%` }} />
-                              </div>
-                              <span className="text-[10px] text-muted-foreground font-mono">{b.avg_trust.toFixed(0)}</span>
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
+                  <CardContent className="h-48">
+                    {sellerChartData.length > 0 ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={sellerChartData} layout="vertical">
+                          <CartesianGrid strokeDasharray="3 3" horizontal={false} className="stroke-border/30" />
+                          <XAxis type="number" tickLine={false} axisLine={false} fontSize={10} />
+                          <YAxis dataKey="name" type="category" tickLine={false} axisLine={false} fontSize={10} width={70} />
+                          <ReTooltip contentStyle={{ borderRadius: "8px", fontSize: "11px" }} />
+                          <Bar dataKey="products" radius={[0, 4, 4, 0]}>
+                            {sellerChartData.map((_, i) => <Cell key={i} fill="#6366f1" fillOpacity={0.7 + (1 - i / sellerChartData.length) * 0.3} />)}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="flex h-full items-center justify-center text-xs text-muted-foreground">No data</div>
+                    )}
                   </CardContent>
                 </Card>
-              )}
-              
+
+                <Card className="border-border/50 shadow-sm">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="flex items-center gap-2 text-sm"><TrendingUp className="size-3.5 text-indigo-500" />Trust Score Distribution</CardTitle>
+                  </CardHeader>
+                  <CardContent className="h-48">
+                    {chartTrustData.some((d) => d.count > 0) ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={chartTrustData}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-border/30" />
+                          <XAxis dataKey="name" tickLine={false} axisLine={false} fontSize={10} />
+                          <YAxis tickLine={false} axisLine={false} fontSize={10} allowDecimals={false} />
+                          <ReTooltip contentStyle={{ borderRadius: "8px", fontSize: "11px" }} />
+                          <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+                            {chartTrustData.map((e) => (
+                              <Cell key={e.name} fill={parseInt(e.name) >= 80 ? "#22c55e" : parseInt(e.name) >= 50 ? "#f59e0b" : "#ef4444"} />
+                            ))}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="flex h-full items-center justify-center text-xs text-muted-foreground">No trust data</div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+
               <div className="space-y-2">
                 {pageProducts.map((p) => <ProductCard key={p.id} product={p} sellerId={sellerId} currentFilter={filter} />)}
               </div>

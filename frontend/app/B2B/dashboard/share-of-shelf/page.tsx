@@ -4,6 +4,7 @@ import { Bar, BarChart, CartesianGrid, Cell, LabelList, Pie, PieChart, Responsiv
 import { BarChart3, CheckCircle2, ChevronDown, ChevronRight, Eye, EyeOff, HelpCircle, PieChartIcon, ShoppingBag, TrendingDown, TrendingUp } from "lucide-react"
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useB2B } from "@/components/B2B/b2b-context"
+import B2BPlanGate from "@/components/B2B/b2b-plan-gate"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -26,7 +27,7 @@ type CompetitorItem = { name: string; count: number; is_own?: boolean }
 type ShelfItem = { category?: string; category_id?: number; your_products?: number; brand_products?: number; total_products?: number; share_of_shelf?: number; delta?: number | null; top_competitors?: CompetitorItem[] }
 
 export default function ShareOfShelfPage() {
-  const { summary, loading, mode } = useB2B()
+  const { summary, loading, mode, isGold } = useB2B()
   const metrics = summary?.metrics as Record<string, unknown> | undefined
   const raw = ((metrics?.share_of_shelf ?? []) as ShelfItem[])
   const [selectedBarCategory, setSelectedBarCategory] = useState<string | null>(null)
@@ -134,6 +135,8 @@ export default function ShareOfShelfPage() {
       </div>
     )
   }
+
+  if (!isGold) return <B2BPlanGate featureName="Share of Shelf" />
 
   return (
     <div className="space-y-6">

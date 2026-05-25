@@ -8,7 +8,7 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 
 trait CachedResponseTrait
 {
-    protected function cachedGet(CacheItemPoolInterface $pool, string $cacheKey, callable $dataGenerator, int $ttl = 300): JsonResponse
+    protected function cachedGet(CacheItemPoolInterface $pool, string $cacheKey, callable $dataGenerator, int $ttl = 900): JsonResponse
     {
         $cacheItem = $pool->getItem($cacheKey);
         if ($cacheItem->isHit()) {

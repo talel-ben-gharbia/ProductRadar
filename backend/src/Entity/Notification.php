@@ -11,6 +11,9 @@ use Doctrine\ORM\Mapping as ORM;
 #[ORM\Index(name: 'idx_notification_company', columns: ['company_id'])]
 #[ORM\Index(name: 'idx_notification_market', columns: ['market_id'])]
 #[ORM\Index(name: 'idx_notification_created', columns: ['created_at'])]
+#[ORM\Index(name: 'idx_notification_company_created', columns: ['company_id', 'created_at'])]
+#[ORM\Index(name: 'idx_notification_market_created', columns: ['market_id', 'created_at'])]
+#[ORM\Index(name: 'idx_notification_client_created', columns: ['client_id', 'created_at'])]
 class Notification
 {
     #[ORM\Id]

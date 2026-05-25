@@ -146,10 +146,6 @@ const SIDEBAR_CONSTANTS: SidebarItem[] = [
         url: "/admin/b2b-workflows/ads-requests",
       },
       {
-        title: "Scraping Requests",
-        url: "/admin/b2b-workflows/scraping-requests",
-      },
-      {
         title: "Business Reports",
         url: "/admin/b2b-workflows/reports",
       },

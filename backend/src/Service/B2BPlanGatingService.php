@@ -14,6 +14,11 @@ class B2BPlanGatingService
     public const FEATURE_REVIEWS_SENTIMENT = 'reviews_sentiment';
     public const FEATURE_DEMAND_INTELLIGENCE = 'demand_intelligence';
     public const FEATURE_EXPORT_CSV = 'export_csv';
+    public const FEATURE_BRAND_INTELLIGENCE = 'brand_intelligence';
+    public const FEATURE_SHARE_OF_SHELF = 'share_of_shelf';
+    public const FEATURE_PRICE_DISPERSION = 'price_dispersion';
+    public const FEATURE_PRICE_COMPETITIVENESS = 'price_competitiveness';
+    public const FEATURE_MULTI_PRODUCT_COMPARE = 'multi_product_compare';
     public const FEATURE_SPONSORED_PRODUCTS = 'sponsored_products';
 
     // Features that require GOLD plan
@@ -23,6 +28,11 @@ class B2BPlanGatingService
         self::FEATURE_REVIEWS_SENTIMENT,
         self::FEATURE_DEMAND_INTELLIGENCE,
         self::FEATURE_EXPORT_CSV,
+        self::FEATURE_BRAND_INTELLIGENCE,
+        self::FEATURE_SHARE_OF_SHELF,
+        self::FEATURE_PRICE_DISPERSION,
+        self::FEATURE_PRICE_COMPETITIVENESS,
+        self::FEATURE_MULTI_PRODUCT_COMPARE,
     ];
 
     public function __construct(private readonly EntityManagerInterface $entityManager)
@@ -43,11 +53,11 @@ class B2BPlanGatingService
         $ownerType = $user instanceof B2BCompany ? 'COMPANY' : 'MARKET';
         /** @var Subscription|null $sub */
         $sub = $this->entityManager->getRepository(Subscription::class)->findOneBy(
-            ['owner_type' => $ownerType, 'owner_id' => $user->getId()],
+            ['owner_type' => $ownerType, 'owner_id' => $user->getId(), 'active' => true],
             ['created_at' => 'DESC', 'id' => 'DESC']
         );
 
-        if (!$sub instanceof Subscription || !$sub->isActive()) {
+        if (!$sub instanceof Subscription) {
             return false;
         }
 

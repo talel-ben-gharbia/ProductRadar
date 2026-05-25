@@ -1,162 +1,122 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 import { Area, AreaChart, ResponsiveContainer, Tooltip } from "recharts"
 import { ChevronLeft, ChevronRight, CheckCircle2, Grid3x3, Package, Store, XCircle, AlertTriangle, ArrowUpDown } from "lucide-react"
-import { useB2B } from "@/components/B2B/b2b-context"
-import B2BErrorState from "@/components/B2B/b2b-error-state"
+import { useDemo } from "../layout-client"
+import { DEMO_METRICS } from "@/lib/demo-data"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Skeleton } from "@/components/ui/skeleton"
 
-type CoverageProduct = {
-  id: number
-  name: string
-  brand: string | null
-  category_name: string | null
-  in_stock_sellers: number
-  out_of_stock_sellers: number
-  total_sellers: number
-  coverage_rate: number
-}
+const DEMO_PRODUCTS = [
+  { id: 1, name: "Wireless Bluetooth Headphones Pro", brand: "SoundMax", category_name: "Electronics", in_stock_sellers: 5, out_of_stock_sellers: 2, total_sellers: 7, coverage_rate: 71 },
+  { id: 2, name: "Smart Home Security Camera 4K", brand: "SafeHome", category_name: "Security", in_stock_sellers: 4, out_of_stock_sellers: 1, total_sellers: 5, coverage_rate: 80 },
+  { id: 3, name: "Ergonomic Office Chair Mesh", brand: "ComfortPlus", category_name: "Furniture", in_stock_sellers: 3, out_of_stock_sellers: 5, total_sellers: 8, coverage_rate: 38 },
+  { id: 4, name: "Portable External SSD 2TB", brand: "DataFast", category_name: "Storage", in_stock_sellers: 7, out_of_stock_sellers: 2, total_sellers: 9, coverage_rate: 78 },
+  { id: 5, name: "Organic Green Tea Matcha Powder", brand: "ZenLeaf", category_name: "Groceries", in_stock_sellers: 3, out_of_stock_sellers: 1, total_sellers: 4, coverage_rate: 75 },
+  { id: 6, name: "Professional Chef Knife Set", brand: "KitchenElite", category_name: "Kitchen", in_stock_sellers: 4, out_of_stock_sellers: 2, total_sellers: 6, coverage_rate: 67 },
+  { id: 8, name: "LED Desk Lamp with Wireless Charger", brand: "BrightTech", category_name: "Lighting", in_stock_sellers: 4, out_of_stock_sellers: 1, total_sellers: 5, coverage_rate: 80 },
+]
 
-type CoverageSeller = {
-  id: number
-  name: string
-  in_stock_count: number
-  out_of_stock_count: number
-  products_carried: number
-}
+const DEMO_SELLERS = [
+  { id: 1, name: "Your Store (Demo)", in_stock_count: 6, out_of_stock_count: 2, products_carried: 8 },
+  { id: 10, name: "PriceBuster", in_stock_count: 28, out_of_stock_count: 7, products_carried: 35 },
+  { id: 11, name: "TechDeals", in_stock_count: 37, out_of_stock_count: 5, products_carried: 42 },
+  { id: 12, name: "OfficeMart", in_stock_count: 12, out_of_stock_count: 6, products_carried: 18 },
+  { id: 13, name: "DataWorld", in_stock_count: 13, out_of_stock_count: 2, products_carried: 15 },
+  { id: 14, name: "HomeBright", in_stock_count: 9, out_of_stock_count: 1, products_carried: 10 },
+]
 
-type CoverageCell = {
-  product_id: number
-  seller_id: number
-  in_stock: boolean
-  price: number | null
-}
-
-type ReliabilityItem = { seller_id?: number; seller_name?: string; total_records?: number; out_of_stock_count?: number; oos_rate_30d?: number }
-type TrendItem = { seller_id?: number; seller_name?: string; daily_rates?: (number | null)[] }
-
-type CoverageResponse = {
-  products: CoverageProduct[]
-  sellers: CoverageSeller[]
-  matrix: CoverageCell[]
-  self_seller_id: number | null
-  competitor_reliability?: ReliabilityItem[]
-  oos_trend?: TrendItem[]
-}
+const DEMO_MATRIX: { product_id: number; seller_id: number; in_stock: boolean; price: number | null }[] = [
+  { product_id: 1, seller_id: 1, in_stock: true, price: 79.99 },
+  { product_id: 1, seller_id: 10, in_stock: true, price: 69.99 },
+  { product_id: 1, seller_id: 11, in_stock: true, price: 74.99 },
+  { product_id: 1, seller_id: 12, in_stock: false, price: 89.99 },
+  { product_id: 2, seller_id: 1, in_stock: true, price: 129.99 },
+  { product_id: 2, seller_id: 11, in_stock: true, price: 119.99 },
+  { product_id: 2, seller_id: 13, in_stock: true, price: 139.99 },
+  { product_id: 3, seller_id: 1, in_stock: false, price: 249.99 },
+  { product_id: 3, seller_id: 10, in_stock: false, price: 219.99 },
+  { product_id: 3, seller_id: 12, in_stock: false, price: 259.99 },
+  { product_id: 4, seller_id: 1, in_stock: true, price: 149.99 },
+  { product_id: 4, seller_id: 13, in_stock: true, price: 139.99 },
+  { product_id: 4, seller_id: 10, in_stock: true, price: 145.99 },
+  { product_id: 5, seller_id: 1, in_stock: true, price: 29.99 },
+  { product_id: 5, seller_id: 11, in_stock: true, price: 27.99 },
+  { product_id: 6, seller_id: 1, in_stock: true, price: 89.99 },
+  { product_id: 6, seller_id: 12, in_stock: false, price: 79.99 },
+  { product_id: 6, seller_id: 10, in_stock: true, price: 85.99 },
+  { product_id: 8, seller_id: 1, in_stock: true, price: 54.99 },
+  { product_id: 8, seller_id: 14, in_stock: true, price: 49.99 },
+  { product_id: 8, seller_id: 10, in_stock: true, price: 52.99 },
+]
 
 const PER_PAGE = 10
 
-export default function DistributionCoveragePage() {
-  const { loading: summaryLoading, isGold } = useB2B()
-
-  const [data, setData] = useState<CoverageResponse | null>(null)
-  const [loading, setLoading] = useState(true)
+export default function DemoDistributionCoveragePage() {
+  const { isGold } = useDemo()
   const [page, setPage] = useState(1)
   const [sortBy, setSortBy] = useState<"coverage" | null>(null)
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc")
   const [filterCategory, setFilterCategory] = useState("")
-  const [error, setError] = useState<string | null>(null)
 
-  const fetchData = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const res = await fetch("/api/b2b/workspace?endpoint=distribution-coverage")
-      if (res.ok) {
-        const json: CoverageResponse = await res.json()
-        setData(json)
-      } else {
-        const body = await res.json().catch(() => ({}))
-        throw new Error((body as Record<string, unknown>).error as string ?? `Request failed (${res.status})`)
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to fetch distribution coverage")
-    }
-    setLoading(false)
-  }, [])
+  const stockBySeller = DEMO_METRICS.stock_by_seller as Array<Record<string, unknown>>
+  const reliability = (DEMO_METRICS as { competitor_reliability?: Array<Record<string, unknown>> }).competitor_reliability ?? stockBySeller
+  const oosTrend = DEMO_METRICS.oos_trend as Array<Record<string, unknown>> | undefined
 
-  useEffect(() => { fetchData() }, [fetchData])
-
-  const loading_ = loading || summaryLoading
-
-  const { products, sellers, matrix, self_seller_id, competitor_reliability, oos_trend } = data ?? {}
-
-  const orderedSellers = useMemo(() => {
-    if (!sellers) return []
-    const you = sellers.filter((s) => s.id === self_seller_id)
-    const others = sellers.filter((s) => s.id !== self_seller_id)
-    return [...you, ...others]
-  }, [sellers, self_seller_id])
+  const products = DEMO_PRODUCTS
+  const sellers = DEMO_SELLERS
+  const selfSellerId = 1
 
   const matrixMap = useMemo(() => {
-    if (!matrix) return new Map<string, CoverageCell>()
-    const map = new Map<string, CoverageCell>()
-    for (const cell of matrix) {
+    const map = new Map<string, { product_id: number; seller_id: number; in_stock: boolean; price: number | null }>()
+    for (const cell of DEMO_MATRIX) {
       map.set(`${cell.product_id}-${cell.seller_id}`, cell)
     }
     return map
-  }, [matrix])
+  }, [])
 
-  const yourSeller = useMemo(() => {
-    if (!sellers || self_seller_id == null) return null
-    return sellers.find((s) => s.id === self_seller_id) ?? null
-  }, [sellers, self_seller_id])
+  const orderedSellers = useMemo(() => {
+    const you = sellers.filter((s) => s.id === selfSellerId)
+    const others = sellers.filter((s) => s.id !== selfSellerId)
+    return [...you, ...others]
+  }, [selfSellerId])
 
-  const totalCovered = products ? products.filter((p) => p.coverage_rate > 0).length : 0
-  const avgCoverage = products && products.length > 0
-    ? Math.round(products.reduce((s, p) => s + p.coverage_rate, 0) / products.length)
-    : 0
+  const yourSeller = sellers.find((s) => s.id === selfSellerId) ?? null
 
-  const yourGaps = useMemo(() => {
-    if (!products || self_seller_id == null || !matrixMap) return 0
-    return products.filter((p) => !matrixMap.has(`${p.id}-${self_seller_id}`)).length
-  }, [products, self_seller_id, matrixMap])
+  const totalCovered = products.filter((p) => p.coverage_rate > 0).length
+  const avgCoverage = Math.round(products.reduce((s, p) => s + p.coverage_rate, 0) / products.length)
 
-  const yourOOS = yourSeller?.out_of_stock_count ?? 0
-  const yourStockRate = yourSeller && yourSeller.products_carried > 0
-    ? Math.round((yourSeller.in_stock_count / yourSeller.products_carried) * 100)
-    : 0
+  const yourGaps = products.filter((p) => !matrixMap.has(`${p.id}-${selfSellerId}`)).length
 
   const reliabilityMap = useMemo(() => {
-    if (!competitor_reliability) return new Map<number, ReliabilityItem>()
-    const map = new Map<number, ReliabilityItem>()
-    for (const r of competitor_reliability) {
-      if (r.seller_id != null) map.set(r.seller_id, r)
+    const map = new Map<number, Record<string, unknown>>()
+    for (const r of reliability) {
+      if (r.seller_id != null) map.set(Number(r.seller_id), r)
     }
     return map
-  }, [competitor_reliability])
+  }, [reliability])
 
-  const worstReliability = competitor_reliability?.length
-    ? [...competitor_reliability].sort((a, b) => Number(b.oos_rate_30d ?? 0) - Number(a.oos_rate_30d ?? 0))[0]
+  const worstReliability = oosTrend?.length
+    ? [...oosTrend].sort((a, b) => Number(b.oos_rate_30d ?? 0) - Number(a.oos_rate_30d ?? 0))[0]
     : null
 
-  const worstTrend = useMemo(() => {
-    if (!worstReliability?.seller_id || !oos_trend) return null
-    return oos_trend.find((t) => t.seller_id === worstReliability.seller_id) ?? null
-  }, [worstReliability, oos_trend])
-
   const categories = useMemo(() => {
-    if (!products) return [] as string[]
     const set = new Set<string>()
     for (const p of products) {
       if (p.category_name) set.add(p.category_name)
     }
     return Array.from(set).sort()
-  }, [products])
+  }, [])
 
   const filtered = useMemo(() => {
-    if (!products) return []
     if (!filterCategory) return products
     return products.filter((p) => p.category_name === filterCategory)
-  }, [products, filterCategory])
+  }, [filterCategory])
 
   const sorted = useMemo(() => {
-    if (!filtered) return []
-    let list = [...filtered]
+    const list = [...filtered]
     if (sortBy === "coverage") {
       list.sort((a, b) => sortDir === "asc" ? a.coverage_rate - b.coverage_rate : b.coverage_rate - a.coverage_rate)
     }
@@ -164,19 +124,14 @@ export default function DistributionCoveragePage() {
   }, [filtered, sortBy, sortDir])
 
   const filteredCount = filtered.length
-  const totalPages = products ? Math.max(1, Math.ceil(sorted.length / PER_PAGE)) : 1
+  const totalPages = Math.max(1, Math.ceil(sorted.length / PER_PAGE))
   const safePage = Math.min(page, totalPages)
   const pageStart = (safePage - 1) * PER_PAGE
   const pageProducts = sorted.slice(pageStart, pageStart + PER_PAGE)
 
   const toggleSort = (col: "coverage") => {
     if (sortBy === col) {
-      if (sortDir === "desc") {
-        setSortDir("asc")
-      } else {
-        setSortBy(null)
-        setSortDir("desc")
-      }
+      setSortDir((d) => (d === "desc" ? "asc" : "desc"))
     } else {
       setSortBy(col)
       setSortDir("desc")
@@ -184,40 +139,10 @@ export default function DistributionCoveragePage() {
     setPage(1)
   }
 
-  if (loading_) {
-    return (
-      <div className="space-y-6">
-        <div className="h-8 w-56 animate-pulse rounded-lg bg-muted/50" />
-        <div className="h-4 w-80 animate-pulse rounded bg-muted/30" />
-        <div className="grid gap-4 sm:grid-cols-4">
-          {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-24 rounded-xl" />)}
-        </div>
-        <Skeleton className="h-96 w-full rounded-xl" />
-      </div>
-    )
-  }
-
-  if (error && !data) {
-    return <B2BErrorState message={error} onRetry={fetchData} />
-  }
-
-  if (!data || !products || products.length === 0 || !sellers || sellers.length === 0) {
-    return (
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Distribution Coverage</h1>
-          <p className="text-sm text-muted-foreground">Product x Seller coverage matrix showing stock status across all sellers.</p>
-        </div>
-        <Card className="border-dashed">
-          <CardContent className="flex flex-col items-center py-16 text-center">
-            <Grid3x3 className="mb-3 size-10 text-muted-foreground/30" />
-            <p className="text-sm font-medium text-muted-foreground">No distribution data yet</p>
-            <p className="text-xs text-muted-foreground mt-1">Data will appear once your brand scope is configured and products are synced.</p>
-          </CardContent>
-        </Card>
-      </div>
-    )
-  }
+  const yourOOS = yourSeller?.out_of_stock_count ?? 0
+  const yourStockRate = yourSeller && yourSeller.products_carried > 0
+    ? Math.round((yourSeller.in_stock_count / yourSeller.products_carried) * 100)
+    : 0
 
   return (
     <div className="space-y-6">
@@ -286,7 +211,7 @@ export default function DistributionCoveragePage() {
             <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Sellers</p>
             <p className="mt-2 text-3xl font-bold">
               {sellers.length}
-              {self_seller_id != null && <span className="text-base font-normal text-muted-foreground"> (You + {sellers.length - 1} others)</span>}
+              {selfSellerId != null && <span className="text-base font-normal text-muted-foreground"> (You + {sellers.length - 1} others)</span>}
             </p>
             <p className="text-xs text-muted-foreground">carrying your brand</p>
           </CardContent>
@@ -307,7 +232,7 @@ export default function DistributionCoveragePage() {
         </Card>
       </section>
 
-      {isGold && (
+      {isGold && worstReliability && (
         <Card className="border-border/50 shadow-sm">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
@@ -317,38 +242,22 @@ export default function DistributionCoveragePage() {
                 </div>
                 <div>
                   <p className="text-xs font-medium text-muted-foreground">Worst Seller (30d)</p>
-                  <p className="text-sm font-bold">{worstReliability?.seller_name ?? "\u2014"}</p>
+                  <p className="text-sm font-bold">{String(worstReliability.seller_name ?? "\u2014")}</p>
                 </div>
               </div>
               <div className="text-right">
-                <p className="text-lg font-bold text-red-600">{Number(worstReliability?.oos_rate_30d ?? 0).toFixed(1)}%</p>
+                <p className="text-lg font-bold text-red-600">{Number(worstReliability.oos_rate_30d ?? 0).toFixed(1)}%</p>
                 <p className="text-[10px] text-muted-foreground">30-day OOS rate</p>
               </div>
             </div>
-            {worstTrend?.daily_rates && (
-              <div className="mt-2 h-8">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={worstTrend.daily_rates.map((r, di) => ({ day: di, rate: r ?? 0 }))}>
-                    <Area dataKey="rate" stroke="#ef4444" fill="#ef4444" fillOpacity={0.08} strokeWidth={1.5} dot={false} isAnimationActive={false} />
-                    <Tooltip
-                      contentStyle={{ borderRadius: "8px", fontSize: "10px", padding: "4px 8px" }}
-                      formatter={(val: number) => [`${val.toFixed(1)}%`, "OOS"]}
-                      labelFormatter={(l) => `${l + 1}d ago`}
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-            )}
           </CardContent>
         </Card>
       )}
 
       <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         {orderedSellers.map((s) => {
-          const isYou = s.id === self_seller_id
+          const isYou = s.id === selfSellerId
           const stockRate = s.products_carried > 0 ? Math.round((s.in_stock_count / s.products_carried) * 100) : 0
-          const rel = isGold ? reliabilityMap.get(s.id) : undefined
-          const relRate = rel ? Number(rel.oos_rate_30d ?? 0) : null
           return (
             <Card key={s.id} className={`border-border/50 shadow-sm ${isYou ? "ring-1 ring-indigo-200" : ""}`}>
               <CardContent className="p-4">
@@ -363,10 +272,8 @@ export default function DistributionCoveragePage() {
                 </div>
                 <div className="mt-2">
                   <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                    <div
-                      className={`h-full rounded-full transition-all ${stockRate >= 50 ? "bg-emerald-500" : stockRate >= 25 ? "bg-amber-500" : "bg-red-500"}`}
-                      style={{ width: `${stockRate}%` }}
-                    />
+                    <div className={`h-full rounded-full transition-all ${stockRate >= 50 ? "bg-emerald-500" : stockRate >= 25 ? "bg-amber-500" : "bg-red-500"}`}
+                      style={{ width: `${stockRate}%` }} />
                   </div>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
@@ -375,19 +282,12 @@ export default function DistributionCoveragePage() {
                   {s.out_of_stock_count > 0 && (
                     <span className="text-red-500 font-medium">{s.out_of_stock_count} OOS</span>
                   )}
-                  {relRate !== null && (
-                    <span className={`font-mono font-medium ${relRate > 50 ? "text-red-600" : relRate > 20 ? "text-amber-600" : "text-emerald-600"}`}>
-                      30d: {relRate.toFixed(1)}% OOS
-                    </span>
-                  )}
                 </div>
               </CardContent>
             </Card>
           )
         })}
       </section>
-
-
 
       <Card className="border-border/50 shadow-sm">
         <CardHeader className="flex flex-row items-center justify-between gap-4">
@@ -424,41 +324,25 @@ export default function DistributionCoveragePage() {
                       Cov.
                       <ArrowUpDown className={`size-3 transition-opacity ${sortBy === "coverage" ? "opacity-100 text-indigo-500" : "opacity-30"}`} />
                     </span>
-                    {sortBy === "coverage" && (
-                      <span className="ml-0.5 text-[10px] text-indigo-500">{sortDir === "desc" ? "▼" : "▲"}</span>
-                    )}
                   </th>
-                  {orderedSellers.map((s) => {
-                    const isYou = s.id === self_seller_id
-                    const rel2 = isGold ? reliabilityMap.get(s.id) : undefined
-                    const relRate2 = rel2 ? Number(rel2.oos_rate_30d ?? 0) : null
-                    return (
-                      <th key={s.id} className={`px-2 py-2 font-medium text-center min-w-[90px] ${isYou ? "bg-indigo-50/80 dark:bg-indigo-950/20" : ""}`} title={s.name}>
-                        <div className="flex flex-col items-center gap-1">
-                          <Store className={`size-3 ${isYou ? "text-indigo-500" : ""}`} />
-                          <span className={`truncate max-w-[80px] block ${isYou ? "text-indigo-700 font-semibold dark:text-indigo-300" : ""}`}>{s.name}</span>
-                          <Badge variant={isYou ? "default" : "outline"} className={`text-[9px] font-normal ${isYou ? "bg-indigo-100 text-indigo-700 hover:bg-indigo-200" : ""}`}>
-                            {s.in_stock_count}/{s.products_carried}
-                          </Badge>
-                          {relRate2 !== null && (
-                            <div className="mt-0.5 flex items-center gap-1">
-                              <div className="h-1 w-8 overflow-hidden rounded-full bg-muted">
-                                <div className={`h-full rounded-full ${relRate2 <= 10 ? "bg-emerald-500" : relRate2 <= 30 ? "bg-amber-500" : "bg-red-500"}`} style={{ width: `${Math.min(100, relRate2)}%` }} />
-                              </div>
-                              <span className={`text-[8px] font-mono font-bold ${relRate2 <= 10 ? "text-emerald-600" : relRate2 <= 30 ? "text-amber-600" : "text-red-600"}`}>{relRate2.toFixed(0)}%</span>
-                            </div>
-                          )}
-                        </div>
-                      </th>
-                    )
-                  })}
+                  {orderedSellers.map((s) => (
+                    <th key={s.id} className={`px-2 py-2 font-medium text-center min-w-[90px] ${s.id === selfSellerId ? "bg-indigo-50/80 dark:bg-indigo-950/20" : ""}`} title={s.name}>
+                      <div className="flex flex-col items-center gap-1">
+                        <Store className={`size-3 ${s.id === selfSellerId ? "text-indigo-500" : ""}`} />
+                        <span className={`truncate max-w-[80px] block ${s.id === selfSellerId ? "text-indigo-700 font-semibold dark:text-indigo-300" : ""}`}>{s.name}</span>
+                        <Badge variant={s.id === selfSellerId ? "default" : "outline"} className={`text-[9px] font-normal ${s.id === selfSellerId ? "bg-indigo-100 text-indigo-700 hover:bg-indigo-200" : ""}`}>
+                          {s.in_stock_count}/{s.products_carried}
+                        </Badge>
+                      </div>
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/50">
                 {pageProducts.map((p) => {
                   const pct = p.coverage_rate
                   const pctColor = pct >= 80 ? "text-emerald-600" : pct >= 50 ? "text-amber-600" : "text-red-600"
-                  const isMissingYou = self_seller_id != null && !matrixMap.has(`${p.id}-${self_seller_id}`)
+                  const isMissingYou = selfSellerId != null && !matrixMap.has(`${p.id}-${selfSellerId}`)
                   return (
                     <tr key={p.id} className={`transition-colors hover:bg-muted/20 ${isMissingYou ? "bg-amber-50/30 dark:bg-amber-950/5" : ""}`}>
                       <td className="sticky left-0 bg-background px-3 py-2">
@@ -480,11 +364,10 @@ export default function DistributionCoveragePage() {
                         {pct}%
                       </td>
                       {orderedSellers.map((s) => {
-                        const isYou = s.id === self_seller_id
                         const cell = matrixMap.get(`${p.id}-${s.id}`)
                         if (!cell) {
                           return (
-                            <td key={s.id} className={`px-2 py-2 text-center ${isYou ? "bg-indigo-50/50 dark:bg-indigo-950/10" : ""}`}>
+                            <td key={s.id} className={`px-2 py-2 text-center ${s.id === selfSellerId ? "bg-indigo-50/50 dark:bg-indigo-950/10" : ""}`}>
                               <span className="inline-flex size-6 items-center justify-center rounded-full bg-muted/30">
                                 <span className="text-[9px] text-muted-foreground/50">&mdash;</span>
                               </span>
@@ -492,9 +375,9 @@ export default function DistributionCoveragePage() {
                           )
                         }
                         return (
-                          <td key={s.id} className={`px-2 py-2 text-center ${isYou ? "bg-indigo-50/50 dark:bg-indigo-950/10" : ""}`}>
+                          <td key={s.id} className={`px-2 py-2 text-center ${s.id === selfSellerId ? "bg-indigo-50/50 dark:bg-indigo-950/10" : ""}`}>
                             {cell.in_stock ? (
-                              <span className="inline-flex items-center justify-center" title={`${cell.price?.toFixed(3)} DT`}>
+                              <span className="inline-flex items-center justify-center">
                                 <CheckCircle2 className="size-4 text-emerald-500" />
                               </span>
                             ) : (

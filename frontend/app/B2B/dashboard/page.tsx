@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import {
   Bar,
@@ -24,9 +24,7 @@ import {
   CheckCircle2,
   Clock,
   DollarSign,
-  Download,
   Eye,
-  FileText,
   Lightbulb,
   Package,
   RefreshCw,
@@ -97,6 +95,22 @@ export default function B2BOverviewPage() {
     fetchTrend()
   }, [fetchTrend])
 
+  const refreshAll = useCallback(async () => {
+    await refresh()
+    fetchTrend()
+  }, [refresh, fetchTrend])
+
+  useEffect(() => {
+    refreshAll()
+    const interval = setInterval(refreshAll, 60000)
+    const onVisibility = () => { if (document.visibilityState === "visible") refreshAll() }
+    document.addEventListener("visibilitychange", onVisibility)
+    return () => {
+      clearInterval(interval)
+      document.removeEventListener("visibilitychange", onVisibility)
+    }
+  }, [refreshAll])
+
   const handleDismissAlert = useCallback(async (notificationId: number) => {
     try {
       setDismissError(null)
@@ -126,12 +140,12 @@ export default function B2BOverviewPage() {
   const outOfStock = Number(metrics?.out_of_stock_count ?? 0)
   const notificationsCount = Number(metrics?.notifications_count ?? 0)
 
-  const stockData = [
+  const stockData = useMemo(() => [
     { name: "In Stock", value: inStock, color: "#22c55e" },
     { name: "Out of Stock", value: outOfStock, color: "#ef4444" },
-  ].filter((d) => d.value > 0)
+  ].filter((d) => d.value > 0), [inStock, outOfStock])
 
-  const chartData =
+  const chartData = useMemo(() =>
     mode === "market"
       ? ((metrics?.share_of_shelf ?? []) as Array<Record<string, unknown>>).slice(0, 6).map((item) => ({
           name: String(item.category ?? "Category"),
@@ -140,35 +154,12 @@ export default function B2BOverviewPage() {
       : ((metrics?.competitor_pricing ?? []) as Array<Record<string, unknown>>).slice(0, 6).map((item) => ({
           name: String(item.product_name ?? item.product_id ?? "Product").slice(0, 16),
           value: Math.abs(Number(item.gap_to_cheapest ?? 0)),
-        }))
+        })),
+    [mode, metrics?.share_of_shelf, metrics?.competitor_pricing])
 
-  const notifications = (summary?.notifications ?? []) as Array<Record<string, unknown>>
-  const opportunities = (metrics?.opportunities ?? []) as Array<Record<string, unknown>>
-  const demandIntel = metrics?.demand_intelligence as Record<string, any> | undefined
-  const demandQueries = (demandIntel?.top_queries ?? {}) as Record<string, number>
-  const zeroResults = (demandIntel?.zero_result_queries ?? {}) as Record<string, number>
-  const stockMonitoring = (metrics?.stock_monitoring ?? []) as Array<Record<string, unknown>>
-
-  const handleExportDashboard = useCallback(() => {
-    const lines = [
-      "Metric,Value",
-      `Products,${productsCount}`,
-      `New This Week,${newProductsThisWeek}`,
-      `Listings,${listingsCount}`,
-      `Avg Trust Score,${avgTrust ?? "-"}`,
-      `In Stock,${inStock}`,
-      `Out of Stock,${outOfStock}`,
-      `Active Alerts,${notificationsCount}`,
-      `Opportunities,${opportunities.length}`,
-    ]
-    const blob = new Blob([lines.join("\n")], { type: "text/csv" })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = `dashboard-${new Date().toISOString().slice(0, 10)}.csv`
-    a.click()
-    URL.revokeObjectURL(url)
-  }, [productsCount, newProductsThisWeek, listingsCount, avgTrust, inStock, outOfStock, notificationsCount, opportunities])
+  const notifications = useMemo(() => (summary?.notifications ?? []) as Array<Record<string, unknown>>, [summary?.notifications])
+  const opportunities = useMemo(() => (metrics?.opportunities ?? []) as Array<Record<string, unknown>>, [metrics?.opportunities])
+  const stockMonitoring = useMemo(() => (metrics?.stock_monitoring ?? []) as Array<Record<string, unknown>>, [metrics?.stock_monitoring])
 
   if (loading && !summary) {
     return (
@@ -187,7 +178,7 @@ export default function B2BOverviewPage() {
       <B2BSubscriptionBanner />
 
       {/* Hero header with at-a-glance metrics */}
-      <section className="rounded-2xl border border-border/50 bg-gradient-to-br from-indigo-950/95 via-slate-900/95 to-violet-950/95 p-6 text-white shadow-sm dark:from-indigo-950 dark:via-slate-950 dark:to-violet-950">
+      <section className="sticky top-0 z-10 rounded-2xl border border-border/50 bg-gradient-to-br from-indigo-950/95 via-slate-900/95 to-violet-950/95 p-6 text-white shadow-sm dark:from-indigo-950 dark:via-slate-950 dark:to-violet-950">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2">
@@ -217,13 +208,9 @@ export default function B2BOverviewPage() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="secondary" size="sm" onClick={() => refresh()} className="h-8 gap-1.5 bg-white/10 text-xs text-white hover:bg-white/20">
+            <Button variant="secondary" size="sm" onClick={refreshAll} className="h-8 gap-1.5 bg-white/10 text-xs text-white hover:bg-white/20">
               <RefreshCw className="size-3.5" />
               Refresh
-            </Button>
-            <Button variant="secondary" size="sm" onClick={handleExportDashboard} className="h-8 gap-1.5 bg-white/10 text-xs text-white hover:bg-white/20">
-              <Download className="size-3.5" />
-              Export
             </Button>
           </div>
         </div>
@@ -342,12 +329,12 @@ export default function B2BOverviewPage() {
           <CardContent className="h-72">
             {chartData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData}>
+                <BarChart data={chartData} barCategoryGap="20%">
                   <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-border/30" />
                   <XAxis dataKey="name" tickLine={false} axisLine={false} fontSize={11} className="fill-muted-foreground" />
-                  <YAxis tickLine={false} axisLine={false} fontSize={11} className="fill-muted-foreground" />
-                  <Tooltip contentStyle={{ borderRadius: "12px", border: "1px solid hsl(var(--border))", fontSize: "12px" }} />
-                  <Bar dataKey="value" radius={[8, 8, 0, 0]}>
+                  <YAxis domain={[0, 100]} tickLine={false} axisLine={false} fontSize={11} className="fill-muted-foreground" unit="%" />
+                  <Tooltip contentStyle={{ borderRadius: "12px", border: "1px solid hsl(var(--border))", fontSize: "12px" }} formatter={(value: number) => [`${value.toFixed(1)}%`, "Share of Shelf"]} />
+                  <Bar dataKey="value" radius={[8, 8, 0, 0]} maxBarSize={48}>
                     {chartData.map((_, index) => (
                       <Cell key={index} fill={CHART_COLORS[index % CHART_COLORS.length]} />
                     ))}
@@ -366,21 +353,41 @@ export default function B2BOverviewPage() {
             <CardHeader className="pb-2">
               <CardTitle className="text-sm">Stock Overview</CardTitle>
             </CardHeader>
-            <CardContent className="h-40">
-              {stockData.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie data={stockData} cx="50%" cy="50%" innerRadius={40} outerRadius={60} dataKey="value" paddingAngle={4}>
-                      {stockData.map((entry, i) => (
-                        <Cell key={i} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip contentStyle={{ borderRadius: "12px", fontSize: "12px" }} />
-                  </PieChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="flex h-full items-center justify-center text-sm text-muted-foreground">No stock data</div>
-              )}
+            <CardContent>
+              <div className="flex items-center gap-4">
+                <div className="h-28 w-28 shrink-0">
+                  {stockData.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie data={stockData} cx="50%" cy="50%" innerRadius={32} outerRadius={48} dataKey="value" paddingAngle={4}>
+                          {stockData.map((entry, i) => (
+                            <Cell key={i} fill={entry.color} />
+                          ))}
+                        </Pie>
+                      </PieChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="flex h-full items-center justify-center text-xs text-muted-foreground">No data</div>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className="inline-block size-2.5 rounded-full bg-emerald-500" />
+                    <span className="text-xs text-muted-foreground">In Stock</span>
+                    <span className="ml-auto text-sm font-bold">{inStock}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="inline-block size-2.5 rounded-full bg-red-500" />
+                    <span className="text-xs text-muted-foreground">Out of Stock</span>
+                    <span className="ml-auto text-sm font-bold text-red-500">{outOfStock}</span>
+                  </div>
+                  <div className="pt-1 text-[10px] text-muted-foreground">
+                    {inStock + outOfStock > 0
+                      ? `${Math.round((inStock / (inStock + outOfStock)) * 100)}% in stock`
+                      : "No listings tracked"}
+                  </div>
+                </div>
+              </div>
             </CardContent>
           </Card>
 
@@ -454,9 +461,50 @@ export default function B2BOverviewPage() {
         </Card>
       </section>
       )}
-      {/* Insights Row: Opportunities for Vendor / Demand for Market */}
-      <section className="grid gap-6 lg:grid-cols-2">
-        {mode === "vendor" ? (
+      {mode === "market" && (
+        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <Card className="border-border/50 shadow-sm bg-gradient-to-br from-white to-indigo-50/30 dark:from-slate-900 dark:to-indigo-950/10">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-xs font-medium text-muted-foreground">Total Products</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">{fmt(productsCount)}</p>
+              {newProductsThisWeek > 0 && <p className="text-[10px] text-emerald-600 mt-1">+{newProductsThisWeek} this week</p>}
+            </CardContent>
+          </Card>
+          <Card className="border-border/50 shadow-sm bg-gradient-to-br from-white to-emerald-50/30 dark:from-slate-900 dark:to-emerald-950/10">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-xs font-medium text-muted-foreground">In Stock Rate</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
+                {inStock + outOfStock > 0 ? Math.round((inStock / (inStock + outOfStock)) * 100) : 0}%
+              </p>
+              <p className="text-[10px] text-muted-foreground mt-1">{inStock} of {inStock + outOfStock} listings</p>
+            </CardContent>
+          </Card>
+          <Card className="border-border/50 shadow-sm bg-gradient-to-br from-white to-amber-50/30 dark:from-slate-900 dark:to-amber-950/10">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-xs font-medium text-muted-foreground">Avg Trust Score</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">{fmt(avgTrust)}</p>
+              <p className="text-[10px] text-muted-foreground mt-1">out of 100</p>
+            </CardContent>
+          </Card>
+          <Card className="border-border/50 shadow-sm bg-gradient-to-br from-white to-violet-50/30 dark:from-slate-900 dark:to-violet-950/10">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-xs font-medium text-muted-foreground">Active Alerts</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-2xl font-bold text-violet-600 dark:text-violet-400">{notificationsCount}</p>
+              <p className="text-[10px] text-muted-foreground mt-1">{notifications.filter((n) => !n.is_read).length} unread</p>
+            </CardContent>
+          </Card>
+        </section>
+      )}
+      {mode === "vendor" && (
+        <section className="grid gap-6 lg:grid-cols-2">
           <Card className="border-border/50 bg-gradient-to-br from-white to-amber-50/30 shadow-sm dark:from-slate-900 dark:to-amber-950/10">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
@@ -512,94 +560,8 @@ export default function B2BOverviewPage() {
               )}
             </CardContent>
           </Card>
-        ) : (
-          <Card className="border-border/50 bg-gradient-to-br from-white to-indigo-50/30 shadow-sm dark:from-slate-900 dark:to-indigo-950/10">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400">
-                <Zap className="size-5" />
-                Demand Intelligence
-              </CardTitle>
-              <CardDescription>Top search trends and unfulfilled demand in your categories.</CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-3">
-                <h4 className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Trending Queries</h4>
-                {Object.entries(demandQueries).slice(0, 5).map(([query, count]) => (
-                  <div key={query} className="flex items-center justify-between rounded-lg bg-muted/30 px-3 py-2">
-                    <span className="text-xs font-medium capitalize">{query}</span>
-                    <Badge variant="secondary" className="text-[10px]">{count} hits</Badge>
-                  </div>
-                ))}
-                {Object.keys(demandQueries).length === 0 && <p className="py-4 text-center text-xs text-muted-foreground">No trends yet</p>}
-              </div>
-              <div className="space-y-3">
-                <h4 className="text-[10px] font-bold uppercase tracking-wider text-red-500/70">Unfulfilled Demand</h4>
-                {Object.entries(zeroResults).slice(0, 5).map(([query, count]) => (
-                  <div key={query} className="flex items-center justify-between rounded-lg bg-red-50/50 px-3 py-2 dark:bg-red-950/10">
-                    <span className="text-xs font-medium capitalize text-red-700 dark:text-red-400">{query}</span>
-                    <Badge variant="outline" className="border-red-200 text-[10px] text-red-600 dark:border-red-900">{count} missed</Badge>
-                  </div>
-                ))}
-                {Object.keys(zeroResults).length === 0 && <p className="py-4 text-center text-xs text-muted-foreground">No missed opportunities</p>}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Status Breakdown Section */}
-        <Card className="border-border/50 shadow-sm">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Shield className="size-5 text-emerald-500" />
-              Quick Workspace Stats
-            </CardTitle>
-            <CardDescription>Real-time health of your product portfolio.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-             <div className="grid grid-cols-2 gap-4">
-                <div className="rounded-2xl border border-border/50 bg-muted/20 p-4">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Stock Stability</p>
-                  <p className="mt-1 text-2xl font-bold">{inStock > 0 ? Math.round((inStock / (inStock + outOfStock)) * 100) : 0}%</p>
-                  <p className="text-[10px] text-muted-foreground">Availability Index</p>
-                </div>
-                <div className="rounded-2xl border border-border/50 bg-muted/20 p-4">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Market Trust</p>
-                  <p className="mt-1 text-2xl font-bold">{fmt(avgTrust)}</p>
-                  <p className="text-[10px] text-muted-foreground">Avg. Product Score</p>
-                </div>
-                {(() => {
-                  const unreadCompetitive = notifications.filter((n) => !n.is_read && competitiveTypes.has(String(n.type ?? ""))).length
-                  if (unreadCompetitive === 0) return null
-                  return (
-                    <div className="col-span-2 rounded-2xl border border-red-200/50 bg-gradient-to-r from-red-50/80 to-amber-50/80 p-4 dark:border-red-900/30 dark:from-red-950/20 dark:to-amber-950/20">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-[10px] font-bold uppercase tracking-wider text-red-600 dark:text-red-400">Unread Competitive Events</p>
-                          <p className="mt-1 text-2xl font-bold text-red-600 dark:text-red-400">{unreadCompetitive}</p>
-                          <p className="text-[10px] text-muted-foreground">Events requiring your attention</p>
-                        </div>
-                        <Button variant="outline" size="sm" asChild className="h-8 text-xs border-red-200 hover:bg-red-50 dark:border-red-900 dark:hover:bg-red-950/30">
-                          <Link href="/B2B/dashboard/alerts">
-                            Review <ArrowRight className="ml-1 size-3" />
-                          </Link>
-                        </Button>
-                      </div>
-                    </div>
-                  )
-                })()}
-             </div>
-             <div className="rounded-2xl border border-border/50 bg-indigo-50/50 p-4 dark:bg-indigo-950/20">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-semibold">Active Monitoring</p>
-                    <p className="text-xs text-muted-foreground">Your listings are being tracked across 12 marketplaces.</p>
-                  </div>
-                  <CheckCircle2 className="size-6 text-indigo-500" />
-                </div>
-             </div>
-          </CardContent>
-        </Card>
-      </section>
+        </section>
+      )}
 
       {/* Smart Alerts */}
       {dismissError && (
@@ -868,99 +830,6 @@ export default function B2BOverviewPage() {
         </Card>
       )}
 
-      {/* Quick Action Cards — context-aware */}
-      <section className={`grid gap-4 sm:grid-cols-2 ${mode === "market" ? "xl:grid-cols-4 2xl:grid-cols-5" : "xl:grid-cols-4"}`}>
-        {(() => {
-          const undercutCount = notifications.filter((n) => String(n.type ?? "") === "COMPETITOR_UNDERCUT").length
-          const stockAlertCount = notifications.filter((n) => String(n.type ?? "") === "STOCK_SHORTAGE").length
-          const cards = [
-            {
-              title: "Reports",
-              desc: undercutCount > 0 ? `${undercutCount} products need pricing review` : "Generate and download business reports",
-              href: "/B2B/dashboard/reports",
-              icon: FileText,
-              color: "text-violet-500",
-              bgHover: "hover:bg-violet-50/80 dark:hover:bg-violet-950/30",
-            },
-            {
-              title: mode === "market" ? "Share of Shelf" : "Competitor Pricing",
-              desc: mode === "market" ? "Category shelf analysis" : "Price comparison analysis",
-              href: mode === "market" ? "/B2B/dashboard/share-of-shelf" : "/B2B/dashboard/competitor-pricing",
-              icon: TrendingUp,
-              color: "text-indigo-500",
-              bgHover: "hover:bg-indigo-50/80 dark:hover:bg-indigo-950/30",
-            },
-            {
-              title: mode === "market" ? "Stock & Distribution" : "Stock Monitoring",
-              desc: stockAlertCount > 0 ? `${stockAlertCount} stock alerts to review` : "Coverage, OOS rates, and stock-out tracking",
-              href: mode === "market" ? "/B2B/dashboard/distribution-coverage" : "/B2B/dashboard/stock-monitoring",
-              icon: AlertTriangle,
-              color: "text-amber-500",
-              bgHover: "hover:bg-amber-50/80 dark:hover:bg-amber-950/30",
-            },
-            {
-              title: "Watchlist",
-              desc: "Follow and monitor competitor products",
-              href: "/B2B/dashboard/watchlist",
-              icon: ShoppingCart,
-              color: "text-emerald-500",
-              bgHover: "hover:bg-emerald-50/80 dark:hover:bg-emerald-950/30",
-            },
-            ...(mode === "market"
-              ? [
-                  {
-                    title: "Brand Intelligence",
-                    desc: "Explore brands, products, and seller distribution",
-                    href: "/B2B/dashboard/brand-intelligence",
-                    icon: Eye,
-                    color: "text-blue-500",
-                    bgHover: "hover:bg-blue-50/80 dark:hover:bg-blue-950/30",
-                  },
-                  {
-                    title: "Product Comparison",
-                    desc: "Compare 2-3 products head-to-head",
-                    href: "/B2B/dashboard/product-compare",
-                    icon: BarChart3,
-                    color: "text-pink-500",
-                    bgHover: "hover:bg-pink-50/80 dark:hover:bg-pink-950/30",
-                  },
-                  {
-                    title: "Price Competitiveness",
-                    desc: "How your prices compare to market averages",
-                    href: "/B2B/dashboard/price-competitiveness",
-                    icon: TrendingUp,
-                    color: "text-cyan-500",
-                    bgHover: "hover:bg-cyan-50/80 dark:hover:bg-cyan-950/30",
-                  },
-                  {
-                    title: "Price Dispersion",
-                    desc: "Price spread analysis across sellers",
-                    href: "/B2B/dashboard/price-dispersion",
-                    icon: TrendingUp,
-                    color: "text-violet-500",
-                    bgHover: "hover:bg-violet-50/80 dark:hover:bg-violet-950/30",
-                  },
-                ]
-              : []),
-          ]
-          return cards.map((action) => (
-            <Card key={action.title} className={`border-border/50 shadow-sm ${action.bgHover}`}>
-              <CardContent className="flex flex-col items-start p-6">
-                <div className="mb-4 rounded-2xl bg-background/80 p-3.5 shadow-sm ring-1 ring-border/50 backdrop-blur-sm">
-                  <action.icon className={`size-6 ${action.color}`} />
-                </div>
-                <h3 className="font-bold tracking-tight">{action.title}</h3>
-                <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">{action.desc}</p>
-                <Button variant="link" asChild className="mt-4 h-auto p-0 text-xs font-semibold">
-                  <Link href={action.href}>
-                    Explore <ArrowRight className="ml-1.5 size-3.5" />
-                  </Link>
-                </Button>
-              </CardContent>
-            </Card>
-          ))
-        })()}
-      </section>
     </div>
   )
 }

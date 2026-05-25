@@ -9,8 +9,8 @@ use Doctrine\ORM\EntityManagerInterface;
 
 /**
  * Enforces B2B ads request quotas based on subscription plan.
- * Gold plan: 15 ads per week
- * Silver plan: 2 ads per week
+ * Gold plan: 15 ads per week, 50 per month
+ * Silver plan: 2 ads per week, 20 per month
  */
 final class B2BAdsQuotaService
 {
@@ -25,40 +25,52 @@ final class B2BAdsQuotaService
      */
     public function canCreateAdsRequest(B2BCompany|B2BMarket $user): array
     {
-        $isGold = $this->planGatingService->canAccessFeature($user, B2BPlanGatingService::FEATURE_STOCK_INTELLIGENCE);
-        $limit = $isGold ? 15 : 2;
+        $isGold = $this->planGatingService->isGoldPlan($user);
+        $weeklyLimit = $isGold ? 15 : 2;
+        $monthlyLimit = $isGold ? 50 : 20;
 
-        // Get ads created in the past 7 days
         $ownerId = $user->getId();
         $ownerType = $user instanceof B2BCompany ? 'COMPANY' : 'MARKET';
+        $conn = $this->entityManager->getConnection();
 
-        $sql = 'SELECT COUNT(*) FROM b2b_ads_request WHERE owner_type = :owner_type AND created_at >= NOW() - INTERVAL \'7 days\'';
-        $params = ['owner_type' => $ownerType];
+        $whereClause = $ownerType === 'COMPANY' ? 'AND company_id = :owner_id' : 'AND market_id = :owner_id';
+        $params = ['owner_type' => $ownerType, 'owner_id' => $ownerId];
 
-        if ($ownerType === 'COMPANY') {
-            $sql .= ' AND company_id = :owner_id';
-            $params['owner_id'] = $ownerId;
-        } elseif ($ownerType === 'MARKET') {
-            $sql .= ' AND market_id = :owner_id';
-            $params['owner_id'] = $ownerId;
+        $weeklyCount = (int) $conn->fetchOne(
+            "SELECT COUNT(*) FROM b2b_ads_request WHERE owner_type = :owner_type $whereClause AND created_at >= NOW() - INTERVAL '7 days'",
+            $params
+        );
+
+        $monthlyCount = (int) $conn->fetchOne(
+            "SELECT COUNT(*) FROM b2b_ads_request WHERE owner_type = :owner_type $whereClause AND DATE_TRUNC('month', created_at) = DATE_TRUNC('month', NOW())",
+            $params
+        );
+
+        $weeklyRemaining = max(0, $weeklyLimit - $weeklyCount);
+        $monthlyRemaining = max(0, $monthlyLimit - $monthlyCount);
+        $remaining = min($weeklyRemaining, $monthlyRemaining);
+
+        $messages = [];
+        if ($remaining > 0) {
+            if ($weeklyRemaining < $monthlyRemaining) {
+                $messages[] = sprintf('You have %d ads request(s) remaining this week.', $weeklyRemaining);
+            } else {
+                $messages[] = sprintf('You have %d ads request(s) remaining this month.', $monthlyRemaining);
+            }
+        } else {
+            if ($weeklyRemaining <= 0) {
+                $messages[] = sprintf('You have reached your limit of %d ads requests per week.', $weeklyLimit);
+            }
+            if ($monthlyRemaining <= 0) {
+                $messages[] = sprintf('You have reached your limit of %d ads requests per month.', $monthlyLimit);
+            }
         }
-
-        $count = $this->entityManager->getConnection()->fetchOne($sql, $params);
-
-        if (!is_numeric($count) || $count === null) {
-            $count = 0;
-        }
-
-        $count = (int) $count;
-        $remaining = max(0, $limit - $count);
 
         return [
             'allowed' => $remaining > 0,
             'remaining' => $remaining,
-            'limit' => $limit,
-            'message' => $remaining > 0
-                ? sprintf('You have %d ads request(s) remaining this week.', $remaining)
-                : sprintf('You have reached your limit of %d ads requests per week.', $limit),
+            'limit' => $monthlyLimit,
+            'message' => implode(' ', $messages),
         ];
     }
 

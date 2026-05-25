@@ -53,8 +53,7 @@ export default function B2CDashboardPage() {
 
   async function logout() {
     await fetch("/api/b2c/auth/logout", { method: "POST" })
-    router.push("/")
-    router.refresh()
+    window.location.href = "/"
   }
 
   if (loading) {

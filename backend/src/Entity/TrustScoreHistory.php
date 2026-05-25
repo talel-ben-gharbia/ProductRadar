@@ -8,6 +8,8 @@ use Doctrine\ORM\Mapping as ORM;
 #[ORM\Table(name: 'trust_score_history')]
 #[ORM\Index(name: 'idx_tsh_listing', columns: ['listing_id'])]
 #[ORM\Index(name: 'idx_tsh_created', columns: ['created_at'])]
+#[ORM\Index(name: 'idx_tsh_listing_created', columns: ['listing_id', 'created_at'])]
+#[ORM\Index(name: 'idx_tsh_listing_id_score', columns: ['listing_id', 'id', 'score'])]
 class TrustScoreHistory
 {
     #[ORM\Id]

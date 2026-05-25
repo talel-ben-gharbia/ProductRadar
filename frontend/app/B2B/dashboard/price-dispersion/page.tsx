@@ -5,6 +5,7 @@ import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis
 import { ChevronLeft, ChevronRight, LineChart as LineChartIcon } from "lucide-react"
 
 import { useB2B } from "@/components/B2B/b2b-context"
+import B2BPlanGate from "@/components/B2B/b2b-plan-gate"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -19,7 +20,7 @@ type DispersionItem = {
 const PER_PAGE = 20
 
 export default function PriceDispersionPage() {
-  const { summary, loading } = useB2B()
+  const { summary, loading, isGold } = useB2B()
   const metrics = summary?.metrics as Record<string, unknown> | undefined
   const data = ((metrics?.price_dispersion ?? []) as DispersionItem[])
 
@@ -54,6 +55,8 @@ export default function PriceDispersionPage() {
       </div>
     )
   }
+
+  if (!isGold) return <B2BPlanGate featureName="Price Dispersion" />
 
   return (
     <div className="space-y-6">

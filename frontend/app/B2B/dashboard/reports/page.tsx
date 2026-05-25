@@ -73,9 +73,7 @@ export default function ReportsPage() {
 
   const statusColor = (s?: string): string => {
     switch (s?.toUpperCase()) {
-      case "GENERATED": case "COMPLETED": return "bg-emerald-100 text-emerald-700"
-      case "PENDING": case "PROCESSING": return "bg-amber-100 text-amber-700"
-      case "FAILED": return "bg-red-100 text-red-700"
+      case "GENERATED": return "bg-emerald-100 text-emerald-700"
       default: return "bg-slate-100 text-slate-700"
     }
   }

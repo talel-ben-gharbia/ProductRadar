@@ -6,6 +6,8 @@ use App\Repository\PriceHistoryRepository;
 use Doctrine\ORM\Mapping as ORM;
 
 #[ORM\Entity(repositoryClass: PriceHistoryRepository::class)]
+#[ORM\Index(name: 'idx_price_history_listing_recorded', columns: ['product_listing_id', 'recorded_at'])]
+#[ORM\Index(name: 'idx_price_history_recorded_seller', columns: ['recorded_at', 'seller_id'])]
 class PriceHistory
 {
     #[ORM\Id]
@@ -27,6 +29,10 @@ class PriceHistory
 
     #[ORM\ManyToOne(inversedBy: 'priceHistories')]
     private ?ProductListing $productListing = null;
+
+    #[ORM\ManyToOne]
+    #[ORM\JoinColumn(nullable: true, onDelete: 'SET NULL')]
+    private ?Seller $seller = null;
 
     public function getId(): ?int
     {
@@ -89,6 +95,18 @@ class PriceHistory
     public function setProductListing(?ProductListing $productListing): static
     {
         $this->productListing = $productListing;
+
+        return $this;
+    }
+
+    public function getSeller(): ?Seller
+    {
+        return $this->seller;
+    }
+
+    public function setSeller(?Seller $seller): static
+    {
+        $this->seller = $seller;
 
         return $this;
     }

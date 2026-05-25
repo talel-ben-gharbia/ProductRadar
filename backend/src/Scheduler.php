@@ -31,7 +31,7 @@ use Symfony\Component\Console\Style\SymfonyStyle;
  */
 #[AsCommand(
     name: 'app:scheduler:run',
-    description: 'Run all periodic maintenance tasks (trust score incremental + subscription expiry + event outbox).',
+    description: 'Run all periodic maintenance tasks (B2B alerts + trust score incremental + subscription expiry + event outbox).',
 )]
 final class Scheduler extends Command
 {
@@ -48,6 +48,7 @@ final class Scheduler extends Command
         }
 
         $tasks = [
+            'app:b2b:detect-alerts'       => [],
             'app:trust-score:recalculate' => [],
             'app:b2b:check-expiry'        => [],
             'app:events:consume'          => ['--one-shot' => true],

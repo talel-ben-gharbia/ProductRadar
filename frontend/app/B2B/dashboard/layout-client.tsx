@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation"
 import { B2BProvider, type B2BSummary } from "@/components/B2B/b2b-context"
 import B2BNavbar from "@/components/B2B/b2b-navbar"
 import B2BSidebar from "@/components/B2B/b2b-sidebar"
-import B2BAIAssistant from "@/components/B2B/b2b-ai-assistant"
 import { SidebarProvider } from "@/components/ui/sidebar"
 
 function B2BLoginRedirect() {
@@ -49,7 +48,6 @@ export default function B2BDashboardLayoutClient({
           </div>
         </div>
       </SidebarProvider>
-      <B2BAIAssistant />
     </B2BProvider>
   )
 }

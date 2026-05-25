@@ -8,7 +8,6 @@ use App\Entity\B2BAdsCampaign;
 use App\Entity\B2BCompany;
 use App\Entity\B2BMarket;
 use App\Entity\B2BReport;
-use App\Entity\B2BScrapingRequest;
 use App\Entity\Subscription;
 use App\Entity\TrustScoreWeight;
 use App\Service\B2BNotificationService;
@@ -208,70 +207,6 @@ final class B2BAdminController extends AbstractController
         return $this->json(['status' => 'REJECTED']);
     }
 
-    #[Route('/scraping-requests/{requestId}/approve', name: 'b2b_admin_approve_scraping_request', methods: ['POST'])]
-    public function approveScrapingRequest(
-        int $requestId,
-        Request $request,
-        AdminApiGuard $adminApiGuard,
-        EntityManagerInterface $entityManager,
-        B2BNotificationService $b2bNotificationService,
-    ): JsonResponse {
-        if ($errorResponse = $adminApiGuard->assertAuthorized($request)) {
-            return $errorResponse;
-        }
-
-        $scrapingRequest = $entityManager->find(B2BScrapingRequest::class, $requestId);
-        if (!$scrapingRequest instanceof B2BScrapingRequest) {
-            return $this->json(['error' => 'Scraping request not found.'], 404);
-        }
-
-        $scrapingRequest->setStatus('APPROVED');
-        $scrapingRequest->setUpdatedAt(new \DateTimeImmutable());
-
-        $entityManager->flush();
-
-        $this->invalidateCache($this->cache);
-        $b2bNotificationService->notifyScrapingRequestApproved($scrapingRequest);
-
-        return $this->json([
-            'id' => $scrapingRequest->getId(),
-            'status' => 'APPROVED',
-        ]);
-    }
-
-    #[Route('/scraping-requests/{requestId}/reject', name: 'b2b_admin_reject_scraping_request', methods: ['POST'])]
-    public function rejectScrapingRequest(
-        int $requestId,
-        Request $request,
-        AdminApiGuard $adminApiGuard,
-        EntityManagerInterface $entityManager,
-        B2BNotificationService $b2bNotificationService,
-    ): JsonResponse {
-        if ($errorResponse = $adminApiGuard->assertAuthorized($request)) {
-            return $errorResponse;
-        }
-
-        $scrapingRequest = $entityManager->find(B2BScrapingRequest::class, $requestId);
-        if (!$scrapingRequest instanceof B2BScrapingRequest) {
-            return $this->json(['error' => 'Scraping request not found.'], 404);
-        }
-
-        $body = json_decode((string) $request->getContent(), true);
-        $reason = is_array($body) ? ($body['reason'] ?? '') : '';
-
-        $scrapingRequest->setStatus('REJECTED');
-        $scrapingRequest->setUpdatedAt(new \DateTimeImmutable());
-        if (!empty($reason)) {
-            $scrapingRequest->setNotes($reason);
-        }
-
-        $entityManager->flush();
-
-        $this->invalidateCache($this->cache);
-        $b2bNotificationService->notifyScrapingRequestRejected($scrapingRequest, $reason);
-
-        return $this->json(['status' => 'REJECTED']);
-    }
 
     #[Route('/subscriptions/{subscriptionId}/approve-renewal', name: 'b2b_admin_approve_renewal', methods: ['POST'])]
     public function approveRenewal(
@@ -597,14 +532,13 @@ final class B2BAdminController extends AbstractController
 
             $items = $qb->getQuery()->getResult();
 
-            $scrapingRepo = $entityManager->getRepository(B2BScrapingRequest::class);
             $reportRepo = $entityManager->getRepository(B2BReport::class);
             $listingRepo = $entityManager->getRepository(\App\Entity\ProductListing::class);
 
             $total = $entityManager->createQueryBuilder()->select('COUNT(c.id)')->from(B2BCompany::class, 'c')->getQuery()->getSingleScalarResult();
 
             return [
-                'items' => array_map(function (B2BCompany $c) use ($scrapingRepo, $reportRepo, $listingRepo) {
+                'items' => array_map(function (B2BCompany $c) use ($reportRepo, $listingRepo) {
                     $listingsCount = 0;
                     if ($c->getSeller()) {
                         $listingsCount = (int) $listingRepo->createQueryBuilder('pl')
@@ -623,7 +557,6 @@ final class B2BAdminController extends AbstractController
                         'is_verified' => $c->isVerified(),
                         'joined_at' => $c->getJoinedAt()?->format(\DateTimeInterface::ATOM),
                         'listings_count' => $listingsCount,
-                        'scraping_requests_count' => (int) $scrapingRepo->createQueryBuilder('sr')->select('COUNT(sr.id)')->where('sr.company = :company')->setParameter('company', $c)->getQuery()->getSingleScalarResult(),
                         'reports_count' => (int) $reportRepo->createQueryBuilder('r')->select('COUNT(r.id)')->where('r.company = :company')->setParameter('company', $c)->getQuery()->getSingleScalarResult(),
                     ];
                 }, $items),
@@ -656,13 +589,12 @@ final class B2BAdminController extends AbstractController
                 ->setFirstResult($offset);
 
             $items = $qb->getQuery()->getResult();
-            $scrapingRepo = $entityManager->getRepository(B2BScrapingRequest::class);
             $reportRepo = $entityManager->getRepository(B2BReport::class);
 
             $total = $entityManager->createQueryBuilder()->select('COUNT(m.id)')->from(B2BMarket::class, 'm')->getQuery()->getSingleScalarResult();
 
             return [
-                'items' => array_map(function (B2BMarket $m) use ($scrapingRepo, $reportRepo) {
+                'items' => array_map(function (B2BMarket $m) use ($reportRepo) {
                     return [
                         'id' => $m->getId(),
                         'email' => $m->getEmail(),
@@ -670,7 +602,6 @@ final class B2BAdminController extends AbstractController
                         'status' => $m->getB2bStatus(),
                         'is_verified' => $m->isVerified(),
                         'joined_at' => $m->getJoinedAt()?->format(\DateTimeInterface::ATOM),
-                        'scraping_requests_count' => (int) $scrapingRepo->createQueryBuilder('sr')->select('COUNT(sr.id)')->where('sr.market = :market')->setParameter('market', $m)->getQuery()->getSingleScalarResult(),
                         'reports_count' => (int) $reportRepo->createQueryBuilder('r')->select('COUNT(r.id)')->where('r.market = :market')->setParameter('market', $m)->getQuery()->getSingleScalarResult(),
                     ];
                 }, $items),

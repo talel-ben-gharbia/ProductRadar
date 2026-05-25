@@ -46,12 +46,29 @@ final class B2BDetectAlertsCommand extends Command
         return Command::SUCCESS;
     }
 
+    private function hasActiveSubscription(B2BCompany|B2BMarket $user): bool
+    {
+        $ownerType = $user instanceof B2BCompany ? 'COMPANY' : 'MARKET';
+        $sub = $this->entityManager->getRepository(Subscription::class)->findOneBy(
+            ['owner_type' => $ownerType, 'owner_id' => $user->getId(), 'active' => true],
+            ['created_at' => 'DESC', 'id' => 'DESC']
+        );
+
+        if (!$sub instanceof Subscription) {
+            return false;
+        }
+
+        $endDate = $sub->getEndDate();
+        return !($endDate !== null && $endDate < new \DateTimeImmutable());
+    }
+
     private function processVendorAlerts(SymfonyStyle $io): void
     {
         $io->section('Processing Vendor Alerts (Undercuts & Stock)');
         $companies = $this->entityManager->getRepository(B2BCompany::class)->findBy(['b2b_status' => 'ACTIVE']);
 
         foreach ($companies as $company) {
+            if (!$this->hasActiveSubscription($company)) continue;
             $seller = $company->getSeller();
             if (!$seller) continue;
 
@@ -94,7 +111,8 @@ final class B2BDetectAlertsCommand extends Command
         $conn = $this->entityManager->getConnection();
 
         foreach ($markets as $market) {
-            $brandName = $market->getCompanyName();
+            if (!$this->hasActiveSubscription($market)) continue;
+            $brandName = $market->getBrandName();
             if (!$brandName) continue;
 
             // 1. Price dispersion (existing)
@@ -142,8 +160,9 @@ final class B2BDetectAlertsCommand extends Command
                     COUNT(pl.id) AS total_count,
                     SUM(CASE WHEN pl.availability = 'out_of_stock' THEN 1 ELSE 0 END) AS oos_count
              FROM product p
+             LEFT JOIN brand b ON b.id = p.brand_id
              JOIN product_listing pl ON pl.product_id = p.id AND pl.is_active = true
-             WHERE LOWER(p.brand) = LOWER(:brand)
+             WHERE COALESCE(LOWER(b.name), LOWER(p.brand)) = LOWER(:brand)
              GROUP BY p.id, p.name
              HAVING COUNT(pl.id) > 1
              AND SUM(CASE WHEN pl.availability = 'out_of_stock' THEN 1 ELSE 0 END) >= 2",
@@ -189,8 +208,9 @@ final class B2BDetectAlertsCommand extends Command
                     AVG(CASE WHEN pl.updated_at >= :yesterday AND pl.updated_at < :today THEN pl.price END) AS avg_yesterday
              FROM product_listing pl
              JOIN product p ON p.id = pl.product_id
+             LEFT JOIN brand b ON b.id = p.brand_id
              JOIN category c ON c.id = p.category_id
-             WHERE LOWER(p.brand) = LOWER(:brand)
+             WHERE COALESCE(LOWER(b.name), LOWER(p.brand)) = LOWER(:brand)
              AND pl.is_active = true
              AND pl.price IS NOT NULL
              GROUP BY c.id, c.name",
@@ -274,9 +294,9 @@ final class B2BDetectAlertsCommand extends Command
                 SUM(CASE WHEN r.rating >= 4 THEN 1 ELSE 0 END) AS positive,
                 SUM(CASE WHEN r.rating <= 2 THEN 1 ELSE 0 END) AS negative
              FROM review r
-             JOIN product_listing pl ON pl.id = r.product_listing_id
-             JOIN product p ON p.id = pl.product_id
-             WHERE LOWER(p.brand) = LOWER(:brand)
+             JOIN product p ON p.id = r.product_id
+             LEFT JOIN brand b ON b.id = p.brand_id
+             WHERE COALESCE(LOWER(b.name), LOWER(p.brand)) = LOWER(:brand)
                AND r.status = 'approved'
                AND r.created_at >= :prior_start
              GROUP BY period",
@@ -312,9 +332,9 @@ final class B2BDetectAlertsCommand extends Command
             // Find top complaint keyword from recent reviews
             $topComplaint = (string) $conn->fetchOne(
                 "SELECT r.comment FROM review r
-                 JOIN product_listing pl ON pl.id = r.product_listing_id
-                 JOIN product p ON p.id = pl.product_id
-                 WHERE LOWER(p.brand) = LOWER(:brand)
+                 JOIN product p ON p.id = r.product_id
+                 LEFT JOIN brand b ON b.id = p.brand_id
+                 WHERE COALESCE(LOWER(b.name), LOWER(p.brand)) = LOWER(:brand)
                    AND r.status = 'approved'
                    AND r.rating <= 2
                    AND r.created_at >= :recent
@@ -342,8 +362,9 @@ final class B2BDetectAlertsCommand extends Command
             "SELECT p.id, p.name, pl.seller_id, s.name AS seller_name, pl.created_at
              FROM product_listing pl
              JOIN product p ON p.id = pl.product_id
+             LEFT JOIN brand b ON b.id = p.brand_id
              JOIN seller s ON s.id = pl.seller_id
-             WHERE LOWER(p.brand) = LOWER(:brand)
+             WHERE COALESCE(LOWER(b.name), LOWER(p.brand)) = LOWER(:brand)
                AND pl.is_active = true
                AND pl.created_at >= :since
              ORDER BY pl.created_at DESC",
@@ -431,19 +452,42 @@ final class B2BDetectAlertsCommand extends Command
             ORDER BY listing_id, id DESC
         ');
 
+        $listingIds = array_map(static fn (array $r): int => (int) $r['listing_id'], $rows);
+        $listingIds = array_values(array_unique(array_filter($listingIds, static fn (int $id): bool => $id > 0)));
+        if (empty($listingIds)) return;
+
+        $listings = $this->entityManager->getRepository(ProductListing::class)->findBy(['id' => $listingIds]);
+        $listingMap = [];
+        foreach ($listings as $l) {
+            $listingMap[$l->getId()] = $l;
+        }
+
+        $sellerIds = array_values(array_unique(array_filter(array_map(static fn (ProductListing $l): ?int => $l->getSeller()?->getId(), $listings))));
+        $companies = [];
+        if (!empty($sellerIds)) {
+            $companies = $this->entityManager->getRepository(B2BCompany::class)->findBy(['seller' => $sellerIds]);
+        }
+        $companyBySeller = [];
+        foreach ($companies as $c) {
+            $sid = $c->getSeller()?->getId();
+            if ($sid !== null) {
+                $companyBySeller[$sid] = $c;
+            }
+        }
+
         $count = 0;
         foreach ($rows as $row) {
             $listingId = (int) $row['listing_id'];
             $oldScore = (float) $row['prev_score'];
             $newScore = (float) $row['score'];
 
-            $listing = $this->entityManager->getRepository(ProductListing::class)->find($listingId);
+            $listing = $listingMap[$listingId] ?? null;
             if (!$listing) continue;
 
             $seller = $listing->getSeller();
             if (!$seller) continue;
 
-            $company = $this->entityManager->getRepository(B2BCompany::class)->findOneBy(['seller' => $seller]);
+            $company = $companyBySeller[$seller->getId()] ?? null;
             if (!$company) continue;
 
             $delta = $oldScore - $newScore;
