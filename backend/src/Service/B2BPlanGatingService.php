@@ -2,6 +2,7 @@
 
 namespace App\Service;
 
+use App\Entity\B2B;
 use App\Entity\B2BCompany;
 use App\Entity\B2BMarket;
 use App\Entity\Subscription;
@@ -12,7 +13,6 @@ class B2BPlanGatingService
     public const FEATURE_COMPETITOR_PRICING = 'competitor_pricing';
     public const FEATURE_STOCK_INTELLIGENCE = 'stock_intelligence';
     public const FEATURE_REVIEWS_SENTIMENT = 'reviews_sentiment';
-    public const FEATURE_DEMAND_INTELLIGENCE = 'demand_intelligence';
     public const FEATURE_EXPORT_CSV = 'export_csv';
     public const FEATURE_BRAND_INTELLIGENCE = 'brand_intelligence';
     public const FEATURE_SHARE_OF_SHELF = 'share_of_shelf';
@@ -26,7 +26,6 @@ class B2BPlanGatingService
         self::FEATURE_COMPETITOR_PRICING,
         self::FEATURE_STOCK_INTELLIGENCE,
         self::FEATURE_REVIEWS_SENTIMENT,
-        self::FEATURE_DEMAND_INTELLIGENCE,
         self::FEATURE_EXPORT_CSV,
         self::FEATURE_BRAND_INTELLIGENCE,
         self::FEATURE_SHARE_OF_SHELF,
@@ -39,7 +38,7 @@ class B2BPlanGatingService
     {
     }
 
-    public function canAccessFeature(B2BCompany|B2BMarket $user, string $featureName): bool
+    public function canAccessFeature(B2B $user, string $featureName): bool
     {
         if (!in_array($featureName, self::GOLD_FEATURES, true)) {
             return true; // Silver-level feature: always accessible
@@ -48,7 +47,7 @@ class B2BPlanGatingService
         return $this->isGoldPlan($user);
     }
 
-    public function isGoldPlan(B2BCompany|B2BMarket $user): bool
+    public function isGoldPlan(B2B $user): bool
     {
         $ownerType = $user instanceof B2BCompany ? 'COMPANY' : 'MARKET';
         /** @var Subscription|null $sub */
@@ -71,7 +70,7 @@ class B2BPlanGatingService
         return str_contains(strtoupper((string) $sub->getPlanType()), 'GOLD');
     }
 
-    public function requireFeatureAccess(B2BCompany|B2BMarket $user, string $featureName): void
+    public function requireFeatureAccess(B2B $user, string $featureName): void
     {
         if (!$this->canAccessFeature($user, $featureName)) {
             throw new \RuntimeException(sprintf('Access denied. The feature "%s" requires a GOLD subscription plan.', $featureName));

@@ -2,6 +2,7 @@
 
 namespace App\Controller;
 
+use App\Entity\B2B;
 use App\Entity\B2BCompany;
 use App\Entity\B2BMarket;
 use App\Entity\Customer;
@@ -270,7 +271,7 @@ final class B2CAuthController extends AbstractController
         ];
     }
 
-    private function createB2bAccount(string $accountType): B2BCompany|B2BMarket
+    private function createB2bAccount(string $accountType): B2B
     {
         return $accountType === self::ACCOUNT_TYPE_B2B_MARKET ? new B2BMarket() : new B2BCompany();
     }

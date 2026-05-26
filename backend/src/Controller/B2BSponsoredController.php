@@ -5,6 +5,7 @@ namespace App\Controller;
 use App\Entity\Admin;
 use App\Entity\B2BAdsCampaign;
 use App\Entity\B2BAdsRequest;
+use App\Entity\B2B;
 use App\Entity\B2BCompany;
 use App\Entity\B2BMarket;
 use App\Entity\B2BSponsoredArticle;
@@ -486,7 +487,7 @@ final class B2BSponsoredController extends AbstractController
     //  Helpers
     // ─────────────────────────────────────────────
 
-    private function resolveUser(Request $request, UserRepository $userRepository): B2BCompany|B2BMarket|null
+    private function resolveUser(Request $request, UserRepository $userRepository): B2B|null
     {
         $firebaseUid = trim((string) $request->headers->get('X-Firebase-Uid', ''));
         if ($firebaseUid === '') return null;
@@ -495,7 +496,7 @@ final class B2BSponsoredController extends AbstractController
         return ($user instanceof B2BCompany || $user instanceof B2BMarket) ? $user : null;
     }
 
-    private function resolveWorkspaceUser(string $firebaseUid, UserRepository $userRepository): B2BCompany|B2BMarket|JsonResponse
+    private function resolveWorkspaceUser(string $firebaseUid, UserRepository $userRepository): B2B|JsonResponse
     {
         $user = $userRepository->findOneBy(['firebase_uid' => $firebaseUid]);
         if (!$user instanceof B2BCompany && !$user instanceof B2BMarket) {

@@ -1,8 +1,9 @@
 <?php
 
 namespace App\Service;
-
+use App\Entity\B2B;
 use App\Entity\B2BCompany;
+
 use App\Entity\B2BMarket;
 use App\Entity\Subscription;
 use App\Entity\User;
@@ -41,7 +42,7 @@ final class SubscriptionContextResolver
      *   "effective_limits": {...}
      * }
      */
-    public function resolveB2BSubscriptionContext(B2BCompany|B2BMarket $owner): array
+    public function resolveB2BSubscriptionContext(B2B $owner): array
     {
         $user = $this->entityManager->find(User::class, $owner->getId());
         if (!$user instanceof User) {
@@ -104,7 +105,7 @@ final class SubscriptionContextResolver
      * }
      */
     public function checkQuota(
-        B2BCompany|B2BMarket $owner,
+        B2B $owner,
         string $operationType,
         int $quantity = 1,
     ): array {
@@ -154,7 +155,7 @@ final class SubscriptionContextResolver
      * Records usage against quota (called after successful operation).
      */
     public function recordUsage(
-        B2BCompany|B2BMarket $owner,
+        B2B $owner,
         string $operationType,
         int $quantity = 1,
     ): void {
@@ -251,7 +252,7 @@ private function canGenerateReports(Subscription $sub): bool
         ];
     }
 
-    private function fetchCurrentUsage(B2BCompany|B2BMarket $owner, string $operationType): int
+    private function fetchCurrentUsage(B2B $owner, string $operationType): int
     {
         $usageJson = $owner->getUsageJson() ?? [];
         $currentMonth = (new \DateTime())->format('Y-m');

@@ -2,6 +2,7 @@
 
 namespace App\Service;
 
+use App\Entity\B2B;
 use App\Entity\B2BAdsRequest;
 use App\Entity\B2BCompany;
 use App\Entity\B2BMarket;
@@ -23,7 +24,7 @@ final class B2BAdsQuotaService
      * Check if a B2B user can create a new ads request.
      * Returns ['allowed' => bool, 'remaining' => int, 'limit' => int, 'message' => string]
      */
-    public function canCreateAdsRequest(B2BCompany|B2BMarket $user): array
+    public function canCreateAdsRequest(B2B $user): array
     {
         $isGold = $this->planGatingService->isGoldPlan($user);
         $weeklyLimit = $isGold ? 15 : 2;
@@ -77,7 +78,7 @@ final class B2BAdsQuotaService
     /**
      * Get quota usage details for display.
      */
-    public function getQuotaUsage(B2BCompany|B2BMarket $user): array
+    public function getQuotaUsage(B2B $user): array
     {
         $quota = $this->canCreateAdsRequest($user);
 

@@ -2,6 +2,7 @@
 
 namespace App\Command;
 
+use App\Entity\B2B;
 use App\Entity\B2BCompany;
 use App\Entity\B2BMarket;
 use App\Entity\B2BSponsoredArticle;
@@ -46,7 +47,7 @@ final class B2BDetectAlertsCommand extends Command
         return Command::SUCCESS;
     }
 
-    private function hasActiveSubscription(B2BCompany|B2BMarket $user): bool
+    private function hasActiveSubscription(B2B $user): bool
     {
         $ownerType = $user instanceof B2BCompany ? 'COMPANY' : 'MARKET';
         $sub = $this->entityManager->getRepository(Subscription::class)->findOneBy(

@@ -17,6 +17,7 @@ use Doctrine\ORM\Mapping as ORM;
 #[ORM\DiscriminatorMap([
     'user' => User::class,
     'customer' => Customer::class,
+    'b2b' => B2B::class,
     'b2b_company' => B2BCompany::class,
     'b2b_market' => B2BMarket::class,
 ])]

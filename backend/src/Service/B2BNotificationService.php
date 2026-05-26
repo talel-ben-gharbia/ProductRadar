@@ -4,6 +4,7 @@ namespace App\Service;
 
 use App\Entity\Admin;
 use App\Entity\B2BAdsRequest;
+use App\Entity\B2B;
 use App\Entity\B2BCompany;
 use App\Entity\B2BMarket;
 use App\Entity\B2BSponsoredArticle;
@@ -148,7 +149,7 @@ final class B2BNotificationService
         );
     }
 
-    public function alertStockShortage(B2BCompany|B2BMarket $owner, string $itemName, string $severity = 'MEDIUM'): void
+    public function alertStockShortage(B2B $owner, string $itemName, string $severity = 'MEDIUM'): void
     {
         $message = sprintf('Stock shortage detected for "%s". Frequent stock-outs observed in recent logs.', $itemName);
         if ($owner instanceof B2BCompany) {
@@ -379,7 +380,7 @@ final class B2BNotificationService
         );
     }
 
-    public function notifyOwner(B2BCompany|B2BMarket $owner, string $type, string $message, string $severity = 'INFO'): void
+    public function notifyOwner(B2B $owner, string $type, string $message, string $severity = 'INFO'): void
     {
         if ($owner instanceof B2BCompany) {
             $this->notifyCompany($owner, $type, $message, $severity);
@@ -388,7 +389,7 @@ final class B2BNotificationService
         }
     }
 
-    public function sendEmail(B2BCompany|B2BMarket $owner, string $subject, string $body): bool
+    public function sendEmail(B2B $owner, string $subject, string $body): bool
     {
         $emailAddress = (string) $owner->getEmail();
         if ($emailAddress === '') {
@@ -453,7 +454,7 @@ final class B2BNotificationService
     //  Internal helpers
     // ─────────────────────────────────────────────
 
-    private function resolveOwner(Subscription $entity): B2BCompany|B2BMarket|null
+    private function resolveOwner(Subscription $entity): B2B|null
     {
         $ownerType = $entity->getOwnerType();
         $ownerId = $entity->getOwnerId();

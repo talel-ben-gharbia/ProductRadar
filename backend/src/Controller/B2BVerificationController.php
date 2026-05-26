@@ -3,6 +3,7 @@
 namespace App\Controller;
 
 use App\Entity\Activity;
+use App\Entity\B2B;
 use App\Entity\B2BCompany;
 use App\Entity\B2BMarket;
 use App\Entity\Brand;
@@ -371,7 +372,7 @@ final class B2BVerificationController extends AbstractController
         return $trimmed === '' ? null : $trimmed;
     }
 
-    private function createVerifiedB2bUser(PartnerRequest $partnerRequest, EntityManagerInterface $entityManager): B2BCompany|B2BMarket
+    private function createVerifiedB2bUser(PartnerRequest $partnerRequest, EntityManagerInterface $entityManager): B2B
     {
         $email = (string) $partnerRequest->getEmail();
         $userRepo = $entityManager->getRepository(User::class);
@@ -406,7 +407,7 @@ final class B2BVerificationController extends AbstractController
         return $user;
     }
 
-    private function attachB2bSubscription(B2BCompany|B2BMarket $user, string $planType, int $durationMonths): Subscription
+    private function attachB2bSubscription(B2B $user, string $planType, int $durationMonths): Subscription
     {
         $startDate = new \DateTimeImmutable();
         $endDate = $startDate->modify('+' . $durationMonths . ' months');
@@ -603,7 +604,7 @@ final class B2BVerificationController extends AbstractController
         return is_string($secret) && trim($secret) !== '' ? $secret : null;
     }
 
-    private function serializeApprovedUser(B2BCompany|B2BMarket $user): array
+    private function serializeApprovedUser(B2B $user): array
     {
         return [
             'id' => $user->getId(),

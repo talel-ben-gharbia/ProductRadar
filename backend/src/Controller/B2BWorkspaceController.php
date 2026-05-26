@@ -2,12 +2,12 @@
 
 namespace App\Controller;
 
+use App\Entity\B2B;
 use App\Entity\B2BAdsCampaign;
 use App\Entity\B2BAdsRequest;
 use App\Entity\B2BCompany;
 use App\Entity\B2BMarket;
 use App\Entity\B2BReport;
-use App\Entity\B2BSearchLog;
 use App\Entity\B2BWatchlist;
 use App\Entity\Subscription;
 use App\Entity\Notification;
@@ -89,16 +89,14 @@ final class B2BWorkspaceController extends AbstractController
             try {
                 $subscription = $this->resolveWorkspaceSubscription($user, $entityManager);
                 $notifications = $this->fetchWorkspaceNotifications($user, $entityManager, 5);
-                $searchInsights = $this->fetchSearchInsights($user, $entityManager);
 
                 $listings = $this->fetchWorkspaceListings($user, $productListingRepository, $entityManager);
-                $metrics = $this->buildWorkspaceMetrics($user, $listings, $entityManager, $searchInsights);
+                $metrics = $this->buildWorkspaceMetrics($user, $listings, $entityManager);
 
                 return [
                     'user' => $this->serializeWorkspaceUser($user),
                     'subscription' => $this->serializeWorkspaceSubscription($subscription),
                     'metrics' => $metrics,
-                    'search_insights' => $searchInsights,
                     'notifications' => $notifications,
                 ];
             } catch (\Throwable $e) {
@@ -106,7 +104,6 @@ final class B2BWorkspaceController extends AbstractController
                     'user' => $this->serializeWorkspaceUser($user),
                     'subscription' => ['source' => 'none', 'plan_type' => null, 'active' => false],
                     'metrics' => $this->buildEmptyMetrics($user),
-                    'search_insights' => ['top_queries' => [], 'zero_result_queries' => [], 'trending' => []],
                     'notifications' => [],
                     '_error' => $e->getMessage(),
                 ];
@@ -1311,7 +1308,7 @@ final class B2BWorkspaceController extends AbstractController
         return $this->json(['status' => 'DELETED']);
     }
 
-    private function isOwner(B2BAdsRequest $adsRequest, B2BCompany|B2BMarket $user): bool
+    private function isOwner(B2BAdsRequest $adsRequest, B2B $user): bool
     {
         if ($user instanceof B2BCompany) {
             return $adsRequest->getCompany()?->getId() === $user->getId();
@@ -1467,8 +1464,7 @@ final class B2BWorkspaceController extends AbstractController
         }
 
         $listings = $this->fetchWorkspaceListings($user, $productListingRepository, $entityManager);
-        $searchInsights = $this->fetchSearchInsights($user, $entityManager);
-        $reportData = $this->buildReportCsvData($user, $reportType, $listings, $entityManager, $searchInsights);
+        $reportData = $this->buildReportCsvData($user, $reportType, $listings, $entityManager);
 
         if ($reportData === null) {
             return $this->json(['error' => 'Unknown or unsupported report type.'], 422);
@@ -1562,8 +1558,7 @@ final class B2BWorkspaceController extends AbstractController
         }
 
         $listings = $this->fetchWorkspaceListings($user, $entityManager->getRepository(\App\Entity\ProductListing::class), $entityManager);
-        $searchInsights = $this->fetchSearchInsights($user, $entityManager);
-        $reportData = $this->buildReportCsvData($user, $upperType, $listings, $entityManager, $searchInsights);
+        $reportData = $this->buildReportCsvData($user, $upperType, $listings, $entityManager);
 
         if ($reportData === null) {
             return $this->json(['error' => 'Unknown report type.'], 422);
@@ -1969,107 +1964,7 @@ final class B2BWorkspaceController extends AbstractController
         return $this->json(['products' => $results]);
     }
 
-    #[Route('/{firebaseUid}/market-gaps', name: 'b2b_workspace_market_gaps', methods: ['GET'])]
-    public function marketGaps(
-        string $firebaseUid,
-        UserRepository $userRepository,
-        EntityManagerInterface $entityManager,
-    ): JsonResponse {
-        $user = $this->resolveWorkspaceUser($firebaseUid, $userRepository);
-        if ($user instanceof JsonResponse) {
-            return $user;
-        }
 
-        $searchInsights = $this->fetchSearchInsights($user, $entityManager);
-        $zeroResultQueries = $searchInsights['zero_result_queries'] ?? [];
-
-        // Cluster similar zero-result queries
-        $clusters = [];
-        $used = [];
-
-        foreach ($zeroResultQueries as $query => $count) {
-            if (in_array($query, $used, true)) continue;
-            $cluster = [$query => $count];
-            $used[] = $query;
-
-            foreach ($zeroResultQueries as $q2 => $c2) {
-                if (in_array($q2, $used, true)) continue;
-                similar_text($query, $q2, $pct);
-                if ($pct > 70) {
-                    $cluster[$q2] = $c2;
-                    $used[] = $q2;
-                }
-            }
-
-            if (count($cluster) > 1 || $count >= 3) {
-                $clusters[] = [
-                    'queries' => array_keys($cluster),
-                    'total_searches' => array_sum($cluster),
-                    'suggested_product' => $this->inferProductName(array_keys($cluster)),
-                ];
-            }
-        }
-
-        // Also pass un-clustered individual queries
-        $individual = [];
-        foreach ($zeroResultQueries as $query => $count) {
-            if (!in_array($query, $used, true)) {
-                $individual[] = ['query' => $query, 'searches' => $count];
-            }
-        }
-
-        uasort($clusters, static fn (array $a, array $b): int => $b['total_searches'] <=> $a['total_searches']);
-
-        return $this->json([
-            'clusters' => array_values($clusters),
-            'individual' => $individual,
-            'total_zero_result_searches' => array_sum($zeroResultQueries),
-        ]);
-    }
-
-    #[Route('/{firebaseUid}/brand-demand', name: 'b2b_workspace_brand_demand', methods: ['GET'])]
-    public function brandDemand(
-        string $firebaseUid,
-        Request $request,
-        UserRepository $userRepository,
-        EntityManagerInterface $entityManager,
-    ): JsonResponse {
-        $user = $this->resolveWorkspaceUser($firebaseUid, $userRepository);
-        if ($user instanceof JsonResponse) {
-            return $user;
-        }
-
-        $this->gatingService->requireFeatureAccess($user, B2BPlanGatingService::FEATURE_DEMAND_INTELLIGENCE);
-
-        $brand = trim((string) $request->query->get('brand', ''));
-        $repo = $entityManager->getRepository(B2BSearchLog::class);
-        $globalLogs = $repo->findBy(['owner_type' => 'GLOBAL'], ['created_at' => 'DESC'], 500);
-
-        $brandQueries = [];
-        $zeroResultBrand = [];
-        foreach ($globalLogs as $log) {
-            if (!$log instanceof B2BSearchLog) continue;
-            $q = $log->getQuery();
-            if ($q === null || trim($q) === '') continue;
-            $lower = mb_strtolower(trim($q));
-
-            if ($brand === '' || str_contains($lower, mb_strtolower($brand))) {
-                $brandQueries[$lower] = ($brandQueries[$lower] ?? 0) + 1;
-                if ($log->isZeroResults() === true) {
-                    $zeroResultBrand[$lower] = ($zeroResultBrand[$lower] ?? 0) + 1;
-                }
-            }
-        }
-
-        arsort($brandQueries);
-        arsort($zeroResultBrand);
-
-        return $this->json([
-            'brand_filter' => $brand,
-            'top_queries' => array_slice($brandQueries, 0, 15, true),
-            'zero_result_queries' => array_slice($zeroResultBrand, 0, 10, true),
-        ]);
-    }
 
     #[Route('/{firebaseUid}/distribution-coverage', name: 'b2b_workspace_distribution_coverage', methods: ['GET'])]
     public function distributionCoverage(
@@ -2565,7 +2460,7 @@ final class B2BWorkspaceController extends AbstractController
         }, 60);
     }
 
-    private function compareByProduct(\App\Entity\Product $product, B2BCompany|B2BMarket $user, EntityManagerInterface $entityManager): JsonResponse
+    private function compareByProduct(\App\Entity\Product $product, B2B $user, EntityManagerInterface $entityManager): JsonResponse
     {
         $sellerId = $user instanceof B2BCompany ? $user->getSeller()?->getId() : null;
 
@@ -2647,7 +2542,7 @@ final class B2BWorkspaceController extends AbstractController
         ]);
     }
 
-    private function resolveWorkspaceUser(string $firebaseUid, UserRepository $userRepository): B2BCompany|B2BMarket|JsonResponse
+    private function resolveWorkspaceUser(string $firebaseUid, UserRepository $userRepository): B2B|JsonResponse
     {
         // Primary: ownership-based resolution via B2BIdentityService
         $company = $this->b2bIdentityService->resolveB2BCompanyByOwnership($firebaseUid);
@@ -2679,7 +2574,7 @@ final class B2BWorkspaceController extends AbstractController
         return $user;
     }
 
-    private function firePlanExpiryWarning(B2BCompany|B2BMarket $user, EntityManagerInterface $entityManager): void
+    private function firePlanExpiryWarning(B2B $user, EntityManagerInterface $entityManager): void
     {
         $ownerType = $user instanceof B2BCompany ? 'COMPANY' : 'MARKET';
         $current = $entityManager->getRepository(Subscription::class)->findOneBy(
@@ -2711,7 +2606,7 @@ final class B2BWorkspaceController extends AbstractController
         $this->b2bNotificationService->notifySubscriptionExpiryWarning($current, $daysLeft);
     }
 
-    private function resolveWorkspaceSubscription(B2BCompany|B2BMarket $user, EntityManagerInterface $entityManager): array
+    private function resolveWorkspaceSubscription(B2B $user, EntityManagerInterface $entityManager): array
     {
         $ownerType = $user instanceof B2BCompany ? 'COMPANY' : 'MARKET';
         $current = $entityManager->getRepository(Subscription::class)->findOneBy(
@@ -2753,7 +2648,7 @@ final class B2BWorkspaceController extends AbstractController
         ];
     }
 
-    private function fetchWorkspaceListings(B2BCompany|B2BMarket $user, ProductListingRepository $productListingRepository, EntityManagerInterface $entityManager, int $limit = 2000): array
+    private function fetchWorkspaceListings(B2B $user, ProductListingRepository $productListingRepository, EntityManagerInterface $entityManager, int $limit = 2000): array
     {
         if ($user instanceof B2BCompany) {
             $sellerId = $user->getSeller()?->getId();
@@ -2829,7 +2724,7 @@ final class B2BWorkspaceController extends AbstractController
         }, $listings);
     }
 
-    private function buildWorkspaceMetrics(B2BCompany|B2BMarket $user, array $rows, EntityManagerInterface $entityManager, array $searchInsights): array
+    private function buildWorkspaceMetrics(B2B $user, array $rows, EntityManagerInterface $entityManager): array
     {
         $trustScores = array_values(array_filter(array_map(static fn (array $row): ?float => is_numeric($row['trust_score'] ?? null) ? (float) $row['trust_score'] : null, $rows)));
         $averageTrustScore = count($trustScores) > 0 ? round(array_sum($trustScores) / count($trustScores), 2) : null;
@@ -2972,7 +2867,7 @@ final class B2BWorkspaceController extends AbstractController
         return $metrics;
     }
 
-    private function fetchWorkspaceNotifications(B2BCompany|B2BMarket $user, EntityManagerInterface $entityManager, int $limit): array
+    private function fetchWorkspaceNotifications(B2B $user, EntityManagerInterface $entityManager, int $limit): array
     {
         $repo = $entityManager->getRepository(Notification::class);
 
@@ -3001,67 +2896,7 @@ final class B2BWorkspaceController extends AbstractController
         ], array_slice($merged, 0, $limit));
     }
 
-    private function fetchSearchInsights(B2BCompany|B2BMarket $user, EntityManagerInterface $entityManager): array
-    {
-        $conn = $entityManager->getConnection();
-        $ownerField = $user instanceof B2BCompany ? 'company_id' : 'market_id';
-        $ownerId = $user->getId();
-        $sevenDaysAgo = (new \DateTimeImmutable())->modify('-7 days')->format('Y-m-d H:i:s');
-        $fourteenDaysAgo = (new \DateTimeImmutable())->modify('-14 days')->format('Y-m-d H:i:s');
 
-        $rows = $conn->fetchAllAssociative(
-            "SELECT LOWER(TRIM(query)) AS q,
-                    COUNT(*) AS cnt,
-                    SUM(CASE WHEN zero_results = true THEN 1 ELSE 0 END) AS zero_cnt,
-                    SUM(CASE WHEN created_at >= :recent THEN 1 ELSE 0 END) AS recent_cnt,
-                    SUM(CASE WHEN created_at >= :prior_start AND created_at < :recent THEN 1 ELSE 0 END) AS prior_cnt
-             FROM b2b_search_log
-             WHERE ($ownerField = :oid OR owner_type = 'GLOBAL')
-               AND query IS NOT NULL AND TRIM(query) != ''
-               AND created_at >= :prior_start
-             GROUP BY LOWER(TRIM(query))",
-            [
-                'oid' => $ownerId,
-                'recent' => $sevenDaysAgo,
-                'prior_start' => $fourteenDaysAgo,
-            ]
-        );
-
-        $topQueries = [];
-        $zeroResults = [];
-        $trending = [];
-
-        foreach ($rows as $row) {
-            $q = $row['q'];
-            $cnt = (int) $row['cnt'];
-            $zeroCnt = (int) $row['zero_cnt'];
-            $recentCnt = (int) $row['recent_cnt'];
-            $priorCnt = (int) $row['prior_cnt'];
-
-            $topQueries[$q] = $cnt;
-            if ($zeroCnt > 0) {
-                $zeroResults[$q] = $zeroCnt;
-            }
-            if ($priorCnt > 0 && $recentCnt > $priorCnt) {
-                $trending[] = [
-                    'query' => $q,
-                    'current' => $recentCnt,
-                    'previous' => $priorCnt,
-                    'growth' => round((($recentCnt - $priorCnt) / $priorCnt) * 100),
-                ];
-            }
-        }
-
-        arsort($topQueries);
-        arsort($zeroResults);
-        usort($trending, static fn (array $a, array $b): int => $b['growth'] <=> $a['growth']);
-
-        return [
-            'top_queries' => array_slice($topQueries, 0, 10, true),
-            'zero_result_queries' => array_slice($zeroResults, 0, 10, true),
-            'trending' => array_slice($trending, 0, 5),
-        ];
-    }
 
     private function buildVendorCompetitorPricing(array $rows, EntityManagerInterface $entityManager, ?int $vendorSellerId, int $maxResults = 20, array $trackedProductIds = []): array
     {
@@ -3360,7 +3195,7 @@ final class B2BWorkspaceController extends AbstractController
         return array_slice($opportunities, 0, 10);
     }
 
-    private function buildShareOfShelf(B2BCompany|B2BMarket $user, array $rows, EntityManagerInterface $entityManager): array
+    private function buildShareOfShelf(B2B $user, array $rows, EntityManagerInterface $entityManager): array
     {
         $categories = [];
         $categoryIds = [];
@@ -3935,175 +3770,14 @@ final class B2BWorkspaceController extends AbstractController
         ], $trendRows);
     }
 
-    private function buildSearchCalendarHeatmap(EntityManagerInterface $entityManager): array
-    {
-        $since = (new \DateTimeImmutable())->modify('-6 weeks')->format('Y-m-d');
-        $conn = $entityManager->getConnection();
 
-        $rows = $conn->fetchAllAssociative(
-            'SELECT
-                sl.created_at::date as day,
-                COUNT(sl.id) as volume
-             FROM b2b_search_log sl
-             WHERE sl.owner_type = \'GLOBAL\' AND sl.created_at >= :since
-             GROUP BY sl.created_at::date
-             ORDER BY day ASC',
-            ['since' => $since]
-        );
 
-        $daily = [];
-        $maxVol = 0;
-        foreach ($rows as $row) {
-            $day = $row['day'];
-            $v = (int) ($row['volume'] ?? 0);
-            $daily[$day] = $v;
-            if ($v > $maxVol) $maxVol = $v;
-        }
 
-        $weeks = [];
-        $start = new \DateTimeImmutable($since);
-        $end = new \DateTimeImmutable('now');
-        $cursor = $start;
-
-        while ($cursor <= $end) {
-            $weekKey = $cursor->format('o-\WW');
-            $dayName = (int) $cursor->format('N'); // 1=Mon..7=Sun
-            $dateStr = $cursor->format('Y-m-d');
-            $weeks[$weekKey][$dayName] = [
-                'date' => $dateStr,
-                'volume' => $daily[$dateStr] ?? 0,
-            ];
-            $cursor = $cursor->modify('+1 day');
-        }
-
-        return [
-            'weeks' => array_keys($weeks),
-            'days' => $weeks,
-            'max_volume' => $maxVol,
-        ];
-    }
-
-    private function buildSearchVolumeVelocity(EntityManagerInterface $entityManager): array
-    {
-        $since = (new \DateTimeImmutable())->modify('-8 weeks')->format('Y-m-d');
-        $conn = $entityManager->getConnection();
-
-        $rows = $conn->fetchAllAssociative(
-            'SELECT
-                LOWER(TRIM(sl.query)) as query,
-                DATE_TRUNC(\'week\', sl.created_at) as week,
-                COUNT(sl.id) as volume
-             FROM b2b_search_log sl
-             WHERE sl.owner_type = \'GLOBAL\' AND sl.created_at >= :since
-             GROUP BY LOWER(TRIM(sl.query)), DATE_TRUNC(\'week\', sl.created_at)
-             ORDER BY week ASC',
-            ['since' => $since]
-        );
-
-        $weekly = [];
-        $queryTotal = [];
-        foreach ($rows as $row) {
-            $q = $row['query'];
-            $w = $row['week'];
-            $v = (int) ($row['volume'] ?? 0);
-            $weekly[$q][$w] = $v;
-            $queryTotal[$q] = ($queryTotal[$q] ?? 0) + $v;
-        }
-
-        arsort($queryTotal);
-        $topQueries = array_slice(array_keys($queryTotal), 0, 20);
-
-        $weeks = [];
-        $result = [];
-        foreach ($topQueries as $q) {
-            $series = [];
-            foreach ($weekly[$q] ?? [] as $w => $v) {
-                $weekKey = substr($w, 0, 10);
-                $weeks[$weekKey] = true;
-                $series[] = ['week' => $weekKey, 'volume' => $v];
-            }
-            $result[] = ['query' => $q, 'series' => $series];
-        }
-
-        return [
-            'weeks' => array_keys($weeks),
-            'series' => $result,
-        ];
-    }
-
-    private function buildMarketGapClusters(array $searchInsights): array
-    {
-        $zeroResultQueries = $searchInsights['zero_result_queries'] ?? [];
-        if (empty($zeroResultQueries)) return [];
-
-        $clusters = [];
-        $used = [];
-
-        foreach ($zeroResultQueries as $query => $count) {
-            if (in_array($query, $used, true)) continue;
-            $cluster = [$query => $count];
-            $used[] = $query;
-
-            foreach ($zeroResultQueries as $q2 => $c2) {
-                if (in_array($q2, $used, true)) continue;
-                similar_text($query, $q2, $pct);
-                if ($pct > 70) {
-                    $cluster[$q2] = $c2;
-                    $used[] = $q2;
-                }
-            }
-
-            if (count($cluster) > 1 || $count >= 3) {
-                $clusters[] = [
-                    'queries' => array_keys($cluster),
-                    'total_searches' => array_sum($cluster),
-                    'suggested_product' => $this->inferProductName(array_keys($cluster)),
-                ];
-            }
-        }
-
-        uasort($clusters, static fn (array $a, array $b): int => $b['total_searches'] <=> $a['total_searches']);
-
-        return array_values($clusters);
-    }
-
-    private function buildBrandDemandIntelligence(EntityManagerInterface $entityManager, string $brandName): array
-    {
-        $repo = $entityManager->getRepository(B2BSearchLog::class);
-        $globalLogs = $repo->findBy(['owner_type' => 'GLOBAL'], ['created_at' => 'DESC'], 300);
-
-        $brandQueries = [];
-        $zeroResultBrand = [];
-        $lowerBrand = mb_strtolower($brandName);
-
-        foreach ($globalLogs as $log) {
-            if (!$log instanceof B2BSearchLog) continue;
-            $q = $log->getQuery();
-            if ($q === null || trim($q) === '') continue;
-            $lower = mb_strtolower(trim($q));
-
-            if (str_contains($lower, $lowerBrand)) {
-                $brandQueries[$lower] = ($brandQueries[$lower] ?? 0) + 1;
-                if ($log->isZeroResults() === true) {
-                    $zeroResultBrand[$lower] = ($zeroResultBrand[$lower] ?? 0) + 1;
-                }
-            }
-        }
-
-        arsort($brandQueries);
-        arsort($zeroResultBrand);
-
-        return [
-            'brand' => $brandName,
-            'top_queries' => array_slice($brandQueries, 0, 10, true),
-            'zero_result_queries' => array_slice($zeroResultBrand, 0, 10, true),
-        ];
-    }
 
     /**
      * @return array{headers: array<int, string>, rows: array<int, array<int, string|int|float|null>>}|null
      */
-    private function buildReportCsvData(B2BCompany|B2BMarket $user, string $reportType, array $listings, EntityManagerInterface $entityManager, array $searchInsights): ?array
+    private function buildReportCsvData(B2B $user, string $reportType, array $listings, EntityManagerInterface $entityManager): ?array
     {
         if ($reportType === 'COMPETITOR_PRICING') {
             $headers = ['Product Name', 'Your Price', 'Market Min', 'Market Max', 'Your Rank', 'Total Sellers', 'Gap to Cheapest', 'Trust Score', 'Stock Status', 'Last Updated'];
@@ -4262,8 +3936,7 @@ final class B2BWorkspaceController extends AbstractController
                 }
             }
 
-            $rows[] = ['Demand', 'Top Queries', implode(', ', array_keys(array_slice($searchInsights['top_queries'] ?? [], 0, 5)))];
-            $rows[] = ['Demand', 'Zero-Result Queries', implode(', ', array_keys(array_slice($searchInsights['zero_result_queries'] ?? [], 0, 5)))];
+
 
             return ['headers' => $headers, 'rows' => $rows];
         }
@@ -4374,7 +4047,7 @@ final class B2BWorkspaceController extends AbstractController
         }
     }
 
-    private function serializeWorkspaceUser(B2BCompany|B2BMarket $user): array
+    private function serializeWorkspaceUser(B2B $user): array
     {
         return [
             'id' => $user->getId(),
@@ -4647,7 +4320,7 @@ final class B2BWorkspaceController extends AbstractController
         }
     }
 
-    private function buildEmptyMetrics(B2BCompany|B2BMarket $user): array
+    private function buildEmptyMetrics(B2B $user): array
     {
         return [
             'mode' => $user instanceof B2BCompany ? 'vendor' : 'market',
@@ -4692,25 +4365,6 @@ final class B2BWorkspaceController extends AbstractController
     private function normalizeNullableFloat(mixed $value): ?float
     {
         return is_numeric($value) ? (float) $value : null;
-    }
-
-    private function inferProductName(array $queries): string
-    {
-        $words = [];
-        foreach ($queries as $q) {
-            $parts = preg_split('/[\s,;-]+/', $q);
-            foreach ($parts as $part) {
-                $p = mb_strtolower(trim($part));
-                if (mb_strlen($p) > 2 && !in_array($p, ['the','for','and','with','de','des','du','le','la','les','une','sur','dans','par','et','ou','en','au','aux','pas','pour'], true)) {
-                    $words[] = $p;
-                }
-            }
-        }
-        $freq = array_count_values($words);
-        arsort($freq);
-        $top = array_slice(array_keys($freq), 0, 4);
-
-        return implode(' ', $top);
     }
 
     private function decodeTrustBreakdown(mixed $value): mixed
