@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
-import { Download, FileText, Plus } from "lucide-react"
+import { Download, FileDown, FileText, Plus } from "lucide-react"
 
 import { useB2B } from "@/components/B2B/b2b-context"
 import B2BErrorState from "@/components/B2B/b2b-error-state"
@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 
 import type { B2BReport as Report } from "@/types/b2b"
+import { downloadReportAsPdf } from "@/utils/b2b/pdf-export"
 
 export default function ReportsPage() {
   const { mode, isGold, planType, summary } = useB2B()
@@ -69,6 +70,16 @@ export default function ReportsPage() {
   const downloadReport = (report: Report) => {
     const reportType = report.report_type ?? "COMPETITOR_PRICING"
     window.open(`/api/b2b/workspace?endpoint=reports/export/${reportType}`, "_blank")
+  }
+
+  const downloadReportAsPdfHandler = async (report: Report) => {
+    const reportType = report.report_type ?? "COMPETITOR_PRICING"
+    const label = reportType.replace(/_/g, " ")
+    try {
+      await downloadReportAsPdf(reportType, label, `/api/b2b/workspace?endpoint=reports/export/${reportType}`)
+    } catch {
+      // silently fail
+    }
   }
 
   const statusColor = (s?: string): string => {
@@ -152,7 +163,10 @@ export default function ReportsPage() {
                       <td className="px-4 py-3 text-muted-foreground text-xs">{r.created_at ? new Date(r.created_at).toLocaleString() : "-"}</td>
                       <td className="px-4 py-3 text-right">
                         {r.file_path && r.status?.toUpperCase() === "GENERATED" ? (
-                          <Button variant="ghost" size="sm" onClick={() => downloadReport(r)} className="gap-1 text-xs"><Download className="size-3" />Download</Button>
+                          <div className="flex items-center justify-end gap-1">
+                            <Button variant="ghost" size="sm" onClick={() => downloadReport(r)} className="gap-1 text-xs"><Download className="size-3" />CSV</Button>
+                            <Button variant="ghost" size="sm" onClick={() => downloadReportAsPdfHandler(r)} className="gap-1 text-xs"><FileDown className="size-3" />PDF</Button>
+                          </div>
                         ) : null}
                       </td>
                     </tr>

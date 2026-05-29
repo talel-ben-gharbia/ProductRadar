@@ -62,7 +62,7 @@ const VENDOR_NAV: NavItem[] = [
   { href: "/B2B/dashboard/alerts", name: "Alerts", icon: Bell },
   { href: "/B2B/dashboard/reports", name: "Reports", icon: FileText },
   { href: "/B2B/dashboard/ads-requests", name: "Ads Requests", icon: Megaphone },
-  { href: "/B2B/dashboard/sponsored-products", name: "Sponsored Products", icon: TrendingUp },
+  { href: "/B2B/dashboard/sponsored-products", name: "Sponsored Products and Banner Ads", icon: TrendingUp },
   { href: "/B2B/dashboard/settings", name: "Settings", icon: Settings },
 ]
 
@@ -89,7 +89,7 @@ function B2BSidebar() {
 
   const navItems = useMemo(() => mode === "market" ? MARKET_NAV : VENDOR_NAV, [mode])
   const unreadCount = useMemo(() => notifications.filter((n) => !n.is_read).length, [notifications])
-  const companyName = summary?.user?.company_name ?? "B2B Workspace"
+  const companyName = summary?.user?.name ?? "B2B Workspace"
   const email = summary?.user?.email ?? ""
 
   useEffect(() => {

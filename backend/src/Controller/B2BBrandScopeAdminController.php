@@ -47,7 +47,7 @@ final class B2BBrandScopeAdminController extends AbstractController
             $keywords = $market->getBrandKeywords();
             $result[] = [
                 'market_id' => $market->getId(),
-                'company_name' => $market->getCompanyName(),
+                'name' => $market->getName(),
                 'brand_id' => $market->getBrandEntity()?->getId(),
                 'brand_name' => $market->getBrandName(),
                 'seller_id' => $market->getSeller()?->getId(),
@@ -178,7 +178,7 @@ final class B2BBrandScopeAdminController extends AbstractController
                 $keywords = $this->brandDiscoveryService->discover($market);
                 $results[] = [
                     'market_id' => $market->getId(),
-                    'company_name' => $market->getCompanyName(),
+                    'name' => $market->getName(),
                     'product_count_estimate' => $keywords['product_count_estimate'] ?? 0,
                 ];
             } catch (\Throwable $e) {

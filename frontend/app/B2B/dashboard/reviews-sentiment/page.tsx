@@ -298,7 +298,7 @@ function CompareBrandsTab() {
   const [competitors, setCompetitors] = useState<string[]>([])
   const [inputVal, setInputVal] = useState("")
 
-  const myBrand = (summary?.user?.company_name as string | undefined) ?? ""
+  const myBrand = (summary?.user?.name as string | undefined) ?? ""
 
   const fetchData = useCallback(async (extraBrands: string[]) => {
     setLoading(true)

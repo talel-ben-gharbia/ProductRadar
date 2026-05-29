@@ -67,11 +67,11 @@ final class RefreshMarketBrandScopeCommand extends Command
         }
 
         if ($market->getBrandName() === null || $market->getBrandName() === '') {
-            $io->warning("Market #{$marketId} ({$market->getCompanyName()}) has no brand_name — skipping.");
+            $io->warning("Market #{$marketId} ({$market->getName()}) has no brand_name — skipping.");
             return Command::FAILURE;
         }
 
-        $io->text("Refreshing brand scope for Market #{$marketId}: {$market->getCompanyName()} ({$market->getBrandName()})...");
+        $io->text("Refreshing brand scope for Market #{$marketId}: {$market->getName()} ({$market->getBrandName()})...");
 
         try {
             $keywords = $this->brandDiscoveryService->discover($market);
@@ -118,7 +118,7 @@ final class RefreshMarketBrandScopeCommand extends Command
                 }
             }
 
-            $io->text("Refreshing Market #{$market->getId()}: {$market->getCompanyName()} ({$market->getBrandName()})...");
+            $io->text("Refreshing Market #{$market->getId()}: {$market->getName()} ({$market->getBrandName()})...");
 
             try {
                 $keywords = $this->brandDiscoveryService->discover($market);

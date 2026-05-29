@@ -68,10 +68,10 @@ final class B2BSubscriptionExpiryCommand extends Command
             $ownerType = $subscription->getOwnerType();
             if ($ownerType === 'COMPANY' && $ownerId !== null) {
                 $company = $this->entityManager->find(\App\Entity\B2BCompany::class, $ownerId);
-                $companyName = $company?->getCompanyName() ?? 'Unknown';
+                $companyName = $company?->getName() ?? 'Unknown';
             } elseif ($ownerType === 'MARKET' && $ownerId !== null) {
                 $market = $this->entityManager->find(\App\Entity\B2BMarket::class, $ownerId);
-                $companyName = $market?->getCompanyName() ?? 'Unknown';
+                $companyName = $market?->getName() ?? 'Unknown';
             }
 
             $io->text(sprintf(

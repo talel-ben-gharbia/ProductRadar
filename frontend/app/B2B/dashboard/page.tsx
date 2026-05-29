@@ -21,6 +21,7 @@ import {
   ArrowRight,
   BarChart3,
   Bell,
+  Building2,
   CheckCircle2,
   Clock,
   DollarSign,
@@ -177,12 +178,25 @@ export default function B2BOverviewPage() {
       {/* Subscription Status Banner */}
       <B2BSubscriptionBanner />
 
+      {/* Seller Setup Warning (vendor mode with no seller linked) */}
+      {mode === "vendor" && summary?.user?.seller_id == null && (
+        <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50/80 px-4 py-3 text-sm text-amber-800 dark:border-amber-900/30 dark:bg-amber-950/20 dark:text-amber-400">
+          <Building2 className="mt-0.5 size-5 shrink-0" />
+          <div>
+            <p className="font-semibold">Seller account not linked</p>
+            <p className="mt-0.5 text-xs opacity-80">
+              Your company account isn&apos;t linked to a seller profile yet. Dashboard data will show zero until a seller is configured. Contact support to link your seller account.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Hero header with at-a-glance metrics */}
       <section className="sticky top-0 z-10 rounded-2xl border border-border/50 bg-gradient-to-br from-indigo-950/95 via-slate-900/95 to-violet-950/95 p-6 text-white shadow-sm dark:from-indigo-950 dark:via-slate-950 dark:to-violet-950">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-xl font-bold tracking-tight sm:text-2xl">{summary?.user?.company_name ?? "B2B Workspace"}</h1>
+              <h1 className="text-xl font-bold tracking-tight sm:text-2xl">{summary?.user?.name ?? "B2B Workspace"}</h1>
               <Badge className={`rounded-full px-3 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
                 isGold
                   ? "bg-amber-500/20 text-amber-400 ring-1 ring-amber-500/30"

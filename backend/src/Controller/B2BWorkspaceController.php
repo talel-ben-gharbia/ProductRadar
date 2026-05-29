@@ -591,7 +591,7 @@ final class B2BWorkspaceController extends AbstractController
             }
         }
 
-        $companyName = $user instanceof B2BCompany ? $user->getCompanyName() : ($user instanceof B2BMarket ? $user->getCompanyName() : 'your brand');
+        $companyName = $user instanceof B2BCompany ? $user->getName() : ($user instanceof B2BMarket ? $user->getName() : 'your brand');
 
         return $this->json([
             'reply' => sprintf(
@@ -976,7 +976,7 @@ final class B2BWorkspaceController extends AbstractController
     private function filterListingsBySector(B2BMarket $market, array $rows): array
     {
         $sectorNames = array_filter([
-            mb_strtolower(trim((string) $market->getCompanyMarket())),
+            mb_strtolower(trim((string) $market->getSector())),
         ]);
         if (empty($sectorNames)) return $rows;
 
@@ -1716,51 +1716,6 @@ final class B2BWorkspaceController extends AbstractController
         return $this->json(['id' => $newSub->getId(), 'status' => 'PENDING', 'message' => 'Upgrade request submitted. Awaiting admin approval.'], 201);
     }
 
-    #[Route('/{firebaseUid}/pvc-compliance', name: 'b2b_workspace_pvc_compliance', methods: ['GET'])]
-    public function pvcCompliance(
-        string $firebaseUid,
-        Request $request,
-        UserRepository $userRepository,
-        EntityManagerInterface $entityManager,
-    ): JsonResponse {
-        $user = $this->resolveWorkspaceUser($firebaseUid, $userRepository);
-        if ($user instanceof JsonResponse) {
-            return $user;
-        }
-
-        $brandId = $request->query->getInt('brandId', 0);
-        $brand = trim((string) $request->query->get('brand', ''));
-        $conn = $entityManager->getConnection();
-
-        $qb = 'SELECT p.id, p.name, COALESCE(b.name, p.brand) as brand,
-                      COUNT(pl.id) as total_listings
-               FROM product p
-               LEFT JOIN brand b ON b.id = p.brand_id
-               JOIN product_listing pl ON pl.product_id = p.id AND pl.is_active = true';
-
-        $params = [];
-        if ($brandId > 0) {
-            $qb .= ' WHERE p.brand_id = :brandId';
-            $params['brandId'] = $brandId;
-        } elseif ($brand !== '') {
-            $qb .= ' WHERE COALESCE(LOWER(b.name), LOWER(p.brand)) = :brand';
-            $params['brand'] = mb_strtolower($brand);
-        }
-
-        $qb .= ' GROUP BY p.id, p.name, COALESCE(b.name, p.brand) ORDER BY p.name ASC';
-
-        $products = $conn->fetchAllAssociative($qb, $params);
-
-        $results = array_map(static fn (array $row): array => [
-            'product_id' => (int) $row['id'],
-            'product_name' => $row['name'],
-            'brand' => $row['brand'],
-            'total_listings' => (int) $row['total_listings'],
-        ], $products);
-
-        return $this->json(['products' => $results]);
-    }
-
     #[Route('/{firebaseUid}/sentiment-compare', name: 'b2b_workspace_sentiment_compare', methods: ['GET'])]
     public function sentimentCompare(
         string $firebaseUid,
@@ -1780,9 +1735,9 @@ final class B2BWorkspaceController extends AbstractController
         $myBrandId = $user->getBrandEntity()?->getId();
         $myBrandName = $myBrandId !== null
             ? ($user->getBrandEntity()?->getName() ?? '')
-            : trim((string) $user->getCompanyName());
+            : trim((string) $user->getName());
         if ($myBrandName === '') {
-            $myBrandName = mb_strtolower(trim((string) $user->getCompanyMarket()));
+            $myBrandName = mb_strtolower(trim((string) $user->getSector()));
         }
         if ($myBrandName === '') {
             return $this->json(['error' => 'No brand name configured for this market.'], 400);
@@ -2144,10 +2099,10 @@ final class B2BWorkspaceController extends AbstractController
         }
 
         if (isset($body['fullName'])) $user->setFullName((string) $body['fullName']);
-        if (isset($body['companyName'])) $user->setCompanyName((string) $body['companyName']);
+        if (isset($body['name'])) $user->setName((string) $body['name']);
         if (isset($body['companyWebsite'])) $user->setCompanyWebsite((string) $body['companyWebsite']);
         if (isset($body['companyCountry'])) $user->setCompanyCountry((string) $body['companyCountry']);
-        if (isset($body['companyMarket'])) $user->setCompanyMarket((string) $body['companyMarket']);
+        if (isset($body['sector'])) $user->setSector((string) $body['sector']);
 
         $entityManager->flush();
         $this->cacheVersionManager->bumpVersion($firebaseUid);
@@ -2828,7 +2783,7 @@ final class B2BWorkspaceController extends AbstractController
 
         $metrics = [
             'mode' => 'market',
-            'brand_name' => $user->getCompanyName(),
+            'brand_name' => $user->getName(),
             'products_count' => count(array_unique(array_filter(array_map(static fn (array $row): ?int => isset($row['productId']) ? (int) $row['productId'] : null, $rows)))),
             'listings_count' => count($rows),
             'average_trust_score' => $averageTrustScore,
@@ -3345,7 +3300,7 @@ final class B2BWorkspaceController extends AbstractController
             }
         }
 
-        $marketSellerName = $isMarket ? mb_strtolower(trim((string) $user->getCompanyName())) : null;
+        $marketSellerName = $isMarket ? mb_strtolower(trim((string) $user->getName())) : null;
 
         foreach ($categories as &$category) {
             $category['share_of_shelf'] = $category['total_products'] > 0
@@ -4053,8 +4008,8 @@ final class B2BWorkspaceController extends AbstractController
             'id' => $user->getId(),
             'email' => $user->getEmail(),
             'full_name' => $user->getFullName(),
-            'company_name' => $user->getCompanyName(),
-            'company_market' => $user->getCompanyMarket(),
+            'name' => $user->getName(),
+            'sector' => $user->getSector(),
             'company_country' => $user->getCompanyCountry(),
             'company_website' => $user->getCompanyWebsite(),
             'b2b_status' => $user->getB2bStatus(),

@@ -7,8 +7,8 @@ export type B2BUserInfo = {
   id?: number | null
   email?: string | null
   full_name?: string | null
-  company_name?: string | null
-  company_market?: string | null
+  name?: string | null
+  sector?: string | null
   company_country?: string | null
   company_website?: string | null
   b2b_status?: string | null

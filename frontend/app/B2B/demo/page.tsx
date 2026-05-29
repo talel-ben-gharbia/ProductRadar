@@ -92,7 +92,7 @@ export default function DemoOverviewPage() {
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-xl font-bold tracking-tight sm:text-2xl">{summary.user?.company_name ?? "Demo Workspace"}</h1>
+              <h1 className="text-xl font-bold tracking-tight sm:text-2xl">{summary.user?.name ?? "Demo Workspace"}</h1>
               <Badge className="rounded-full bg-amber-500/20 px-3 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-400 ring-1 ring-amber-500/30">
                 {planLabel}
               </Badge>

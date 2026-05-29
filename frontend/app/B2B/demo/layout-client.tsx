@@ -238,7 +238,7 @@ function DemoSidebar() {
 
 export default function B2BDemoLayoutClient({ children }: { children: ReactNode }) {
   const [mode, setMode] = useState<"vendor" | "market">("vendor")
-  const companyName = DEMO_SUMMARY.user?.company_name ?? "Demo Retail Inc."
+  const companyName = DEMO_SUMMARY.user?.name ?? "Demo Retail Inc."
   const email = DEMO_SUMMARY.user?.email ?? "demo@example.com"
   const planType = "Gold"
   const isGold = true

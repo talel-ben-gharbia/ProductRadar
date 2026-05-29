@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input"
 
 type MarketBrandScope = {
   market_id: number
-  company_name: string | null
+  name: string | null
   brand_name: string | null
   seller_id: number | null
   seller_name: string | null
@@ -153,7 +153,7 @@ export default function BrandScopeAdminPage() {
                 <div className="flex items-start justify-between">
                   <div>
                     <CardTitle className="text-base">
-                      {market.company_name ?? `Market #${market.market_id}`}
+                      {market.name ?? `Market #${market.market_id}`}
                     </CardTitle>
                     {market.brand_name ? (
                       <Badge variant="default" className="mt-1">
@@ -188,7 +188,7 @@ export default function BrandScopeAdminPage() {
                         size="sm"
                         variant="default"
                         onClick={() => {
-                          setAssignDialog({ marketId: market.market_id, companyName: market.company_name ?? `Market #${market.market_id}` })
+                          setAssignDialog({ marketId: market.market_id, companyName: market.name ?? `Market #${market.market_id}` })
                           setAssignBrandName("")
                         }}
                       >
@@ -278,7 +278,7 @@ export default function BrandScopeAdminPage() {
       <Dialog open onOpenChange={(open) => { if (!open) setDetailDialog(null) }}>
         <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{detailDialog.company_name ?? `Market #${detailDialog.market_id}`}</DialogTitle>
+            <DialogTitle>{detailDialog.name ?? `Market #${detailDialog.market_id}`}</DialogTitle>
           </DialogHeader>
           <div className="space-y-5 py-2">
             <div className="flex items-center gap-2">

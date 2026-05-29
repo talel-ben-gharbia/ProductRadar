@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { useCallback, useEffect, useState } from "react"
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
-import { ArrowDownRight, ArrowUpRight, BookmarkCheck, BookmarkPlus, Loader2, TrendingUp } from "lucide-react"
+import { AlertTriangle, ArrowDownRight, ArrowUpRight, BookmarkCheck, BookmarkPlus, Loader2, RefreshCw, TrendingUp } from "lucide-react"
 
 import { useB2B } from "@/components/B2B/b2b-context"
 import { Badge } from "@/components/ui/badge"
@@ -27,7 +27,7 @@ type CompetitorRow = {
 export default function CompetitorPricingPage() {
   const { summary, isGold, refresh } = useB2B()
   const metrics = summary?.metrics as Record<string, unknown> | undefined
-  const data = ((metrics?.competitor_pricing ?? []) as CompetitorRow[])
+  const contextData = ((metrics?.competitor_pricing ?? []) as CompetitorRow[])
   const trackingLimit = Number(metrics?.tracking_limit ?? 20)
 
   const [trackedProducts, setTrackedProducts] = useState<Record<number, number>>({})
@@ -36,6 +36,10 @@ export default function CompetitorPricingPage() {
   const [trackError, setTrackError] = useState<string | null>(null)
   const [watchlistError, setWatchlistError] = useState<string | null>(null)
   const [untrackError, setUntrackError] = useState<string | null>(null)
+
+  const [localData, setLocalData] = useState<CompetitorRow[]>([])
+  const [localLoading, setLocalLoading] = useState(false)
+  const [dataWarning, setDataWarning] = useState<string | null>(null)
 
   const loadWatchlist = useCallback(async () => {
     setFetchingWatchlist(true)
@@ -60,6 +64,33 @@ export default function CompetitorPricingPage() {
   useEffect(() => {
     loadWatchlist()
   }, [loadWatchlist])
+
+  // Direct fetch for fresh competitor pricing data
+  const fetchCompetitorData = useCallback(async () => {
+    setLocalLoading(true)
+    setDataWarning(null)
+    try {
+      const res = await fetch("/api/b2b/workspace?endpoint=summary")
+      if (res.ok) {
+        const json = await res.json()
+        const m = json?.metrics as Record<string, unknown> | undefined
+        const cp = (m?.competitor_pricing ?? []) as CompetitorRow[]
+        setLocalData(cp)
+        if (cp.length === 0) {
+          setDataWarning("No competitor pricing data available yet. This may be because your company isn't linked to a seller account, your plan doesn't include this feature, or you have no products with active listings.")
+        }
+      } else {
+        setDataWarning("Failed to refresh competitor data from server.")
+      }
+    } catch {
+      setDataWarning("Network error while fetching competitor data.")
+    }
+    setLocalLoading(false)
+  }, [])
+
+  useEffect(() => {
+    fetchCompetitorData()
+  }, [fetchCompetitorData])
 
   const handleTrack = async (productId: number) => {
     setTrackError(null)
@@ -112,6 +143,9 @@ export default function CompetitorPricingPage() {
     return <B2BPlanGate featureName="Competitor Pricing" />
   }
 
+  // Use locally-fetched data as primary, context data as fallback
+  const data = localData.length > 0 ? localData : contextData
+
   const chartData = data.slice(0, 10).map((item) => ({
     name: String(item.product_name ?? "Product").slice(0, 20),
     gap: Number(item.gap_to_cheapest ?? 0),
@@ -124,13 +158,24 @@ export default function CompetitorPricingPage() {
   const undercut = data.filter((d) => Number(d.gap_to_cheapest ?? 0) > 0).length
   const pctUsed = trackingLimit > 0 ? Math.min(100, Math.round((trackedCount / trackingLimit) * 100)) : 0
 
-  const showContent = trackedCount > 0 && !fetchingWatchlist
+  const showContent = (trackedCount > 0 || data.length > 0) && !fetchingWatchlist
+
+  const handleRefresh = () => {
+    refresh()
+    fetchCompetitorData()
+  }
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Competitor Pricing</h1>
-        <p className="text-sm text-muted-foreground">Compare your prices against competitors across all your products.</p>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Competitor Pricing</h1>
+          <p className="text-sm text-muted-foreground">Compare your prices against competitors across all your products.</p>
+        </div>
+        <Button variant="outline" size="sm" onClick={handleRefresh} disabled={localLoading} className="h-8 gap-1.5 text-xs">
+          <RefreshCw className={`size-3.5 ${localLoading ? "animate-spin" : ""}`} />
+          Refresh Data
+        </Button>
       </div>
 
       <section className="grid gap-4 md:grid-cols-3">
@@ -166,10 +211,20 @@ export default function CompetitorPricingPage() {
         )}
       </section>
 
+      {dataWarning && !localLoading && (
+        <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50/80 px-4 py-3 text-sm text-amber-800 dark:border-amber-900/30 dark:bg-amber-950/20 dark:text-amber-400">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+          <div>
+            <p className="font-medium">Limited competitor data</p>
+            <p className="mt-0.5 text-xs opacity-80">{dataWarning}</p>
+          </div>
+        </div>
+      )}
+
       {watchlistError && (
         <B2BErrorState message={watchlistError} onRetry={() => { setWatchlistError(null); loadWatchlist() }} />
       )}
-      {!showContent && !fetchingWatchlist && (
+      {!showContent && !fetchingWatchlist && !localLoading && (
         <Card className="border-border/50 shadow-sm">
           <CardContent className="flex flex-col items-center justify-center py-24">
             <BookmarkPlus className="mb-4 size-16 text-muted-foreground/20" />
@@ -187,13 +242,13 @@ export default function CompetitorPricingPage() {
         </Card>
       )}
 
-      {fetchingWatchlist && (
+      {fetchingWatchlist || localLoading ? (
         <Card className="border-border/50 shadow-sm">
           <CardContent className="flex items-center justify-center py-24">
             <Loader2 className="size-8 animate-spin text-muted-foreground" />
           </CardContent>
         </Card>
-      )}
+      ) : null}
 
       {untrackError && (
         <B2BErrorState message={untrackError} onRetry={() => setUntrackError(null)} />

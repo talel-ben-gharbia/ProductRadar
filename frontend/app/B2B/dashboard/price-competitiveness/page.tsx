@@ -33,7 +33,7 @@ export default function PriceCompetitivenessPage() {
   const competitorBrands = (metrics?.competitor_brands ?? []) as Array<Record<string, unknown>>
 
   useEffect(() => {
-    const brandScope = summary?.user?.company_name
+    const brandScope = summary?.user?.name
     const allBrands = competitorBrands.map((b) => String(b.brand ?? "")).filter(Boolean)
     const unique = [...new Set(allBrands)]
     setBrands(unique)

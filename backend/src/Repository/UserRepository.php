@@ -66,7 +66,7 @@ class UserRepository extends ServiceEntityRepository
 
         $search = trim((string) ($filters['search'] ?? ''));
         if ($search !== '') {
-            $where[] = "(LOWER(u.email) LIKE :search OR LOWER(COALESCE(c.full_name, bc.full_name, bm.full_name, '')) LIKE :search OR LOWER(COALESCE(bc.company_name, bm.company_name, '')) LIKE :search OR LOWER(COALESCE(bc.company_market, bm.company_market, '')) LIKE :search OR LOWER(COALESCE(bc.company_website, bm.company_website, '')) LIKE :search)";
+            $where[] = "(LOWER(u.email) LIKE :search OR LOWER(COALESCE(c.full_name, bc.full_name, bm.full_name, '')) LIKE :search OR LOWER(COALESCE(bc.name, bm.name, '')) LIKE :search OR LOWER(COALESCE(bc.sector, bm.sector, '')) LIKE :search OR LOWER(COALESCE(bc.company_website, bm.company_website, '')) LIKE :search)";
             $params['search'] = '%' . mb_strtolower($search) . '%';
         }
 

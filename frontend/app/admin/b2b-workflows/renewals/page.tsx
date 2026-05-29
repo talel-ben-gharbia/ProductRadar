@@ -18,7 +18,7 @@ type RenewalRequest = {
   created_at?: string
   company_id?: number
   market_id?: number
-  company_name?: string
+  name?: string
   market_name?: string
 }
 
@@ -110,7 +110,7 @@ export default function B2BRenewalsAdminPage() {
                         </td>
                         <td className="px-4 py-3 font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
                           <Building2 className="size-3.5 text-muted-foreground" />
-                          {r.company_name ?? r.market_name ?? `#${r.company_id ?? r.market_id ?? "-"}`}
+                          {r.name ?? r.market_name ?? `#${r.company_id ?? r.market_id ?? "-"}`}
                         </td>
                         <td className="px-4 py-3">
                           <Badge className={`text-xs font-semibold ${r.plan_type?.includes("GOLD") ? "bg-gradient-to-r from-amber-200 to-yellow-400 text-amber-900 border-none shadow-sm shadow-amber-500/20" : "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300"}`}>

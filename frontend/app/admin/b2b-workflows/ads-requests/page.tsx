@@ -26,7 +26,7 @@ type AdsRequest = {
   id?: number
   owner_type?: string
   company_id?: number
-  company_name?: string
+  name?: string
   request_type?: string
   image_url?: string
   link_url?: string
@@ -180,7 +180,7 @@ export default function AdsRequestsAdminPage() {
                           <div className="flex items-center gap-2">
                             <Building2 className="size-4 shrink-0 text-muted-foreground/60" />
                             <span className="font-medium">
-                              {r.company_name ?? <span className="text-muted-foreground italic">#{r.company_id}</span>}
+                              {r.name ?? <span className="text-muted-foreground italic">#{r.company_id}</span>}
                             </span>
                           </div>
                           <div className="mt-1 flex flex-wrap items-center gap-1.5">

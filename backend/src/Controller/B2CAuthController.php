@@ -130,8 +130,8 @@ final class B2CAuthController extends AbstractController
             }
 
             if ($customer instanceof B2BCompany || $customer instanceof B2BMarket) {
-                $customer->setCompanyName($companyName);
-                $customer->setCompanyMarket($companyMarket);
+                $customer->setName($companyName);
+                $customer->setSector($companyMarket);
                 $customer->setCompanyCountry($companyCountry !== null ? strtoupper($companyCountry) : null);
                 $customer->setCompanyWebsite($companyWebsite);
                 $customer->setB2bStatus('PENDING');
@@ -244,8 +244,8 @@ final class B2CAuthController extends AbstractController
             'last_login' => $customer->getLastLogin()?->format(\DateTimeInterface::ATOM),
             'account_type' => $accountType,
             'account_status' => $customer->getAccountStatus(),
-            'company_name' => $customer instanceof B2BCompany || $customer instanceof B2BMarket ? $customer->getCompanyName() : null,
-            'company_market' => $customer instanceof B2BCompany || $customer instanceof B2BMarket ? $customer->getCompanyMarket() : null,
+            'name' => $customer instanceof B2BCompany || $customer instanceof B2BMarket ? $customer->getName() : null,
+            'sector' => $customer instanceof B2BCompany || $customer instanceof B2BMarket ? $customer->getSector() : null,
             'company_country' => $customer instanceof B2BCompany || $customer instanceof B2BMarket ? $customer->getCompanyCountry() : null,
             'company_website' => $customer instanceof B2BCompany || $customer instanceof B2BMarket ? $customer->getCompanyWebsite() : null,
             'b2b_status' => $customer instanceof B2BCompany || $customer instanceof B2BMarket ? $customer->getB2bStatus() : null,

@@ -26,7 +26,7 @@ type SponsoredItem = {
   ends_at: string | null
   created_at: string | null
   company_id: number | null
-  company_name: string | null
+  name: string | null
   seller_id: number | null
   ads_request_id: number | null
 }
@@ -144,7 +144,7 @@ export default function AdminSponsoredProductsPage() {
                             <p className="text-xs text-muted-foreground">{item.product_brand}</p>
                           )}
                         </td>
-                        <td className="px-4 py-3 text-muted-foreground">{item.company_name ?? "-"}</td>
+                        <td className="px-4 py-3 text-muted-foreground">{item.name ?? "-"}</td>
                         <td className="px-4 py-3">
                           <Badge className={`text-xs ${STATUS_BADGES[item.status] ?? ""}`}>
                             {item.status}

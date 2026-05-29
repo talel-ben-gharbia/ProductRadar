@@ -77,7 +77,7 @@ export default function B2BAIAssistant() {
     }
   }
 
-  const brandName = summary?.user?.company_name ?? "your brand"
+  const brandName = summary?.user?.name ?? "your brand"
 
   return (
     <>

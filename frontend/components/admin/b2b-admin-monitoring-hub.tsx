@@ -22,7 +22,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 type Company = {
   id: number
   email: string
-  company_name: string
+  name: string
   status: string
   is_verified: boolean
   joined_at: string
@@ -33,7 +33,7 @@ type Company = {
 type Market = {
   id: number
   email: string
-  company_name: string
+  name: string
   status: string
   is_verified: boolean
   joined_at: string
@@ -44,7 +44,7 @@ type B2BReport = {
   id: number
   type: string
   status: string
-  company_name?: string
+  name?: string
   market_name?: string
   created_at: string
   file_url?: string
@@ -141,7 +141,7 @@ export default function B2BAdminMonitoringHub() {
                     {companies.slice(0, 10).map((c) => (
                       <TableRow key={c.id} className="transition-colors hover:bg-muted/10">
                         <TableCell>
-                          <div className="font-medium">{c.company_name}</div>
+                          <div className="font-medium">{c.name}</div>
                           <div className="text-xs text-muted-foreground">{c.email}</div>
                         </TableCell>
                         <TableCell>
@@ -180,7 +180,7 @@ export default function B2BAdminMonitoringHub() {
                         {markets.slice(0, 10).map((m) => (
                           <TableRow key={m.id} className="transition-colors hover:bg-muted/10">
                             <TableCell>
-                              <div className="font-medium">{m.company_name}</div>
+                              <div className="font-medium">{m.name}</div>
                               <div className="text-xs text-muted-foreground">{m.email}</div>
                             </TableCell>
                             <TableCell>
@@ -222,7 +222,7 @@ export default function B2BAdminMonitoringHub() {
                          <FileText className="size-4 text-indigo-600" />
                        </div>
                        <div className="min-w-0 flex-1">
-                         <p className="text-xs font-semibold truncate">{rep.company_name || rep.market_name}</p>
+                          <p className="text-xs font-semibold truncate">{rep.name || rep.market_name}</p>
                          <p className="text-[10px] text-muted-foreground mt-0.5">{rep.type} • {new Date(rep.created_at).toLocaleDateString()}</p>
                        </div>
                        {rep.file_url && (

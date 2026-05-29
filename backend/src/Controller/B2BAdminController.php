@@ -327,8 +327,8 @@ final class B2BAdminController extends AbstractController
                         'created_at' => $sub->getCreatedAt()?->format(\DateTimeInterface::ATOM),
                         'company_id' => $company?->getId(),
                         'market_id' => $market?->getId(),
-                        'company_name' => $company?->getCompanyName(),
-                        'market_name' => $market?->getCompanyName(),
+                        'name' => $company?->getName(),
+                        'market_name' => $market?->getName(),
                     ];
                 }, $items),
         ]);
@@ -371,8 +371,8 @@ final class B2BAdminController extends AbstractController
                     'status' => $r->getStatus(),
                     'period_start' => $r->getPeriodStart()?->format(\DateTimeInterface::ATOM),
                     'period_end' => $r->getPeriodEnd()?->format(\DateTimeInterface::ATOM),
-                    'company_name' => $r->getCompany()?->getCompanyName(),
-                    'market_name' => $r->getMarket()?->getCompanyName(),
+                    'name' => $r->getCompany()?->getName(),
+                    'market_name' => $r->getMarket()?->getName(),
                     'created_at' => $r->getCreatedAt()?->format(\DateTimeInterface::ATOM),
                     'file_url' => $r->getFilePath(),
                 ], $items),
@@ -435,8 +435,8 @@ final class B2BAdminController extends AbstractController
                         'activated_at' => $sub->getActivatedAt()?->format(\DateTimeInterface::ATOM),
                         'company_id' => $company?->getId(),
                         'market_id' => $market?->getId(),
-                        'company_name' => $company?->getCompanyName(),
-                        'market_name' => $market?->getCompanyName(),
+                        'name' => $company?->getName(),
+                        'market_name' => $market?->getName(),
                     ];
                 }, $items),
                 'pagination' => [
@@ -494,7 +494,7 @@ final class B2BAdminController extends AbstractController
                     'image_mime_type' => $ar->getImageMimeType(),
                     'status' => $ar->getStatus(),
                     'company_id' => $ar->getCompany()?->getId(),
-                    'company_name' => $ar->getCompany()?->getCompanyName(),
+                    'name' => $ar->getCompany()?->getName(),
                     'created_at' => $ar->getCreatedAt()?->format(\DateTimeInterface::ATOM),
                     'updated_at' => $ar->getUpdatedAt()?->format(\DateTimeInterface::ATOM),
                 ], $items),
@@ -552,7 +552,7 @@ final class B2BAdminController extends AbstractController
                     return [
                         'id' => $c->getId(),
                         'email' => $c->getEmail(),
-                        'company_name' => $c->getCompanyName(),
+                        'name' => $c->getName(),
                         'status' => $c->getB2bStatus(),
                         'is_verified' => $c->isVerified(),
                         'joined_at' => $c->getJoinedAt()?->format(\DateTimeInterface::ATOM),
@@ -598,7 +598,7 @@ final class B2BAdminController extends AbstractController
                     return [
                         'id' => $m->getId(),
                         'email' => $m->getEmail(),
-                        'company_name' => $m->getCompanyName(),
+                        'name' => $m->getName(),
                         'status' => $m->getB2bStatus(),
                         'is_verified' => $m->isVerified(),
                         'joined_at' => $m->getJoinedAt()?->format(\DateTimeInterface::ATOM),

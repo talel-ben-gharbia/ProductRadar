@@ -324,7 +324,7 @@ final class B2BVerificationController extends AbstractController
             $responsePayload = $this->serializeApprovedUser($approvedUser);
             $responsePayload['reviewer_note'] = $reviewerNote;
 
-            $this->sendApprovalConfirmationEmail((string) $approvedUser->getEmail(), (string) $approvedUser->getCompanyName(), $logger, $mailer);
+            $this->sendApprovalConfirmationEmail((string) $approvedUser->getEmail(), (string) $approvedUser->getName(), $logger, $mailer);
         }
 
         $logger->info('B2B moderation decision completed', [
@@ -395,8 +395,8 @@ final class B2BVerificationController extends AbstractController
         $user->setIsActive(true);
         $user->setAccountStatus('ACTIVE');
 
-        $user->setCompanyName((string) $partnerRequest->getCompanyName());
-        $user->setCompanyMarket((string) $partnerRequest->getCompanyMarket());
+        $user->setName((string) $partnerRequest->getCompanyName());
+        $user->setSector((string) $partnerRequest->getCompanyMarket());
         $user->setCompanyCountry((string) $partnerRequest->getCompanyCountry());
         $user->setCompanyWebsite((string) $partnerRequest->getCompanyWebsite());
         $user->setB2bStatus('APPROVED');
@@ -613,8 +613,8 @@ final class B2BVerificationController extends AbstractController
             'account_type' => $user instanceof B2BMarket ? 'B2B_MARKET' : 'B2B_COMPANY',
             'b2b_status' => $user->getB2bStatus(),
             'account_status' => $user->getAccountStatus(),
-            'company_name' => $user->getCompanyName(),
-            'company_market' => $user->getCompanyMarket(),
+            'name' => $user->getName(),
+            'sector' => $user->getSector(),
             'company_country' => $user->getCompanyCountry(),
             'company_website' => $user->getCompanyWebsite(),
         ];

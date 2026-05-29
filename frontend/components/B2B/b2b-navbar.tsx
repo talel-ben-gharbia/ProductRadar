@@ -51,7 +51,7 @@ function B2BNavbar() {
           <div>
             <p className="text-sm font-semibold tracking-tight">{pageTitle}</p>
             <p className="text-xs text-muted-foreground">
-              {mode === "market" ? "Market Intelligence" : "Seller Intelligence"} • {summary?.user?.company_name ?? "Workspace"}
+              {mode === "market" ? "Market Intelligence" : "Seller Intelligence"} • {summary?.user?.name ?? "Workspace"}
             </p>
           </div>
         </div>

@@ -48,7 +48,7 @@ final class RefreshShelfSnapshotCommand extends Command
         foreach ($markets as $market) {
             $brandId = $market->getBrandEntity()?->getId();
             if ($brandId === null) {
-                $io->writeln(sprintf('  Skipping market #%d (%s): no brand_id set', $market->getId(), $market->getCompanyName()));
+                $io->writeln(sprintf('  Skipping market #%d (%s): no brand_id set', $market->getId(), $market->getName()));
                 continue;
             }
 
@@ -65,7 +65,7 @@ final class RefreshShelfSnapshotCommand extends Command
             );
 
             if (empty($brandRows)) {
-                $io->writeln(sprintf('  Market #%d (%s): no brand products found for brand_id #%d', $market->getId(), $market->getCompanyName(), $brandId));
+                $io->writeln(sprintf('  Market #%d (%s): no brand products found for brand_id #%d', $market->getId(), $market->getName(), $brandId));
                 continue;
             }
 
@@ -107,7 +107,7 @@ final class RefreshShelfSnapshotCommand extends Command
                 $conn->insert('market_shelf_snapshot', [
                     'market_id' => $market->getId(),
                     'category_id' => $cat['category_id'],
-                    'seller_name' => $market->getCompanyName() ?: 'Unknown',
+                    'seller_name' => $market->getName() ?: 'Unknown',
                     'share_percent' => $share,
                     'listing_count' => $cat['listing_count'],
                     'total_products' => $total,
@@ -117,7 +117,7 @@ final class RefreshShelfSnapshotCommand extends Command
                 ++$count;
             }
 
-            $io->writeln(sprintf('  Market #%d (%s): %d categories', $market->getId(), $market->getCompanyName(), count($categories)));
+            $io->writeln(sprintf('  Market #%d (%s): %d categories', $market->getId(), $market->getName(), count($categories)));
         }
 
         // Backfill last week if missing (first run: copy this week with slight variation)

@@ -42,7 +42,7 @@ final class B2BNotificationService
             sprintf('⚠ Stock Alert: %s %s OOS at %d Sellers', $brandName, $productName, $count),
             sprintf(
                 "Hello %s,\n\n%s\n\nThis alert was triggered because a product you follow is now out of stock at multiple major sellers.\n\nCheck your dashboard for details.\n\nBest regards,\nProductRadar Team",
-                $market->getCompanyName() ?? 'Valued Partner',
+                $market->getName() ?? 'Valued Partner',
                 $message
             )
         );
@@ -61,7 +61,7 @@ final class B2BNotificationService
             sprintf('⚠ Price Spike Alert: %s — Avg up %.0f%%', $category, $spikePct),
             sprintf(
                 "Hello %s,\n\n%s\n\nInvestigate your dashboard to see which products are affected.\n\nBest regards,\nProductRadar Team",
-                $market->getCompanyName() ?? 'Valued Partner',
+                $market->getName() ?? 'Valued Partner',
                 $message
             )
         );
@@ -82,7 +82,7 @@ final class B2BNotificationService
             sprintf('⬇ Shelf Share Alert: %s lost %.0f%% in %s', $brandName, $drop, $category),
             sprintf(
                 "Hello %s,\n\n%s\n\nReview your category performance on the dashboard.\n\nBest regards,\nProductRadar Team",
-                $market->getCompanyName() ?? 'Valued Partner',
+                $market->getName() ?? 'Valued Partner',
                 $message
             )
         );
@@ -103,7 +103,7 @@ final class B2BNotificationService
             sprintf('😐 Sentiment Shift: %s NSS dropped %d pts', $brandName, $drop),
             sprintf(
                 "Hello %s,\n\n%s\n\nCheck the reviews & sentiment section for details.\n\nBest regards,\nProductRadar Team",
-                $market->getCompanyName() ?? 'Valued Partner',
+                $market->getName() ?? 'Valued Partner',
                 $message
             )
         );
@@ -213,7 +213,7 @@ final class B2BNotificationService
             sprintf('Your Sponsorship for "%s" is Live!', $productName),
             sprintf(
                 "Hello %s,\n\nGreat news! Your sponsorship request for \"%s\" has been approved.\n\nYour product will appear as a sponsored item on our marketplace until %s.\n\nTrack your sponsorship performance from your dashboard.\n\nBest regards,\nProductRadar Team",
-                $company->getCompanyName() ?? 'Valued Partner',
+                $company->getName() ?? 'Valued Partner',
                 $productName,
                 $endsAt,
             )
@@ -234,7 +234,7 @@ final class B2BNotificationService
             sprintf('Update on Your Sponsorship Request for "%s"', $productName),
             sprintf(
                 "Hello %s,\n\nUnfortunately, your sponsorship request for \"%s\" was not approved at this time.\n\nIf you have any questions, please contact our support team.\n\nBest regards,\nProductRadar Team",
-                $company->getCompanyName() ?? 'Valued Partner',
+                $company->getName() ?? 'Valued Partner',
                 $productName,
             )
         );
@@ -254,7 +254,7 @@ final class B2BNotificationService
             sprintf('Your Sponsorship for "%s" Has Ended', $productName),
             sprintf(
                 "Hello %s,\n\nYour sponsorship for \"%s\" has ended.\n\nTo continue promoting your product on our marketplace, submit a new sponsorship request from your dashboard.\n\nBest regards,\nProductRadar Team",
-                $company->getCompanyName() ?? 'Valued Partner',
+                $company->getName() ?? 'Valued Partner',
                 $productName,
             )
         );
@@ -278,7 +278,7 @@ final class B2BNotificationService
             sprintf('Your %s Subscription is Approved!', $planLabel),
             sprintf(
                 "Hello %s,\n\nGreat news! Your %s subscription request has been approved by our team.\n\nPlan: %s\nDuration: %d months\n\nYou can now access all the features included in your plan from your dashboard.\n\nBest regards,\nProductRadar Team",
-                $owner->getCompanyName() ?? 'Valued Partner',
+                $owner->getName() ?? 'Valued Partner',
                 $planLabel,
                 $planLabel,
                 (int) ($subscription->getDurationMonths() ?? 12),
@@ -300,7 +300,7 @@ final class B2BNotificationService
             sprintf('Update on Your %s Subscription Request', $planLabel),
             sprintf(
                 "Hello %s,\n\nUnfortunately, your %s subscription request was not approved at this time.\n\nIf you have any questions or would like to discuss alternative options, please contact our support team.\n\nBest regards,\nProductRadar Team",
-                $owner->getCompanyName() ?? 'Valued Partner',
+                $owner->getName() ?? 'Valued Partner',
                 $planLabel,
             )
         );
@@ -327,7 +327,7 @@ final class B2BNotificationService
             'Your Advertising Campaign is Live!',
             sprintf(
                 "Hello %s,\n\nYour ads request #%d has been approved! Your campaign is now active.\n\nLanding page: %s\nDimensions: %s\nDuration: %s\n\nTrack your campaign performance from the dashboard.\n\nBest regards,\nProductRadar Team",
-                $owner->getCompanyName() ?? 'Valued Partner',
+                $owner->getName() ?? 'Valued Partner',
                 $adsRequest->getId(),
                 $linkUrl,
                 $dimensions,
@@ -351,7 +351,7 @@ final class B2BNotificationService
             'Update on Your Ads Request',
             sprintf(
                 "Hello %s,\n\nYour ads request #%d was not approved at this time.\n\nIf you have any questions, please reach out to our support team.\n\nBest regards,\nProductRadar Team",
-                $owner->getCompanyName() ?? 'Valued Partner',
+                $owner->getName() ?? 'Valued Partner',
                 $adsRequest->getId(),
             )
         );
@@ -373,7 +373,7 @@ final class B2BNotificationService
             'Your Subscription Has Been Renewed',
             sprintf(
                 "Hello %s,\n\nYour %s subscription has been renewed.\n\nNew expiry date: %s\n\nBest regards,\nProductRadar Team",
-                $owner->getCompanyName() ?? 'Valued Partner',
+                $owner->getName() ?? 'Valued Partner',
                 $planLabel,
                 $endDate
             )
@@ -411,7 +411,7 @@ final class B2BNotificationService
                 'to' => $emailAddress,
                 'subject' => $subject,
                 'owner_id' => $owner->getId(),
-                'owner_name' => $owner->getCompanyName(),
+                'owner_name' => $owner->getName(),
                 'owner_type' => $owner instanceof B2BCompany ? 'company' : 'market',
                 'error' => $e->getMessage(),
                 'exception' => $e,
@@ -442,7 +442,7 @@ final class B2BNotificationService
             sprintf('Your %s Subscription Expires in %d Days', $planLabel, $daysLeft),
             sprintf(
                 "Hello %s,\n\nThis is a reminder that your %s subscription will expire in %d days.\n\nExpiration date: %s\n\nPlease contact our team to renew your subscription and continue enjoying uninterrupted access to all features.\n\nBest regards,\nProductRadar Team",
-                $owner->getCompanyName() ?? 'Valued Partner',
+                $owner->getName() ?? 'Valued Partner',
                 $planLabel,
                 $daysLeft,
                 $endDate,

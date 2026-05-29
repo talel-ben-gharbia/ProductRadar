@@ -26,12 +26,12 @@ export default function DemoSettingsPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             {[
-              { icon: Building2, label: "Company Name", value: user?.company_name },
+              { icon: Building2, label: "Company Name", value: user?.name },
               { icon: Mail, label: "Email", value: user?.email },
               { icon: User, label: "Full Name", value: user?.full_name },
               { icon: Globe, label: "Website", value: user?.company_website },
               { icon: MapPin, label: "Country", value: user?.company_country },
-              { icon: Star, label: "Market / Sector", value: user?.company_market },
+              { icon: Star, label: "Market / Sector", value: user?.sector },
             ].map((field) => (
               <div key={field.label} className="flex items-center gap-3 rounded-xl border border-border/50 bg-muted/20 px-4 py-3">
                 <field.icon className="size-4 shrink-0 text-muted-foreground" />

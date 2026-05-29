@@ -28,10 +28,10 @@ class B2B extends User
     private ?string $full_name = null;
 
     #[ORM\Column(length: 255)]
-    private ?string $company_name = null;
+    private ?string $name = null;
 
     #[ORM\Column(length: 255, nullable: true)]
-    private ?string $company_market = null;
+    private ?string $sector = null;
 
     #[ORM\Column(length: 2, nullable: true)]
     private ?string $company_country = null;
@@ -66,26 +66,26 @@ class B2B extends User
         return $this;
     }
 
-    public function getCompanyName(): ?string
+    public function getName(): ?string
     {
-        return $this->company_name;
+        return $this->name;
     }
 
-    public function setCompanyName(?string $company_name): static
+    public function setName(?string $name): static
     {
-        $this->company_name = $company_name;
+        $this->name = $name;
 
         return $this;
     }
 
-    public function getCompanyMarket(): ?string
+    public function getSector(): ?string
     {
-        return $this->company_market;
+        return $this->sector;
     }
 
-    public function setCompanyMarket(?string $company_market): static
+    public function setSector(?string $sector): static
     {
-        $this->company_market = $company_market;
+        $this->sector = $sector;
 
         return $this;
     }

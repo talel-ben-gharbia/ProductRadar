@@ -476,7 +476,7 @@ final class B2BSponsoredController extends AbstractController
                 'height' => $campaign->getHeight(),
                 'starts_at' => $campaign->getStartsAt()?->format(\DateTimeInterface::ATOM),
                 'ends_at' => $campaign->getEndsAt()?->format(\DateTimeInterface::ATOM),
-                'company_name' => $adsRequest->getCompany()?->getCompanyName(),
+                'name' => $adsRequest->getCompany()?->getName(),
             ];
         }
 
@@ -534,7 +534,7 @@ final class B2BSponsoredController extends AbstractController
         $company = $a->getCompany();
         return $this->serialize($a) + [
             'company_id' => $company?->getId(),
-            'company_name' => $company?->getCompanyName(),
+            'name' => $company?->getName(),
             'seller_id' => $company?->getSeller()?->getId(),
             'ads_request_id' => $a->getAdsRequest()?->getId(),
         ];
