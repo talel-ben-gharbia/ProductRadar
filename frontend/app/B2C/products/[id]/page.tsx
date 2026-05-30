@@ -13,13 +13,7 @@ import ProductPriceHistoryLinearChart from "@/components/B2C/product-price-histo
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import {
-  NavigationMenu,
-  NavigationMenuContent,
-  NavigationMenuItem,
-  NavigationMenuList,
-  NavigationMenuTrigger,
-} from "@/components/ui/navigation-menu"
+
 import { Separator } from "@/components/ui/separator"
 import {
   Table,
@@ -31,6 +25,9 @@ import {
 } from "@/components/ui/table"
 import { BACKEND_URL } from "@/utils/admin/constants"
 import { COOKIE_NAME, verifyB2CSessionToken } from "@/lib/b2c-session"
+import { getServerLocale } from "@/lib/get-server-locale"
+import { serverT } from "@/lib/translations"
+import { translateCategoryName } from "@/lib/category-translations"
 import { getBestTimeToBuy } from "@/services/admin/best-time-to-buy"
 import { getRawCategories } from "@/services/admin/categories"
 import { getPriceHistory } from "@/services/admin/price-history"
@@ -316,11 +313,13 @@ async function ProductDetailContent({
   b2cSession,
   isAuthenticated,
   categoryRows,
+  locale,
 }: {
   productId: number
   b2cSession: Awaited<ReturnType<typeof verifyB2CSessionToken>>
   isAuthenticated: boolean
   categoryRows: CategoryRaw[]
+  locale: string
 }) {
   let b2bSellerId: number | null = null
   if (b2cSession?.type === "b2b_company") {
@@ -328,7 +327,7 @@ async function ProductDetailContent({
       const controller = new AbortController()
       const timeoutId = setTimeout(() => controller.abort(), 3000)
       const response = await fetch(
-        `${BACKEND_URL}/api/b2b/workspace/${encodeURIComponent(b2cSession.firebase_uid)}/summary`,
+        `${BACKEND_URL}/api/b2b/workspace/${encodeURIComponent(b2cSession.firebase_uid)}/summary?lang=${locale}`,
         { cache: "no-store", signal: controller.signal }
       )
       clearTimeout(timeoutId)
@@ -351,15 +350,15 @@ async function ProductDetailContent({
 
   try {
     const [allProducts, productListings, allSellers, history, sponsoredRes] = await Promise.all([
-      getProducts(),
-      getProductListings(productId),
-      getSellers()
+      getProducts(undefined, locale),
+      getProductListings(productId, undefined, undefined, undefined, locale),
+      getSellers(locale)
         .then((rows) => rows as SellerWithLogo[])
         .catch(() => []),
       isAuthenticated
-        ? getPriceHistory(productId).catch(() => [])
+        ? getPriceHistory(productId, undefined, locale).catch(() => [])
         : Promise.resolve([]),
-      fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/b2b/b2c/sponsored-products?product_id=${productId}`, { cache: "no-store" })
+      fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/b2b/b2c/sponsored-products?product_id=${productId}&lang=${locale}`, { cache: "no-store" })
         .then((res) => res.ok ? res.json() : { items: [] })
         .catch(() => ({ items: [] })),
     ])
@@ -376,7 +375,7 @@ async function ProductDetailContent({
     if (isAuthenticated && b2cSession) {
       try {
         const subscriptionResponse = await fetch(
-          `${BACKEND_URL}/api/b2c/subscription/${encodeURIComponent(b2cSession.firebase_uid)}`,
+          `${BACKEND_URL}/api/b2c/subscription/${encodeURIComponent(b2cSession.firebase_uid)}?lang=${locale}`,
           { cache: "no-store" }
         )
 
@@ -395,7 +394,7 @@ async function ProductDetailContent({
 
     if (isAuthenticated && b2cSession) {
       try {
-        const res = await getBestTimeToBuy(productId, b2cSession.id)
+        const res = await getBestTimeToBuy(productId, b2cSession.id, locale)
         bestTimePrediction = res.prediction ?? null
         bestTimeFriendlyMessage = res.friendly_message ?? null
       } catch (error) {
@@ -454,11 +453,11 @@ async function ProductDetailContent({
           <div className="px-4 py-3 text-sm text-muted-foreground">
             <div className="flex flex-wrap items-center gap-2">
               <Link href="/" className="hover:text-foreground">
-                Accueil
+                {serverT(locale, "detail.home")}
               </Link>
               <span>/</span>
               <Link href="/B2C/products" className="hover:text-foreground">
-                Produits
+                {serverT(locale, "detail.products")}
               </Link>
               {breadcrumbTrail.map((crumb) => (
                 <span key={crumb.id} className="flex items-center gap-2">
@@ -491,7 +490,7 @@ async function ProductDetailContent({
                   />
                 ) : (
                   <div className="flex h-56 items-center justify-center border bg-background text-sm text-muted-foreground sm:h-64">
-                    No image available
+                    {serverT(locale, "detail.no_image")}
                   </div>
                 )}
 
@@ -510,14 +509,14 @@ async function ProductDetailContent({
                 </h2>
 
                 <p className="text-sm leading-7 text-muted-foreground">
-                  {product.description ||
-                    "No description available for this product."}
+                {product.description ||
+                  serverT(locale, "detail.no_description")}
                 </p>
 
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="border border-orange-200 bg-orange-50 px-3 py-2">
                     <p className="text-xs tracking-wide text-orange-700 uppercase">
-                      Best price
+                      {serverT(locale, "detail.best_price")}
                     </p>
                     <p className="mt-1 text-2xl font-bold text-orange-600">
                       {toMoney(bestPrice)}
@@ -525,7 +524,7 @@ async function ProductDetailContent({
                   </div>
                   <div className="border bg-background px-3 py-2">
                     <p className="text-xs tracking-wide text-muted-foreground uppercase">
-                      Total offers
+                      {serverT(locale, "detail.total_offers")}
                     </p>
                     <p className="mt-1 text-2xl font-semibold">
                       {activeListings.length}
@@ -536,7 +535,7 @@ async function ProductDetailContent({
                 {specs.length > 0 ? (
                   <div className="border bg-muted/20 p-3">
                     <p className="mb-2 text-xs tracking-wide text-muted-foreground uppercase">
-                      Specifications
+                      {serverT(locale, "detail.specifications")}
                     </p>
                     <div className="grid gap-2 text-sm sm:grid-cols-2">
                       {specs.map((item) => (
@@ -568,12 +567,11 @@ async function ProductDetailContent({
                   ) : (
                     <Card className="rounded-xl border">
                       <CardHeader>
-                        <CardTitle>Evolution du prix</CardTitle>
+                        <CardTitle>{serverT(locale, "detail.price_history")}</CardTitle>
                       </CardHeader>
                       <CardContent className="space-y-3">
                         <p className="text-sm text-muted-foreground">
-                          Connect your B2C account to unlock the product
-                          history chart.
+                          {serverT(locale, "detail.authenticate")}
                         </p>
                         <Button
                           asChild
@@ -581,7 +579,7 @@ async function ProductDetailContent({
                           className="w-full rounded-lg"
                         >
                           <Link href="/B2C/products">
-                            Authenticate from the top bar
+                            {serverT(locale, "detail.authenticate_btn")}
                           </Link>
                         </Button>
                       </CardContent>
@@ -595,9 +593,9 @@ async function ProductDetailContent({
           <section>
             <Card className="rounded-xl border-border/70">
               <CardHeader className="flex-row items-center justify-between space-y-0">
-                <CardTitle>Compare offers</CardTitle>
+                <CardTitle>{serverT(locale, "detail.compare_offers")}</CardTitle>
                 <Badge variant="secondary">
-                  {activeListings.length} offers
+                  {activeListings.length} {serverT(locale, "detail.offers")}
                 </Badge>
               </CardHeader>
 
@@ -606,13 +604,13 @@ async function ProductDetailContent({
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Seller</TableHead>
-                        <TableHead>Price</TableHead>
-                        <TableHead>Old price</TableHead>
-                        <TableHead>Availability</TableHead>
-                        <TableHead>Trust</TableHead>
-                        <TableHead>Updated</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
+                        <TableHead>{serverT(locale, "detail.seller")}</TableHead>
+                        <TableHead>{serverT(locale, "detail.price")}</TableHead>
+                        <TableHead>{serverT(locale, "detail.old_price")}</TableHead>
+                        <TableHead>{serverT(locale, "detail.availability")}</TableHead>
+                        <TableHead>{serverT(locale, "detail.trust")}</TableHead>
+                        <TableHead>{serverT(locale, "detail.updated")}</TableHead>
+                        <TableHead className="text-right">{serverT(locale, "detail.actions")}</TableHead>
                       </TableRow>
                     </TableHeader>
 
@@ -623,7 +621,7 @@ async function ProductDetailContent({
                             colSpan={7}
                             className="py-8 text-center text-muted-foreground"
                           >
-                            No listings found for this product.
+                            {serverT(locale, "detail.no_listings")}
                           </TableCell>
                         </TableRow>
                       ) : (
@@ -682,7 +680,7 @@ async function ProductDetailContent({
                                           variant="secondary"
                                           className="ml-2 border border-emerald-200 bg-emerald-100 text-[9px] tracking-wider text-emerald-700 uppercase dark:border-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300"
                                         >
-                                          You
+                                          {serverT(locale, "detail.you")}
                                         </Badge>
                                       )}
                                     </p>
@@ -722,12 +720,12 @@ async function ProductDetailContent({
                               </TableCell>
                               <TableCell>
                                 {listing.availability === null ? (
-                                  <Badge variant="outline">Unknown</Badge>
+                                  <Badge variant="outline">{serverT(locale, "detail.unknown")}</Badge>
                                 ) : listing.availability ? (
-                                  <Badge variant="secondary">In stock</Badge>
+                                  <Badge variant="secondary">{serverT(locale, "detail.in_stock")}</Badge>
                                 ) : (
                                   <Badge variant="destructive">
-                                    Out of stock
+                                    {serverT(locale, "detail.out_of_stock")}
                                   </Badge>
                                 )}
                               </TableCell>
@@ -752,7 +750,7 @@ async function ProductDetailContent({
                                       target="_blank"
                                       rel="noreferrer"
                                     >
-                                      Visit offer
+                                      {serverT(locale, "detail.visit_store")}
                                     </a>
                                   </Button>
                                 </div>
@@ -798,6 +796,7 @@ export default async function B2CProductDetailsPage({
     ? await verifyB2CSessionToken(sessionToken)
     : null
   const isAuthenticated = Boolean(b2cSession)
+  const locale = await getServerLocale()
 
   const categoryRows = await getRawCategories().catch(() => [] as CategoryRaw[])
   const rootCategories = buildRootCategoriesForMenu(categoryRows)
@@ -805,80 +804,73 @@ export default async function B2CProductDetailsPage({
   return (
     <div className="min-h-svh bg-muted/30">
       <B2CNavbar
-        title="Product radar"
+        title={serverT(locale, "nav.brand")}
         backHref="/B2C/products"
-        backLabel="Back to products"
+        backLabel={serverT(locale, "general.back")}
       />
 
       <section className="border-b bg-background">
         <div className="w-full px-4 py-2 sm:px-10">
           {rootCategories.length > 0 ? (
-            <NavigationMenu
-              viewport={false}
-              className="w-full max-w-none justify-start"
-            >
-              <NavigationMenuList className="w-full justify-start gap-2">
-                {rootCategories.map((category) => (
-                  <NavigationMenuItem key={category.id} className="static">
-                    <NavigationMenuTrigger className="h-10 rounded-lg px-4 text-sm font-medium">
-                      {category.name}
-                    </NavigationMenuTrigger>
+            <nav className="flex w-full items-center gap-2 overflow-x-auto">
+              {rootCategories.map((category) => (
+                <div key={category.id} className="group/cat relative">
+                  <button
+                    type="button"
+                    className="inline-flex h-10 items-center gap-1 rounded-xl px-4 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+                  >
+                    {translateCategoryName(locale, category.name)}
+                    <svg className="ml-1 h-3 w-3 transition-transform group-hover/cat:rotate-180" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                  </button>
 
-                    <NavigationMenuContent className="absolute top-full left-0 z-50 mt-2 w-screen max-w-300 rounded-xl border p-6 shadow-lg">
-                      {category.under.length > 0 ? (
-                        <div className="grid w-full grid-cols-1 gap-x-8 gap-y-6 pr-1 md:grid-cols-2 lg:grid-cols-4">
-                          {category.under.map((item) => (
-                            <div
-                              key={`${category.id}-${item.id}`}
-                              className="space-y-2"
+                  <div className="pointer-events-none absolute left-0 top-full z-50 mt-2 w-screen max-w-[75rem] scale-95 rounded-xl border bg-popover p-6 opacity-0 shadow-lg transition-all duration-200 group-hover/cat:pointer-events-auto group-hover/cat:scale-100 group-hover/cat:opacity-100">
+                    {category.under.length > 0 ? (
+                      <div className="grid w-full grid-cols-1 gap-x-8 gap-y-6 pr-1 md:grid-cols-2 lg:grid-cols-4">
+                        {category.under.map((item) => (
+                          <div key={`${category.id}-${item.id}`} className="space-y-2">
+                            <Link
+                              href={`/B2C/products?categoryIds=${encodeURIComponent(item.allCategoryIds.join(","))}&categoryName=${encodeURIComponent(item.name)}`}
+                              className="block text-sm font-semibold text-foreground hover:text-primary"
                             >
-                              <Link
-                                href={`/B2C/products?categoryIds=${encodeURIComponent(item.allCategoryIds.join(","))}&categoryName=${encodeURIComponent(item.name)}`}
-                                className="block text-sm font-semibold text-foreground hover:text-primary"
-                              >
-                                {item.name}
-                              </Link>
+                              {translateCategoryName(locale, item.name)}
+                            </Link>
 
-                              {item.children.length > 0 ? (
-                                <>
-                                  <Separator />
-                                  <ul className="mt-2 space-y-1">
-                                    {item.children.map((child) => (
-                                      <li
-                                        key={`${category.id}-${item.id}-${child.id}`}
-                                        className="text-sm leading-6"
+                            {item.children.length > 0 ? (
+                              <>
+                                <Separator />
+                                <ul className="mt-2 space-y-1">
+                                  {item.children.map((child) => (
+                                    <li key={`${category.id}-${item.id}-${child.id}`} className="text-sm leading-6">
+                                      <Link
+                                        href={`/B2C/products?categoryIds=${encodeURIComponent(child.allCategoryIds.join(","))}&categoryName=${encodeURIComponent(child.name)}`}
+                                        className="text-muted-foreground hover:text-primary"
                                       >
-                                        <Link
-                                          href={`/B2C/products?categoryIds=${encodeURIComponent(child.allCategoryIds.join(","))}&categoryName=${encodeURIComponent(child.name)}`}
-                                          className="text-muted-foreground hover:text-primary"
-                                        >
-                                          {child.name}
-                                        </Link>
-                                      </li>
-                                    ))}
-                                  </ul>
-                                </>
-                              ) : (
-                                <p className="mt-2 text-sm text-muted-foreground">
-                                  No child categories
-                                </p>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="text-sm text-muted-foreground">
-                          No under categories
-                        </p>
-                      )}
-                    </NavigationMenuContent>
-                  </NavigationMenuItem>
-                ))}
-              </NavigationMenuList>
-            </NavigationMenu>
+                                        {translateCategoryName(locale, child.name)}
+                                      </Link>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </>
+                            ) : (
+                              <p className="mt-2 text-sm text-muted-foreground">
+                                {serverT(locale, "detail.no_under_categories")}
+                              </p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        {serverT(locale, "detail.no_under_categories")}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </nav>
           ) : (
             <p className="px-2 py-1 text-sm text-muted-foreground">
-              No categories available
+              {serverT(locale, "detail.no_categories")}
             </p>
           )}
         </div>
@@ -890,6 +882,7 @@ export default async function B2CProductDetailsPage({
           b2cSession={b2cSession}
           isAuthenticated={isAuthenticated}
           categoryRows={categoryRows}
+          locale={locale}
         />
       </Suspense>
     </div>

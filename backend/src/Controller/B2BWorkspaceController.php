@@ -2679,12 +2679,58 @@ final class B2BWorkspaceController extends AbstractController
         }, $listings);
     }
 
+    private function computeRealCounts(B2B $user, EntityManagerInterface $entityManager): array
+    {
+        $conn = $entityManager->getConnection();
+
+        if ($user instanceof B2BCompany) {
+            $sellerId = $user->getSeller()?->getId();
+            if ($sellerId === null) {
+                return ['products_count' => 0, 'listings_count' => 0, 'in_stock_count' => 0, 'out_of_stock_count' => 0];
+            }
+            $row = $conn->fetchAssociative(
+                'SELECT COUNT(*) as listings_count,
+                        COUNT(DISTINCT pl.product_id) as products_count,
+                        COUNT(*) FILTER (WHERE pl.availability = true) as in_stock_count,
+                        COUNT(*) FILTER (WHERE pl.availability = false) as out_of_stock_count
+                 FROM product_listing pl
+                 WHERE pl.seller_id = :sellerId AND pl.is_active = true',
+                ['sellerId' => $sellerId]
+            );
+        } else {
+            $brandId = $user->getBrandEntity()?->getId();
+            if ($brandId === null) {
+                return ['products_count' => 0, 'listings_count' => 0, 'in_stock_count' => 0, 'out_of_stock_count' => 0];
+            }
+            $row = $conn->fetchAssociative(
+                'SELECT COUNT(*) as listings_count,
+                        COUNT(DISTINCT pl.product_id) as products_count,
+                        COUNT(*) FILTER (WHERE pl.availability = true) as in_stock_count,
+                        COUNT(*) FILTER (WHERE pl.availability = false) as out_of_stock_count
+                 FROM product_listing pl
+                 JOIN product p ON p.id = pl.product_id
+                 WHERE p.brand_id = :brandId AND pl.is_active = true',
+                ['brandId' => $brandId]
+            );
+        }
+
+        return [
+            'products_count' => (int) ($row['products_count'] ?? 0),
+            'listings_count' => (int) ($row['listings_count'] ?? 0),
+            'in_stock_count' => (int) ($row['in_stock_count'] ?? 0),
+            'out_of_stock_count' => (int) ($row['out_of_stock_count'] ?? 0),
+        ];
+    }
+
     private function buildWorkspaceMetrics(B2B $user, array $rows, EntityManagerInterface $entityManager): array
     {
+        // Use direct SQL counts instead of counting from limited $rows array
+        $realCounts = $this->computeRealCounts($user, $entityManager);
+
         $trustScores = array_values(array_filter(array_map(static fn (array $row): ?float => is_numeric($row['trust_score'] ?? null) ? (float) $row['trust_score'] : null, $rows)));
         $averageTrustScore = count($trustScores) > 0 ? round(array_sum($trustScores) / count($trustScores), 2) : null;
-        $inStockCount = count(array_filter($rows, static fn (array $row): bool => ($row['availability'] ?? null) === true));
-        $outOfStockCount = count(array_filter($rows, static fn (array $row): bool => ($row['availability'] ?? null) === false));
+        $inStockCount = $realCounts['in_stock_count'];
+        $outOfStockCount = $realCounts['out_of_stock_count'];
         $notificationsCount = count($this->fetchWorkspaceNotifications($user, $entityManager, 1000));
 
         $sevenDaysAgo = (new \DateTimeImmutable())->modify('-7 days');
@@ -2757,9 +2803,9 @@ final class B2BWorkspaceController extends AbstractController
 
             $metrics = [
                 'mode' => 'vendor',
-                'products_count' => $productsCount,
+                'products_count' => $realCounts['products_count'],
                 'new_products_this_week' => $newThisWeek,
-                'listings_count' => count($rows),
+                'listings_count' => $realCounts['listings_count'],
                 'average_trust_score' => $averageTrustScore,
                 'in_stock_count' => $inStockCount,
                 'out_of_stock_count' => $outOfStockCount,
@@ -2784,8 +2830,8 @@ final class B2BWorkspaceController extends AbstractController
         $metrics = [
             'mode' => 'market',
             'brand_name' => $user->getName(),
-            'products_count' => count(array_unique(array_filter(array_map(static fn (array $row): ?int => isset($row['productId']) ? (int) $row['productId'] : null, $rows)))),
-            'listings_count' => count($rows),
+            'products_count' => $realCounts['products_count'],
+            'listings_count' => $realCounts['listings_count'],
             'average_trust_score' => $averageTrustScore,
             'in_stock_count' => $inStockCount,
             'out_of_stock_count' => $outOfStockCount,

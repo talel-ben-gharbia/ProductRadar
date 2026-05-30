@@ -28,7 +28,7 @@ class ProductListingRepository extends ServiceEntityRepository
      * @param int $limit number of items per page
      * @return array<int, array<string, mixed>>
      */
-    public function findListingRows(?int $productId = null, ?int $sellerId = null, int $page = 1, int $limit = 0): array
+    public function findListingRows(?int $productId = null, ?int $sellerId = null, int $page = 1, int $limit = 0, array $categoryIds = []): array
     {
         $queryBuilder = $this->createBaseRowsQueryBuilder();
 
@@ -42,6 +42,12 @@ class ProductListingRepository extends ServiceEntityRepository
             $queryBuilder
                 ->andWhere('s.id = :sellerId')
                 ->setParameter('sellerId', $sellerId);
+        }
+
+        if (!empty($categoryIds)) {
+            $queryBuilder
+                ->andWhere('c.id IN (:categoryIds)')
+                ->setParameter('categoryIds', $categoryIds, ArrayParameterType::INTEGER);
         }
 
         // Apply ordering and pagination to bound memory usage.

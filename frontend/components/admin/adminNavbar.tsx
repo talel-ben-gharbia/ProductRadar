@@ -7,6 +7,7 @@ import { Radar } from "lucide-react"
 import { Avatar, AvatarFallback } from "../ui/avatar"
 import { SidebarTrigger } from "../ui/sidebar"
 import { Separator } from "../ui/separator"
+import { LanguageSelector } from "@/components/B2C/language-selector"
 
 function AdminNavbar() {
   const pathname = usePathname()
@@ -20,7 +21,7 @@ function AdminNavbar() {
   }, [pathname])
 
   return (
-    <header className="flex h-16 items-center justify-between border-b bg-background/95 px-4 backdrop-blur sm:px-6 lg:px-8">
+    <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b bg-background/95 px-4 backdrop-blur sm:px-6 lg:px-8">
       <div className="flex items-center gap-3">
         <SidebarTrigger />
         <Separator orientation="vertical" className="hidden h-5! sm:block" />
@@ -37,7 +38,9 @@ function AdminNavbar() {
         </div>
       </div>
 
-      
+      <div className="flex items-center gap-3">
+        <LanguageSelector />
+      </div>
     </header>
   )
 }

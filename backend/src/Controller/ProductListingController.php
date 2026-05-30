@@ -48,11 +48,23 @@ final class ProductListingController extends AbstractController
         $sellerId = $request->query->getInt('sellerId', 0);
         $page = $request->query->getInt('page', 1);
         $limit = $request->query->getInt('limit', 0);
+        $categoryIdsRaw = $request->query->get('categoryIds', '');
 
         $normalizedProductId = $productId > 0 ? $productId : null;
         $normalizedSellerId = $sellerId > 0 ? $sellerId : null;
 
-        $cacheKey = $this->buildListingsCacheKey($normalizedProductId, $normalizedSellerId) . ".p{$page}" . ($limit > 0 ? ".l{$limit}" : "");
+        $categoryIds = [];
+        if ($categoryIdsRaw !== '') {
+            foreach (explode(',', $categoryIdsRaw) as $raw) {
+                $parsed = (int) trim($raw);
+                if ($parsed > 0) {
+                    $categoryIds[] = $parsed;
+                }
+            }
+        }
+        sort($categoryIds);
+
+        $cacheKey = $this->buildListingsCacheKey($normalizedProductId, $normalizedSellerId) . ".p{$page}" . ($limit > 0 ? ".l{$limit}" : '') . (count($categoryIds) > 0 ? '.c' . implode('_', $categoryIds) : '');
 
         $cacheItem = $this->listingsCache->getItem($cacheKey);
         if ($cacheItem->isHit()) {
@@ -64,6 +76,7 @@ final class ProductListingController extends AbstractController
             $normalizedSellerId,
             $page,
             $limit,
+            $categoryIds,
         );
 
         $decodeBreakdown = function (mixed $value): mixed {

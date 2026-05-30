@@ -130,9 +130,9 @@ function B2BSidebar() {
               <Link href="/B2B/dashboard" className="items-start gap-3">
                 <Avatar
                   size="lg"
-                  className="rounded-xl bg-sidebar-primary text-sidebar-primary-foreground after:border-sidebar-primary/20"
+                  className="rounded-xl bg-blue-600 text-white after:border-blue-200"
                 >
-                  <AvatarFallback className="rounded-xl bg-transparent text-sidebar-primary-foreground">
+                  <AvatarFallback className="rounded-xl bg-transparent text-white">
                     <Building2 className="size-5" />
                   </AvatarFallback>
                 </Avatar>
@@ -226,7 +226,7 @@ function B2BSidebar() {
                 onClick={() => setMenuOpen((prev) => !prev)}
                 data-active={menuOpen || undefined}
               >
-                <Avatar size="lg" className="rounded-full bg-sidebar-primary text-sidebar-primary-foreground after:border-sidebar-primary/20">
+                <Avatar size="lg" className="rounded-full bg-blue-600 text-white after:border-blue-200">
                   <AvatarFallback className="bg-transparent text-white">
                     <User className="size-4" />
                   </AvatarFallback>

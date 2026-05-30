@@ -98,7 +98,8 @@ export const getFilteredScrapingLogs = withCache(async (
 
   const cacheKey = `scraping_logs:filtered:${query}`
 
-  return cachedFetch<ScrapingLogsResponse>('/api/admin/scraping-logs/filtered', {
+  return cachedFetch<ScrapingLogsResponse>(`/api/admin/scraping-logs/filtered${query}`,
+  {
     cacheKey,
     cacheTtl: 300,
   })

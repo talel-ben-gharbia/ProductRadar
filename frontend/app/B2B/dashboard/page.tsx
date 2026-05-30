@@ -46,7 +46,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { timeAgo, ordinalSuffix } from "@/components/B2B/b2b-utils"
 
 
-const CHART_COLORS = ["#6366f1", "#8b5cf6", "#a78bfa", "#c4b5fd", "#818cf8", "#7c3aed"]
+const CHART_COLORS = ["#0ea5e9", "#06b6d4", "#14b8a6", "#10b981", "#3b82f6", "#6366f1"]
 
 function fmt(value: unknown): string {
   if (typeof value === "number") return new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(value)
@@ -166,7 +166,7 @@ export default function B2BOverviewPage() {
     return (
       <div className="flex min-h-[400px] items-center justify-center">
         <div className="text-center">
-          <div className="mx-auto mb-4 size-8 animate-spin rounded-full border-4 border-indigo-500/30 border-t-indigo-500" />
+          <div className="mx-auto mb-4 size-8 animate-spin rounded-full border-4 border-blue-500/30 border-t-blue-500" />
           <p className="text-sm text-muted-foreground">Loading dashboard data...</p>
         </div>
       </div>
@@ -192,37 +192,36 @@ export default function B2BOverviewPage() {
       )}
 
       {/* Hero header with at-a-glance metrics */}
-      <section className="sticky top-0 z-10 rounded-2xl border border-border/50 bg-gradient-to-br from-indigo-950/95 via-slate-900/95 to-violet-950/95 p-6 text-white shadow-sm dark:from-indigo-950 dark:via-slate-950 dark:to-violet-950">
+      <section className="sticky top-0 z-10 rounded-2xl border border-slate-200/80 bg-gradient-to-br from-white via-blue-50/20 to-white p-6 text-slate-900 shadow-sm ring-1 ring-slate-100">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-xl font-bold tracking-tight sm:text-2xl">{summary?.user?.name ?? "B2B Workspace"}</h1>
               <Badge className={`rounded-full px-3 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
                 isGold
-                  ? "bg-amber-500/20 text-amber-400 ring-1 ring-amber-500/30"
-                  : "bg-indigo-500/20 text-indigo-300 ring-1 ring-indigo-500/30"
+                  ? "bg-amber-100 text-amber-700 ring-1 ring-amber-200"
+                  : "bg-blue-100 text-blue-700 ring-1 ring-blue-200"
               }`}>
                 {planLabel}
               </Badge>
               <Badge className={`rounded-full px-3 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
                 summary?.subscription?.active === false
-                  ? "bg-red-500/20 text-red-400 ring-1 ring-red-500/30"
-                  : "bg-emerald-500/20 text-emerald-400 ring-1 ring-emerald-500/30"
+                  ? "bg-red-100 text-red-700 ring-1 ring-red-200"
+                  : "bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200"
               }`}>
                 {summary?.subscription?.active === false ? "Expired" : "Active"}
               </Badge>
             </div>
-            <p className="text-sm text-indigo-200/70">
+            <p className="text-sm text-slate-500">
               {mode === "market" ? "Market Intelligence Dashboard" : "Vendor Performance Dashboard"}
               {summary?.subscription?.days_remaining != null && (
-                <span className="ml-3 text-xs text-indigo-300/50">
+                <span className="ml-3 text-xs text-slate-400">
                   {summary.subscription.days_remaining} days remaining
                 </span>
               )}
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <Button variant="secondary" size="sm" onClick={refreshAll} className="h-8 gap-1.5 bg-white/10 text-xs text-white hover:bg-white/20">
+          <div className="flex items-center gap-2">              <Button variant="outline" size="sm" onClick={refreshAll} className="h-8 gap-1.5 text-xs">
               <RefreshCw className="size-3.5" />
               Refresh
             </Button>
@@ -240,16 +239,16 @@ export default function B2BOverviewPage() {
               ? (Number(trustScoreTrend[trustScoreTrend.length - 1]?.avg_score ?? 0) - Number(trustScoreTrend[0]?.avg_score ?? 0))
               : 0
             const kpiItems = [
-              { label: "Products", value: productsCount, sub: newProductsThisWeek > 0 ? `+${newProductsThisWeek} this week` : null, color: "text-indigo-300" },
-              { label: "Listings", value: listingsCount, sub: null, color: "text-violet-300" },
-              { label: "Avg Trust Score", value: avgTrust, sub: trustTrend !== 0 ? `${trustTrend > 0 ? "▲" : "▼"} ${Math.abs(trustTrend).toFixed(1)} pts` : "out of 100", color: "text-emerald-300" },
-              { label: mode === "market" ? "Avg Shelf Share" : "Active Alerts", value: mode === "market" ? (shelfData.length > 0 ? shelfData.reduce((s, c) => s + Number(c.share_of_shelf ?? 0), 0) / shelfData.length : 0) : notificationsCount, sub: mode === "market" ? (avgDelta !== 0 ? `${avgDelta > 0 ? "▲" : "▼"} ${Math.abs(avgDelta).toFixed(1)}% vs last week` : "per category") : (notificationsCount > 0 ? `${notifications.filter((n) => !n.is_read).length} unread` : "needs attention"), color: mode === "market" ? "text-indigo-300" : (notificationsCount > 0 ? "text-amber-300" : "text-emerald-300") },
+              { label: "Products", value: productsCount, sub: newProductsThisWeek > 0 ? `+${newProductsThisWeek} this week` : null, color: "text-blue-600" },
+              { label: "Listings", value: listingsCount, sub: null, color: "text-cyan-600" },
+              { label: "Avg Trust Score", value: avgTrust, sub: trustTrend !== 0 ? `${trustTrend > 0 ? "▲" : "▼"} ${Math.abs(trustTrend).toFixed(1)} pts` : "out of 100", color: "text-emerald-600" },
+              { label: mode === "market" ? "Avg Shelf Share" : "Active Alerts", value: mode === "market" ? (shelfData.length > 0 ? shelfData.reduce((s, c) => s + Number(c.share_of_shelf ?? 0), 0) / shelfData.length : 0) : notificationsCount, sub: mode === "market" ? (avgDelta !== 0 ? `${avgDelta > 0 ? "▲" : "▼"} ${Math.abs(avgDelta).toFixed(1)}% vs last week` : "per category") : (notificationsCount > 0 ? `${notifications.filter((n) => !n.is_read).length} unread` : "needs attention"), color: mode === "market" ? "text-blue-600" : (notificationsCount > 0 ? "text-amber-600" : "text-emerald-600") },
             ]
             return kpiItems.map((item) => (
-              <div key={item.label} className="rounded-xl bg-white/5 px-4 py-3 ring-1 ring-white/10">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-indigo-200/60">{item.label}</p>
+              <div key={item.label} className="rounded-xl bg-gradient-to-br from-slate-50 to-white px-4 py-3 ring-1 ring-slate-200/50 shadow-sm">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{item.label}</p>
                 <p className={`mt-0.5 text-2xl font-black tracking-tight ${item.color}`}>{fmt(item.value)}</p>
-                {item.sub && <p className="text-[10px] text-indigo-200/50">{item.sub}</p>}
+                {item.sub && <p className="text-[10px] text-slate-400">{item.sub}</p>}
               </div>
             ))
           })()}
@@ -311,7 +310,7 @@ export default function B2BOverviewPage() {
                     <p className="text-[10px] text-muted-foreground">Out of Stock</p>
                   </div>
                   <div className="rounded-xl border border-border/50 bg-muted/20 p-3 text-center">
-                    <p className="text-lg font-bold text-indigo-500">{opportunities.length}</p>
+                    <p className="text-lg font-bold text-blue-500">{opportunities.length}</p>
                     <p className="text-[10px] text-muted-foreground">Opportunities</p>
                   </div>
                 </div>
@@ -333,7 +332,7 @@ export default function B2BOverviewPage() {
         <Card className="border-border/50 shadow-sm">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <TrendingUp className="size-4 text-indigo-500" />
+              <TrendingUp className="size-4 text-blue-500" />
               {mode === "market" ? "Share of Shelf" : "Price Gap to Competitors"}
             </CardTitle>
             <CardDescription>
@@ -477,12 +476,12 @@ export default function B2BOverviewPage() {
       )}
       {mode === "market" && (
         <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Card className="border-border/50 shadow-sm bg-gradient-to-br from-white to-indigo-50/30 dark:from-slate-900 dark:to-indigo-950/10">
+          <Card className="border-border/50 shadow-sm bg-gradient-to-br from-white to-sky-50/30 dark:from-slate-900 dark:to-sky-950/10">
             <CardHeader className="pb-2">
               <CardTitle className="text-xs font-medium text-muted-foreground">Total Products</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">{fmt(productsCount)}</p>
+              <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{fmt(productsCount)}</p>
               {newProductsThisWeek > 0 && <p className="text-[10px] text-emerald-600 mt-1">+{newProductsThisWeek} this week</p>}
             </CardContent>
           </Card>
@@ -506,12 +505,12 @@ export default function B2BOverviewPage() {
               <p className="text-[10px] text-muted-foreground mt-1">out of 100</p>
             </CardContent>
           </Card>
-          <Card className="border-border/50 shadow-sm bg-gradient-to-br from-white to-violet-50/30 dark:from-slate-900 dark:to-violet-950/10">
+          <Card className="border-border/50 shadow-sm bg-gradient-to-br from-white to-cyan-50/30 dark:from-slate-900 dark:to-cyan-950/10">
             <CardHeader className="pb-2">
               <CardTitle className="text-xs font-medium text-muted-foreground">Active Alerts</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl font-bold text-violet-600 dark:text-violet-400">{notificationsCount}</p>
+              <p className="text-2xl font-bold text-cyan-600 dark:text-cyan-400">{notificationsCount}</p>
               <p className="text-[10px] text-muted-foreground mt-1">{notifications.filter((n) => !n.is_read).length} unread</p>
             </CardContent>
           </Card>
@@ -585,7 +584,7 @@ export default function B2BOverviewPage() {
         <Card className="border-border/50 shadow-sm overflow-hidden">
           <CardHeader className="flex flex-col gap-3 pb-2 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-2">
-              <Bell className="size-4 text-indigo-500" />
+              <Bell className="size-4 text-blue-500" />
               <CardTitle className="text-sm">Intelligence Feed</CardTitle>
               {(() => {
                 const critical = notifications.filter((n) => !dismissedAlerts.has(Number(n.id)) && String(n.severity ?? "").toUpperCase() === "CRITICAL").length
@@ -647,7 +646,7 @@ export default function B2BOverviewPage() {
                 const isMarketShelfDrop = nType === "MARKET_SHELF_DROP"
                 const isMarketSentimentShift = nType === "MARKET_SENTIMENT_SHIFT"
                 const FeedIcon = isUndercut ? TrendingDown : isTrustDrop ? TrendingDown : isStockShortage ? AlertTriangle : isNewCompetitor ? Zap : isStockOpportunity ? CheckCircle2 : isCompetitorOos ? XCircle : isDispersion ? BarChart3 : isAds ? DollarSign : isScraping ? Package : isSub ? Shield : isMarketBrandOOS ? XCircle : isMarketPriceSpike ? TrendingUp : isMarketShelfDrop ? TrendingDown : isMarketSentimentShift ? TrendingDown : Bell
-                const feedColor = isUndercut ? "text-red-500 bg-red-50 dark:bg-red-950/30" : isStockShortage ? "text-amber-500 bg-amber-50 dark:bg-amber-950/30" : isTrustDrop ? "text-orange-500 bg-orange-50 dark:bg-orange-950/30" : isNewCompetitor ? "text-blue-500 bg-blue-50 dark:bg-blue-950/30" : isStockOpportunity ? "text-emerald-500 bg-emerald-50 dark:bg-emerald-950/30" : isCompetitorOos ? "text-slate-500 bg-slate-50 dark:bg-slate-950/30" : isDispersion ? "text-violet-500 bg-violet-50 dark:bg-violet-950/30" : isAds ? "text-emerald-500 bg-emerald-50 dark:bg-emerald-950/30" : isMarketBrandOOS ? "text-red-500 bg-red-50 dark:bg-red-950/30" : isMarketPriceSpike ? "text-orange-500 bg-orange-50 dark:bg-orange-950/30" : isMarketShelfDrop ? "text-rose-500 bg-rose-50 dark:bg-rose-950/30" : isMarketSentimentShift ? "text-amber-500 bg-amber-50 dark:bg-amber-950/30" : "text-indigo-500 bg-indigo-50 dark:bg-indigo-950/30"
+                const feedColor = isUndercut ? "text-red-500 bg-red-50 dark:bg-red-950/30" : isStockShortage ? "text-amber-500 bg-amber-50 dark:bg-amber-950/30" : isTrustDrop ? "text-orange-500 bg-orange-50 dark:bg-orange-950/30" : isNewCompetitor ? "text-blue-500 bg-blue-50 dark:bg-blue-950/30" : isStockOpportunity ? "text-emerald-500 bg-emerald-50 dark:bg-emerald-950/30" : isCompetitorOos ? "text-slate-500 bg-slate-50 dark:bg-slate-950/30" : isDispersion ? "text-violet-500 bg-violet-50 dark:bg-violet-950/30" : isAds ? "text-emerald-500 bg-emerald-50 dark:bg-emerald-950/30" : isMarketBrandOOS ? "text-red-500 bg-red-50 dark:bg-red-950/30" : isMarketPriceSpike ? "text-orange-500 bg-orange-50 dark:bg-orange-950/30" : isMarketShelfDrop ? "text-rose-500 bg-rose-50 dark:bg-rose-950/30" : isMarketSentimentShift ? "text-amber-500 bg-amber-50 dark:bg-amber-950/30" : "text-blue-500 bg-blue-50 dark:bg-blue-950/30"
                 const nid = Number(n.id)
                 return (
                   <div key={String(n.id ?? n.created_at)} className="flex items-start gap-3 rounded-xl border border-border/50 bg-card p-3">
@@ -664,29 +663,29 @@ export default function B2BOverviewPage() {
                       {Boolean((isUndercut || isStockShortage || isNewCompetitor || isStockOpportunity || isCompetitorOos || isTrustDrop) && n.product_listing_id) && (
                         <Link
                           href={`/B2B/dashboard/comparison?listingId=${n.product_listing_id as number}`}
-                          className="mt-1 inline-flex items-center gap-0.5 text-[10px] text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300"
+                          className="mt-1 inline-flex items-center gap-0.5 text-[10px] text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
                         >
                           <Eye className="size-3" />
                           {isUndercut ? "Compare prices" : isTrustDrop ? "View trust details" : isNewCompetitor ? "View competitor" : "View listing"}
                         </Link>
                       )}
                       {isMarketBrandOOS && (
-                        <Link href="/B2B/dashboard/distribution-coverage" className="mt-1 inline-flex items-center gap-0.5 text-[10px] text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300">
+                        <Link href="/B2B/dashboard/distribution-coverage" className="mt-1 inline-flex items-center gap-0.5 text-[10px] text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300">
                           <Eye className="size-3" /> View stock
                         </Link>
                       )}
                       {isMarketPriceSpike && (
-                        <Link href="/B2B/dashboard/price-dispersion" className="mt-1 inline-flex items-center gap-0.5 text-[10px] text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300">
+                        <Link href="/B2B/dashboard/price-dispersion" className="mt-1 inline-flex items-center gap-0.5 text-[10px] text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300">
                           <Eye className="size-3" /> View dispersion
                         </Link>
                       )}
                       {isMarketShelfDrop && (
-                        <Link href="/B2B/dashboard/share-of-shelf" className="mt-1 inline-flex items-center gap-0.5 text-[10px] text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300">
+                        <Link href="/B2B/dashboard/share-of-shelf" className="mt-1 inline-flex items-center gap-0.5 text-[10px] text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300">
                           <Eye className="size-3" /> View shelf
                         </Link>
                       )}
                       {isMarketSentimentShift && (
-                        <Link href="/B2B/dashboard/reviews-sentiment" className="mt-1 inline-flex items-center gap-0.5 text-[10px] text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300">
+                        <Link href="/B2B/dashboard/reviews-sentiment" className="mt-1 inline-flex items-center gap-0.5 text-[10px] text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300">
                           <Eye className="size-3" /> View sentiment
                         </Link>
                       )}
@@ -715,7 +714,7 @@ export default function B2BOverviewPage() {
         <Card className="border-border/50 shadow-sm">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <BarChart3 className="size-4 text-indigo-500" />
+              <BarChart3 className="size-4 text-blue-500" />
               Your Price Position
             </CardTitle>
             <CardDescription>Where your prices sit in the market range per product.</CardDescription>
@@ -749,7 +748,7 @@ export default function B2BOverviewPage() {
                         className="absolute top-1/2 size-3 -translate-y-1/2 -translate-x-1/2 rounded-full border-2 border-white shadow-lg transition-all"
                         style={{
                           left: `${Math.max(2, Math.min(98, position))}%`,
-                          backgroundColor: isCheapest ? "#22c55e" : isMostExpensive ? "#ef4444" : "#6366f1",
+                          backgroundColor: isCheapest ? "#22c55e" : isMostExpensive ? "#ef4444" : "#3b82f6",
                         }}
                       />
                       <span
@@ -829,7 +828,7 @@ export default function B2BOverviewPage() {
                         </td>
                         <td className="px-4 py-3 text-center">
                           {oppCount > 0 ? (
-                            <Badge className="text-[10px] bg-indigo-100 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-400">{oppCount}</Badge>
+                            <Badge className="text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400">{oppCount}</Badge>
                           ) : (
                             <span className="text-xs text-muted-foreground">—</span>
                           )}

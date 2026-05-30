@@ -3,6 +3,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 
 import { ProductCard } from "@/components/B2C/product-card"
+import { useApiUrl } from "@/lib/use-api-url"
+import { useI18n } from "@/lib/i18n-context"
 import { PriceRangeFilter } from "@/components/B2C/price-range-filter"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -19,7 +21,9 @@ import {
 import { Separator } from "@/components/ui/separator"
 import { Spinner } from "@/components/ui/spinner"
 
-import type { Product, ProductListing, B2CFavorite } from "@/utils/types"
+import type { CanonicalSpecs, Product, ProductListing, B2CFavorite } from "@/utils/types"
+import { normalizeSpecs } from "@/utils/specs"
+import { computeRelevantSpecGroups, type RelevantSpecGroup } from "@/utils/spec-filters"
 
 const dataCache = new Map<string, { data: unknown; ts: number }>()
 const CACHE_TTL = 300_000
@@ -70,6 +74,7 @@ type ProductWithBestPrice = {
   bestTrustScore?: number | null
   offersCount: number
   discountPercent: number
+  canonicalSpecs: CanonicalSpecs
 }
 
 type PageToken = number | "ellipsis"
@@ -100,6 +105,8 @@ export default function B2CProductListing({ categoryIds = [], searchTerm = "" }:
   const [loading, setLoading] = useState(true)
   const [favoritedIds, setFavoritedIds] = useState<Set<number>>(new Set())
 
+  const apiUrl = useApiUrl()
+  const { t } = useI18n()
   const cacheLoadedRef = useRef(false)
 
   useLayoutEffect(() => {
@@ -121,6 +128,8 @@ export default function B2CProductListing({ categoryIds = [], searchTerm = "" }:
   const [minPrice, setMinPrice] = useState<number | undefined>()
   const [maxPrice, setMaxPrice] = useState<number | undefined>()
   const [page, setPage] = useState(1)
+  const [specFilters, setSpecFilters] = useState<Record<string, string>>({})
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
   const pageSize = 24
 
   useEffect(() => {
@@ -135,9 +144,10 @@ export default function B2CProductListing({ categoryIds = [], searchTerm = "" }:
         if (searchTerm) params.set("search", searchTerm)
         const query = params.toString()
 
+        const listingQuery = categoryIds.length > 0 ? `?categoryIds=${categoryIds.join(",")}` : ""
         const [productsRes, listingsRes] = await Promise.all([
-          cachedFetch(`/api/products${query ? `?${query}` : ""}`),
-          cachedFetch(`/api/product-listings`),
+          cachedFetch(apiUrl(`/api/products${query ? `?${query}` : ""}`)),
+          cachedFetch(apiUrl(`/api/product-listings${listingQuery}`)),
         ])
 
         if (cancelled) return
@@ -184,13 +194,23 @@ export default function B2CProductListing({ categoryIds = [], searchTerm = "" }:
           }
         }
 
-        let processed = [...deduped.values()].map((product) => ({
-          product,
-          bestPrice: bestPriceMap.get(product.id),
-          bestListingId: bestListingIdMap.get(product.id),
-          bestTrustScore: bestTrustScoreMap.get(product.id) ?? null,
-          offersCount: offersCountMap.get(product.id) ?? 0,
-          discountPercent: discountMap.get(product.id) ?? 0,
+        let processed = [...deduped.values()].map((product) => {
+          const canonicalSpecs = normalizeSpecs(product.specs_json as Record<string, string> | null | undefined)
+          return {
+            product,
+            bestPrice: bestPriceMap.get(product.id),
+            bestListingId: bestListingIdMap.get(product.id),
+            bestTrustScore: bestTrustScoreMap.get(product.id) ?? null,
+            offersCount: offersCountMap.get(product.id) ?? 0,
+            discountPercent: discountMap.get(product.id) ?? 0,
+            canonicalSpecs,
+          }
+        })
+
+        // Migrate old cached items that may lack canonicalSpecs
+        processed = processed.map((item) => ({
+          ...item,
+          canonicalSpecs: item.canonicalSpecs ?? normalizeSpecs(item.product.specs_json as Record<string, string> | null | undefined),
         }))
 
         const normalizedSearch = searchTerm.toLowerCase()
@@ -233,7 +253,7 @@ export default function B2CProductListing({ categoryIds = [], searchTerm = "" }:
 
     async function loadFavorites() {
       try {
-        const res = await fetch(`/api/b2c/favorites?productListingIds=${listingIds.join(",")}`)
+        const res = await fetch(apiUrl(`/api/b2c/favorites?productListingIds=${listingIds.join(",")}`))
         if (!res.ok) return
         const data = (await res.json()) as { favorites?: B2CFavorite[] }
         if (data.favorites) {
@@ -255,17 +275,31 @@ export default function B2CProductListing({ categoryIds = [], searchTerm = "" }:
   const hasMinPrice = minPrice !== undefined && Number.isFinite(minPrice) && minPrice > 0
   const hasMaxPrice = maxPrice !== undefined && Number.isFinite(maxPrice) && maxPrice > 0
 
+  const hasSpecFilters = Object.keys(specFilters).length > 0
+
   const filteredProducts = useMemo(() => {
     let result = allProducts
 
     if (selectedBrand) {
       result = result.filter(
-        ({ product }) => (product.brand || "Unknown").toLowerCase() === selectedBrand.toLowerCase(),
+        ({ product }) => (product.brand || t("listing.unknown_brand")).toLowerCase() === selectedBrand.toLowerCase(),
       )
     }
 
     if (pricedOnly) {
       result = result.filter(({ bestPrice }) => bestPrice !== undefined)
+    }
+
+    // Spec filters
+    if (hasSpecFilters) {
+      result = result.filter(({ canonicalSpecs }) => {
+        for (const [specKey, specVal] of Object.entries(specFilters)) {
+          if (!specVal) continue
+          const actual = canonicalSpecs[specKey as keyof CanonicalSpecs]
+          if (!actual || actual.toLowerCase() !== specVal.toLowerCase()) return false
+        }
+        return true
+      })
     }
 
     if (hasMinPrice) {
@@ -302,7 +336,7 @@ export default function B2CProductListing({ categoryIds = [], searchTerm = "" }:
     })
 
     return result
-  }, [allProducts, selectedSort, selectedBrand, pricedOnly, minPrice, maxPrice, hasMinPrice, hasMaxPrice])
+  }, [allProducts, selectedSort, selectedBrand, pricedOnly, minPrice, maxPrice, hasMinPrice, hasMaxPrice, specFilters])
 
   const totalProducts = filteredProducts.length
   const totalPages = Math.max(1, Math.ceil(totalProducts / pageSize))
@@ -323,12 +357,23 @@ export default function B2CProductListing({ categoryIds = [], searchTerm = "" }:
 
   const brandCounts = new Map<string, number>()
   for (const item of filteredProducts) {
-    const brand = item.product.brand || "Unknown"
+    const brand = item.product.brand || t("listing.unknown_brand")
     brandCounts.set(brand, (brandCounts.get(brand) ?? 0) + 1)
   }
   const topBrands = [...brandCounts.entries()]
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
     .slice(0, 10)
+
+  const relevantSpecGroups = useMemo(() => computeRelevantSpecGroups(filteredProducts), [filteredProducts])
+
+  function toggleGroupCollapse(groupId: string) {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev)
+      if (next.has(groupId)) next.delete(groupId)
+      else next.add(groupId)
+      return next
+    })
+  }
 
   function changeSort(sort: string) {
     setSelectedSort(sort)
@@ -356,6 +401,20 @@ export default function B2CProductListing({ categoryIds = [], searchTerm = "" }:
     setMinPrice(undefined)
     setMaxPrice(undefined)
     setPricedOnly(false)
+    setSpecFilters({})
+    setPage(1)
+  }
+
+  function toggleSpecFilter(key: string, value: string) {
+    setSpecFilters((prev) => {
+      const next = { ...prev }
+      if (next[key] === value) {
+        delete next[key]
+      } else {
+        next[key] = value
+      }
+      return next
+    })
     setPage(1)
   }
 
@@ -366,7 +425,7 @@ export default function B2CProductListing({ categoryIds = [], searchTerm = "" }:
       <div className="flex min-h-[50vh] items-center justify-center">
         <div className="text-center">
           <Spinner className="mx-auto mb-4 h-8 w-8" />
-          <p className="text-sm text-muted-foreground">Chargement des produits...</p>
+          <p className="text-sm text-muted-foreground">{t("listing.loading")}</p>
         </div>
       </div>
     )
@@ -377,12 +436,12 @@ export default function B2CProductListing({ categoryIds = [], searchTerm = "" }:
       <aside className="space-y-4 xl:sticky xl:top-4 xl:self-start">
         <Card className="rounded-xl">
           <CardHeader className="pb-3">
-            <CardTitle className="text-xl">Filtrer</CardTitle>
+            <CardTitle className="text-xl">{t("listing.filter")}</CardTitle>
           </CardHeader>
 
           <CardContent className="space-y-6">
             <div className="space-y-3">
-              <p className="text-sm font-semibold text-muted-foreground">Prix (DT)</p>
+              <p className="text-sm font-semibold text-muted-foreground">{t("listing.price")} (DT)</p>
               <PriceRangeFilter
                 minBound={sliderMin}
                 maxBound={sliderMax}
@@ -396,29 +455,29 @@ export default function B2CProductListing({ categoryIds = [], searchTerm = "" }:
             <Separator />
 
             <div className="space-y-3">
-              <p className="text-sm font-semibold text-muted-foreground">Autres filtres</p>
+              <p className="text-sm font-semibold text-muted-foreground">{t("listing.other_filters")}</p>
               <Button
                 onClick={togglePriced}
                 variant={pricedOnly ? "default" : "outline"}
                 className="w-full"
               >
-                {pricedOnly ? "Prix uniquement: ON" : "Prix uniquement: OFF"}
+                {pricedOnly ? t("listing.priced_only_on") : t("listing.priced_only_off")}
               </Button>
               <Button onClick={resetFilters} variant="ghost" className="w-full">
-                Reset filters
+                {t("listing.reset")}
               </Button>
             </div>
 
             <Separator />
 
             <div className="space-y-3">
-              <p className="text-sm font-semibold text-muted-foreground">Fabricants</p>
+              <p className="text-sm font-semibold text-muted-foreground">{t("listing.brands")}</p>
               <div className="space-y-2">
                 <button
                   onClick={() => changeBrand("")}
                   className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-sm transition-colors ${selectedBrand ? "hover:bg-muted" : "bg-muted font-medium"}`}
                 >
-                  <span>All brands</span>
+                  <span>{t("listing.all")}</span>
                   <span className="text-muted-foreground">({totalProducts})</span>
                 </button>
 
@@ -434,6 +493,64 @@ export default function B2CProductListing({ categoryIds = [], searchTerm = "" }:
                 ))}
               </div>
             </div>
+
+            {/* Spec filters — professional grouped */}
+            {relevantSpecGroups.map(({ group, options }) => {
+              const isCollapsed = collapsedGroups.has(group.id)
+              return (
+                <div key={group.id} className="space-y-2">
+                  <Separator />
+                  <button
+                    onClick={() => toggleGroupCollapse(group.id)}
+                    className="flex w-full items-center justify-between rounded-md px-1 py-0.5 text-sm font-semibold text-foreground hover:bg-muted/50 transition-colors"
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <span>{group.icon}</span>
+                      <span>{t(`spec.group.${group.id}`)}</span>
+                    </span>
+                    <svg
+                      className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${isCollapsed ? "-rotate-90" : ""}`}
+                      xmlns="http://www.w3.org/2000/svg"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="m6 9 6 6 6-6" />
+                    </svg>
+                  </button>
+                  {!isCollapsed && (
+                    <div className="space-y-3 pl-1">
+                      {options.map((option) => (
+                        <div key={option.key} className="space-y-1.5">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            {t(`spec.option.${option.key}`)}
+                          </p>
+                          <div className="flex flex-wrap gap-1">
+                            {option.values.map(({ value, count }) => (
+                              <button
+                                key={value}
+                                onClick={() => toggleSpecFilter(option.key, value)}
+                                className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition-all ${
+                                  specFilters[option.key] === value
+                                    ? "border-primary bg-primary text-primary-foreground shadow-sm"
+                                    : "border-border bg-background text-foreground hover:border-primary/50 hover:bg-muted"
+                                }`}
+                              >
+                                <span>{value}</span>
+                                <span className="text-[10px] opacity-60">({count})</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
           </CardContent>
         </Card>
       </aside>
@@ -443,38 +560,38 @@ export default function B2CProductListing({ categoryIds = [], searchTerm = "" }:
           <CardContent className="flex flex-wrap items-center justify-between gap-3 py-4">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Badge variant="secondary">{totalProducts}</Badge>
-              <span>produits trouves</span>
+              <span>{t("listing.products")}</span>
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-sm text-muted-foreground">Trier par :</span>
+              <span className="text-sm text-muted-foreground">{t("listing.sort_by")}</span>
               <Button
                 onClick={() => changeSort("discount")}
                 size="sm"
                 variant={selectedSort === "discount" ? "default" : "outline"}
               >
-                Meilleures offres
+                {t("listing.best_offers")}
               </Button>
               <Button
                 onClick={() => changeSort("price-asc")}
                 size="sm"
                 variant={selectedSort === "price-asc" ? "default" : "outline"}
               >
-                Prix croissants
+                {t("listing.price_asc")}
               </Button>
               <Button
                 onClick={() => changeSort("price-desc")}
                 size="sm"
                 variant={selectedSort === "price-desc" ? "default" : "outline"}
               >
-                Prix decroissants
+                {t("listing.price_desc")}
               </Button>
               <Button
                 onClick={() => changeSort("name-asc")}
                 size="sm"
                 variant={selectedSort === "name-asc" ? "default" : "outline"}
               >
-                Nom A-Z
+                {t("listing.name_asc")}
               </Button>
             </div>
           </CardContent>
@@ -483,7 +600,9 @@ export default function B2CProductListing({ categoryIds = [], searchTerm = "" }:
         <Card className="rounded-xl border-border/70">
           <CardContent className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm">
             <p className="font-medium text-foreground">
-              Affichage {totalProducts === 0 ? 0 : startIndex + 1}-{endIndex} de {totalProducts} article(s)
+              {totalProducts === 0
+                ? t("listing.showing", { start: 0, end: 0, total: 0 })
+                : t("listing.showing", { start: startIndex + 1, end: endIndex, total: totalProducts })}
             </p>
 
             <Pagination className="mx-0 w-auto">
@@ -527,7 +646,7 @@ export default function B2CProductListing({ categoryIds = [], searchTerm = "" }:
         {totalProducts === 0 ? (
           <Card className="rounded-xl">
             <CardContent className="pt-6 text-sm text-muted-foreground">
-              No products found{searchTerm ? ` for "${searchTerm}"` : ""}.
+              {t("listing.no_products")}{searchTerm ? t("listing.for", { term: searchTerm }) : ""}.
             </CardContent>
           </Card>
         ) : (
@@ -536,13 +655,13 @@ export default function B2CProductListing({ categoryIds = [], searchTerm = "" }:
               <ProductCard
                 key={product.id}
                 product={product}
-                bestPriceLabel={
-                  bestPrice !== undefined
-                    ? formatPrice(bestPrice)
-                    : offersCount > 0
-                      ? "Épuisé"
-                      : "No available price"
-                }
+                  bestPriceLabel={
+                    bestPrice !== undefined
+                      ? formatPrice(bestPrice)
+                      : offersCount > 0
+                        ? t("listing.out_of_stock")
+                        : t("listing.no_price_available")
+                  }
                 offersCount={offersCount}
                 bestTrustScore={bestTrustScore}
                 favoriteListingId={bestListingId}

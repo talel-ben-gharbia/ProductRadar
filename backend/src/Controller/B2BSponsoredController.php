@@ -107,6 +107,23 @@ final class B2BSponsoredController extends AbstractController
             50
         );
 
+        // Auto-expire: mark any PUBLISHED articles past their ends_at as EXPIRED
+        $now = new \DateTimeImmutable();
+        $needsFlush = false;
+        foreach ($items as $item) {
+            if (
+                $item->getStatus() === 'PUBLISHED'
+                && $item->getEndsAt() !== null
+                && $item->getEndsAt() <= $now
+            ) {
+                $item->setStatus('EXPIRED');
+                $needsFlush = true;
+            }
+        }
+        if ($needsFlush) {
+            $entityManager->flush();
+        }
+
         $quotaUsage = $this->subscriptionResolver->checkQuota($user, 'sponsored_products', 0);
         $activeCount = $entityManager->getRepository(B2BSponsoredArticle::class)->count([
             'company' => $user,
@@ -256,6 +273,23 @@ final class B2BSponsoredController extends AbstractController
 
         $items = $repo->findBy($criteria, ['created_at' => 'DESC'], 100);
 
+        // Auto-expire: mark any PUBLISHED articles past their ends_at as EXPIRED
+        $now = new \DateTimeImmutable();
+        $expiredCount = 0;
+        foreach ($items as $item) {
+            if (
+                $item->getStatus() === 'PUBLISHED'
+                && $item->getEndsAt() !== null
+                && $item->getEndsAt() <= $now
+            ) {
+                $item->setStatus('EXPIRED');
+                $expiredCount++;
+            }
+        }
+        if ($expiredCount > 0) {
+            $entityManager->flush();
+        }
+
         return $this->json([
             'items' => array_map(fn (B2BSponsoredArticle $a) => $this->serializeAdmin($a), $items),
         ]);
@@ -401,6 +435,23 @@ final class B2BSponsoredController extends AbstractController
             ->setParameter('status', 'PUBLISHED')
             ->setParameter('now', $now);
 
+        // Auto-expire: mark any PUBLISHED articles past their ends_at as EXPIRED
+        $expiredArticles = $entityManager->getRepository(B2BSponsoredArticle::class)
+            ->createQueryBuilder('ea')
+            ->where('ea.status = :status')
+            ->andWhere('ea.ends_at IS NOT NULL')
+            ->andWhere('ea.ends_at <= :now')
+            ->setParameter('status', 'PUBLISHED')
+            ->setParameter('now', $now)
+            ->getQuery()
+            ->getResult();
+        if (!empty($expiredArticles)) {
+            foreach ($expiredArticles as $ea) {
+                $ea->setStatus('EXPIRED');
+            }
+            $entityManager->flush();
+        }
+
         $productId = $request->query->getInt('product_id', 0);
         if ($productId > 0) {
             $qb->andWhere('p.id = :productId')
@@ -445,6 +496,23 @@ final class B2BSponsoredController extends AbstractController
         EntityManagerInterface $entityManager,
     ): JsonResponse {
         $now = new \DateTimeImmutable();
+
+        // Auto-expire: mark any ACTIVE campaigns past their ends_at as INACTIVE
+        $expiredCampaigns = $entityManager->createQueryBuilder()
+            ->update(B2BAdsCampaign::class, 'ec')
+            ->set('ec.active', ':false')
+            ->set('ec.status', ':inactive')
+            ->where('ec.active = :active')
+            ->andWhere('ec.status = :status')
+            ->andWhere('ec.ends_at IS NOT NULL')
+            ->andWhere('ec.ends_at <= :now')
+            ->setParameter('active', true)
+            ->setParameter('status', 'ACTIVE')
+            ->setParameter('inactive', 'INACTIVE')
+            ->setParameter('false', false)
+            ->setParameter('now', $now)
+            ->getQuery()
+            ->execute();
 
         $campaigns = $entityManager->createQueryBuilder()
             ->select('c, ar, comp')

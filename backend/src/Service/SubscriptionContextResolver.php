@@ -57,12 +57,26 @@ final class SubscriptionContextResolver
             'active' => true,
         ]);
 
+        // Auto-deactivate: if B2B subscription has ended, deactivate it now
+        if ($b2bSub instanceof Subscription && $b2bSub->getEndDate() !== null && $b2bSub->getEndDate() <= new \DateTimeImmutable()) {
+            $b2bSub->setActive(false);
+            $this->entityManager->flush();
+            $b2bSub = null; // treat as no active subscription
+        }
+
         // Step 2: Check B2C subscription as fallback
         $b2cSub = $this->entityManager->getRepository(Subscription::class)->findOneBy([
             'owner_type' => 'USER',
             'owner_id' => $user->getId(),
             'active' => true,
         ]);
+
+        // Auto-deactivate: if B2C subscription has ended, deactivate it now
+        if ($b2cSub instanceof Subscription && $b2cSub->getEndDate() !== null && $b2cSub->getEndDate() <= new \DateTimeImmutable()) {
+            $b2cSub->setActive(false);
+            $this->entityManager->flush();
+            $b2cSub = null;
+        }
 
         // Step 3: Determine effective context
         if ($b2bSub instanceof Subscription) {
@@ -110,6 +124,8 @@ final class SubscriptionContextResolver
         int $quantity = 1,
     ): array {
         $context = $this->resolveB2BSubscriptionContext($owner);
+
+        // Subscription auto-deactivation is handled in resolveB2BSubscriptionContext
 
         if (!$context['active']) {
             return [

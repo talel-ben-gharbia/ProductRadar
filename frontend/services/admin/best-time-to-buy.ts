@@ -13,14 +13,16 @@ interface BestTimeToBuyResponse {
 export const getBestTimeToBuy = withCache(async (
   productId: number,
   alerterId: number,
+  locale?: string,
 ): Promise<BestTimeToBuyResponse> => {
   const params = new URLSearchParams({
     productId: String(productId),
     alerterId: String(alerterId),
   })
+  if (locale) params.set("lang", locale)
 
   const endpoint = `${BACKEND_URL}/best-time-to-buy?${params.toString()}`
-  const cacheKey = `best-time-to-buy:p${productId}:a${alerterId}`
+  const cacheKey = `best-time-to-buy:p${productId}:a${alerterId}${locale ? `:${locale}` : ""}`
 
   const data = await cachedFetch<BestTimeToBuyResponse>(endpoint, {
     cacheKey,

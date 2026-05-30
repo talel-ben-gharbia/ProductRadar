@@ -6,6 +6,7 @@ import { getAuth, signOut } from "firebase/auth"
 import { BellRing, ChevronDown, LogOut, User } from "lucide-react"
 
 import { B2CAuthDialogTrigger } from "@/components/B2C/b2c-auth-dialog"
+import { useI18n } from "@/lib/i18n-context"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 
@@ -19,6 +20,7 @@ type B2CProfile = {
 }
 
 export function B2CNavAuth() {
+  const { t } = useI18n()
   const containerRef = useRef<HTMLDivElement | null>(null)
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -75,8 +77,8 @@ export function B2CNavAuth() {
 
   const displayName = useMemo(() => {
     const name = customer?.full_name?.trim()
-    return name || "Account"
-  }, [customer?.full_name])
+    return name || t("nav.account")
+  }, [customer?.full_name, t])
 
   const isB2BSession = customer?.type === "b2b_company" || customer?.type === "b2b_market"
 
@@ -88,7 +90,7 @@ export function B2CNavAuth() {
   }
 
   if (loading) {
-    return <Button variant="outline" disabled>Loading...</Button>
+    return <Button variant="outline" disabled>{t("general.loading")}</Button>
   }
 
   if (!customer) {
@@ -126,17 +128,17 @@ export function B2CNavAuth() {
               className="mx-1 mt-1 flex items-center gap-2 rounded-md px-2.5 py-2 text-sm transition-colors hover:bg-muted/60"
             >
               <User className="h-4 w-4" />
-              <span>Profile</span>
-            </Link>
-          ) : null}
-          {!isB2BSession ? (
-            <Link
-              href="/B2C/profile/alerts"
-              onClick={() => setOpen(false)}
-              className="mx-1 flex items-center gap-2 rounded-md px-2.5 py-2 text-sm transition-colors hover:bg-muted/60"
-            >
-              <BellRing className="h-4 w-4" />
-              <span>My alerts</span>
+                  <span>{t("nav.profile")}</span>
+              </Link>
+            ) : null}
+            {!isB2BSession ? (
+              <Link
+                href="/B2C/profile/alerts"
+                onClick={() => setOpen(false)}
+                className="mx-1 flex items-center gap-2 rounded-md px-2.5 py-2 text-sm transition-colors hover:bg-muted/60"
+              >
+                <BellRing className="h-4 w-4" />
+                <span>{t("nav.my_alerts")}</span>
             </Link>
           ) : null}
           {isB2BSession ? (
@@ -146,7 +148,7 @@ export function B2CNavAuth() {
               className="mx-1 flex items-center gap-2 rounded-md px-2.5 py-2 text-sm transition-colors hover:bg-muted/60"
             >
               <User className="h-4 w-4" />
-              <span>B2B dashboard</span>
+                  <span>{t("nav.b2b_dashboard")}</span>
             </Link>
           ) : null}
           <button
@@ -155,7 +157,7 @@ export function B2CNavAuth() {
             className="mx-1 mb-1 flex w-[calc(100%-0.5rem)] items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm text-destructive transition-colors hover:bg-destructive/10"
           >
             <LogOut className="h-4 w-4" />
-            <span>Logout</span>
+            <span>{t("b2c.logout")}</span>
           </button>
         </div>
       ) : null}

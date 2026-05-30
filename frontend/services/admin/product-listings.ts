@@ -11,7 +11,8 @@ async function fetchProductListingsFromApi(
   productId?: number,
   sellerId?: number,
   page?: number,
-  limit?: number
+  limit?: number,
+  locale?: string
 ): Promise<ProductListing[]> {
   try {
     const params = new URLSearchParams()
@@ -27,6 +28,7 @@ async function fetchProductListingsFromApi(
     if (limit !== undefined) {
       params.set("limit", String(limit))
     }
+    if (locale) params.set("lang", locale)
 
     const query = params.toString()
     const endpoint =
@@ -38,7 +40,7 @@ async function fetchProductListingsFromApi(
           ? `/api/product-listings?${query}`
           : "/api/product-listings"
 
-    const cacheKey = `listings:p${productId || "all"}:s${sellerId || "all"}:p${page || "1"}${limit !== undefined && limit > 0 ? `:l${limit}` : ''}`
+    const cacheKey = `listings:p${productId || "all"}:s${sellerId || "all"}:p${page || "1"}${limit !== undefined && limit > 0 ? `:l${limit}` : ''}${locale ? `:${locale}` : ''}`
 
     const productListings = await cachedFetch<ProductListing[]>(endpoint, {
       cacheKey,
@@ -58,10 +60,11 @@ export const getProductListings = withCache(async (
   productId?: number,
   sellerId?: number,
   page?: number,
-  limit?: number
+  limit?: number,
+  locale?: string
 ): Promise<ProductListing[]> => {
   try {
-    const productListings = await fetchProductListingsFromApi(productId, sellerId, page, limit)
+    const productListings = await fetchProductListingsFromApi(productId, sellerId, page, limit, locale)
     return productListings
   } catch (error) {
     if (error instanceof Error) {

@@ -35,6 +35,10 @@ final class ReviewController extends AbstractController
     ) {
     }
 
+    /*
+     * ── List / Root ──────────────────────────────────────────────
+     */
+
     #[Route('', name: 'admin_reviews_list', methods: ['GET'])]
     public function list(
         Request $request,
@@ -66,98 +70,9 @@ final class ReviewController extends AbstractController
         });
     }
 
-    #[Route('/{id}', name: 'admin_reviews_detail', methods: ['GET'])]
-    public function detail(
-        int $id,
-        Request $request,
-        ReviewRepository $reviewRepository,
-        AdminApiGuard $adminApiGuard,
-    ): JsonResponse {
-        $authError = $adminApiGuard->assertAuthorized($request);
-        if ($authError !== null) {
-            return $authError;
-        }
-
-        return $this->cachedGet($this->cache, self::CACHE_KEY_DETAIL . $id, function () use ($id, $reviewRepository): array {
-            $review = $reviewRepository->find($id);
-            if (!$review instanceof Review) {
-                throw new \RuntimeException('Review not found.');
-            }
-
-            return $this->serializeReview($review);
-        });
-    }
-
-    #[Route('/{id}/status', name: 'admin_reviews_status_update', methods: ['PATCH'])]
-    public function updateStatus(
-        int $id,
-        Request $request,
-        ReviewRepository $reviewRepository,
-        EntityManagerInterface $entityManager,
-        AdminApiGuard $adminApiGuard,
-        AuditService $auditService,
-        AdminRepository $adminRepository,
-    ): JsonResponse {
-        $authError = $adminApiGuard->assertAuthorized($request);
-        if ($authError !== null) {
-            return $authError;
-        }
-
-        $payload = json_decode((string) $request->getContent(), true);
-        if (!is_array($payload)) {
-            return $this->json(['error' => 'Invalid request body.'], 400);
-        }
-
-        $status = strtoupper(trim((string) ($payload['status'] ?? '')));
-        if (!in_array($status, ['PENDING', 'APPROVED', 'REJECTED'], true)) {
-            return $this->json(['error' => 'Invalid review status.'], 422);
-        }
-
-        $moderationNote = trim((string) ($payload['moderation_note'] ?? ''));
-        if ($moderationNote === '') {
-            $moderationNote = null;
-        }
-
-        $review = $reviewRepository->find($id);
-        if (!$review instanceof Review) {
-            return $this->json(['error' => 'Review not found.'], 404);
-        }
-
-        $beforeStatus = $review->getStatus();
-        $beforeModerationNote = $review->getModerationNote();
-
-        $review->setStatus($status);
-        $review->setModerationNote($moderationNote);
-        $review->setUpdatedAt(new \DateTimeImmutable());
-
-        $admin = null;
-        $adminId = $adminApiGuard->getAdminId($request);
-        if ($adminId !== null) {
-            $admin = $adminRepository->find($adminId);
-        }
-
-        $auditService->logModeration(
-            $admin,
-            'REVIEW_STATUS_UPDATE',
-            'REVIEW',
-            (int) $review->getId(),
-            [
-                'status' => $beforeStatus,
-                'moderation_note' => $beforeModerationNote,
-            ],
-            [
-                'status' => $status,
-                'moderation_note' => $moderationNote,
-            ],
-            $request->getClientIp(),
-        );
-
-        $entityManager->flush();
-
-        $this->invalidateCache($this->cache);
-
-        return $this->json($this->serializeReview($review));
-    }
+    /*
+     * ── Named sub-routes (must come BEFORE /{id} catch-all) ─────
+     */
 
     #[Route('/analytics', name: 'admin_reviews_analytics', methods: ['GET'])]
     public function analytics(
@@ -308,6 +223,103 @@ final class ReviewController extends AbstractController
             'updated' => $updated,
             'failed' => $failed,
         ]);
+    }
+
+    /*
+     * ── Parameterised routes (must come AFTER named sub-routes) ─
+     */
+
+    #[Route('/{id}', name: 'admin_reviews_detail', methods: ['GET'])]
+    public function detail(
+        int $id,
+        Request $request,
+        ReviewRepository $reviewRepository,
+        AdminApiGuard $adminApiGuard,
+    ): JsonResponse {
+        $authError = $adminApiGuard->assertAuthorized($request);
+        if ($authError !== null) {
+            return $authError;
+        }
+
+        return $this->cachedGet($this->cache, self::CACHE_KEY_DETAIL . $id, function () use ($id, $reviewRepository): array {
+            $review = $reviewRepository->find($id);
+            if (!$review instanceof Review) {
+                throw new \RuntimeException('Review not found.');
+            }
+
+            return $this->serializeReview($review);
+        });
+    }
+
+    #[Route('/{id}/status', name: 'admin_reviews_status_update', methods: ['PATCH'])]
+    public function updateStatus(
+        int $id,
+        Request $request,
+        ReviewRepository $reviewRepository,
+        EntityManagerInterface $entityManager,
+        AdminApiGuard $adminApiGuard,
+        AuditService $auditService,
+        AdminRepository $adminRepository,
+    ): JsonResponse {
+        $authError = $adminApiGuard->assertAuthorized($request);
+        if ($authError !== null) {
+            return $authError;
+        }
+
+        $payload = json_decode((string) $request->getContent(), true);
+        if (!is_array($payload)) {
+            return $this->json(['error' => 'Invalid request body.'], 400);
+        }
+
+        $status = strtoupper(trim((string) ($payload['status'] ?? '')));
+        if (!in_array($status, ['PENDING', 'APPROVED', 'REJECTED'], true)) {
+            return $this->json(['error' => 'Invalid review status.'], 422);
+        }
+
+        $moderationNote = trim((string) ($payload['moderation_note'] ?? ''));
+        if ($moderationNote === '') {
+            $moderationNote = null;
+        }
+
+        $review = $reviewRepository->find($id);
+        if (!$review instanceof Review) {
+            return $this->json(['error' => 'Review not found.'], 404);
+        }
+
+        $beforeStatus = $review->getStatus();
+        $beforeModerationNote = $review->getModerationNote();
+
+        $review->setStatus($status);
+        $review->setModerationNote($moderationNote);
+        $review->setUpdatedAt(new \DateTimeImmutable());
+
+        $admin = null;
+        $adminId = $adminApiGuard->getAdminId($request);
+        if ($adminId !== null) {
+            $admin = $adminRepository->find($adminId);
+        }
+
+        $auditService->logModeration(
+            $admin,
+            'REVIEW_STATUS_UPDATE',
+            'REVIEW',
+            (int) $review->getId(),
+            [
+                'status' => $beforeStatus,
+                'moderation_note' => $beforeModerationNote,
+            ],
+            [
+                'status' => $status,
+                'moderation_note' => $moderationNote,
+            ],
+            $request->getClientIp(),
+        );
+
+        $entityManager->flush();
+
+        $this->invalidateCache($this->cache);
+
+        return $this->json($this->serializeReview($review));
     }
 
     #[Route('/{id}/auto-moderate', name: 'admin_reviews_auto_moderate', methods: ['GET'])]

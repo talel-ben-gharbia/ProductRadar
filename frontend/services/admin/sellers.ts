@@ -17,15 +17,17 @@ async function parseJson(response: Response): Promise<unknown> {
   return response.json().catch(() => ({}))
 }
 
-async function fetchSellersFromApi(): Promise<Seller[]> {
+async function fetchSellersFromApi(locale?: string): Promise<Seller[]> {
   try {
+    const params = locale ? `?lang=${locale}` : ""
     const endpoint =
       typeof window === "undefined"
-        ? `${BACKEND_URL}/sellers`
-        : "/api/sellers"
+        ? `${BACKEND_URL}/sellers${params}`
+        : `/api/sellers${params}`
 
+    const cacheKey = locale ? `sellers:all:${locale}` : "sellers:all"
     const sellers = await cachedFetch<Seller[]>(endpoint, {
-      cacheKey: "sellers:all",
+      cacheKey,
       cacheTtl: 300,
     })
     return sellers
@@ -35,9 +37,9 @@ async function fetchSellersFromApi(): Promise<Seller[]> {
   }
 }
 
-export const getSellers = withCache(async (): Promise<Seller[]> => {
+export const getSellers = withCache(async (locale?: string): Promise<Seller[]> => {
   try {
-    return await fetchSellersFromApi()
+    return await fetchSellersFromApi(locale)
   } catch (error) {
     if (error instanceof Error) {
       if (error.message.startsWith("Unable to load sellers from backend.")) {

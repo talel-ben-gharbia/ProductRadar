@@ -5,7 +5,8 @@ import type { PriceHistoryEntry } from "@/utils/types"
 
 async function fetchPriceHistoryFromApi(
   productId?: number,
-  listingId?: number
+  listingId?: number,
+  locale?: string
 ): Promise<PriceHistoryEntry[]> {
   try {
     const params = new URLSearchParams()
@@ -15,6 +16,7 @@ async function fetchPriceHistoryFromApi(
     if (listingId !== undefined) {
       params.set("listingId", String(listingId))
     }
+    if (locale) params.set("lang", locale)
 
     const query = params.toString()
     const endpoint =
@@ -22,7 +24,7 @@ async function fetchPriceHistoryFromApi(
         ? `${BACKEND_URL}/price-history${query ? "?" + query : ""}`
         : `/api/price-history${query ? "?" + query : ""}`
 
-    const cacheKey = `price-history:p${productId ?? 0}:l${listingId ?? 0}`
+    const cacheKey = `price-history:p${productId ?? 0}:l${listingId ?? 0}${locale ? `:${locale}` : ""}`
 
     return await cachedFetch<PriceHistoryEntry[]>(endpoint, {
       cacheKey,
@@ -37,10 +39,11 @@ async function fetchPriceHistoryFromApi(
 
 export const getPriceHistory = withCache(async (
   productId?: number,
-  listingId?: number
+  listingId?: number,
+  locale?: string
 ): Promise<PriceHistoryEntry[]> => {
   try {
-    return await fetchPriceHistoryFromApi(productId, listingId)
+    return await fetchPriceHistoryFromApi(productId, listingId, locale)
   } catch (error) {
     if (error instanceof Error) {
       if (error.message.startsWith("Unable to load price history from backend.")) {

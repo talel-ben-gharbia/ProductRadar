@@ -3,15 +3,18 @@ import { cachedFetch } from "@/lib/fetch-with-cache"
 import { withCache } from "@/lib/server-cache"
 import type { Product } from "@/utils/types"
 
-async function fetchProductsFromApi(categoryId?: number): Promise<Product[]> {
+async function fetchProductsFromApi(categoryId?: number, locale?: string): Promise<Product[]> {
   try {
-    const query = categoryId ? `?categoryId=${categoryId}` : ""
+    const params = new URLSearchParams()
+    if (categoryId) params.set("categoryId", String(categoryId))
+    if (locale) params.set("lang", locale)
+    const query = params.toString()
     const endpoint =
       typeof window === "undefined"
-        ? `${BACKEND_URL}/products${query}`
-        : `/api/products${query}`
+        ? `${BACKEND_URL}/products${query ? `?${query}` : ""}`
+        : `/api/products${query ? `?${query}` : ""}`
 
-    const cacheKey = categoryId ? `products:cat` : "products:all"
+    const cacheKey = locale ? `products:all:${locale}` : "products:all"
 
     const products = await cachedFetch<Product[]>(endpoint, {
       cacheKey,

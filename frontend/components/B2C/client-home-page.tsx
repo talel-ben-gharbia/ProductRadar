@@ -15,6 +15,9 @@ import {
   type LucideIcon,
 } from "lucide-react"
 
+import { useApiUrl } from "@/lib/use-api-url"
+import { useI18n } from "@/lib/i18n-context"
+import { translateCategoryName } from "@/lib/category-translations"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -61,6 +64,7 @@ function matchesGaming(name: string): boolean {
 }
 
 function ProductTile({ product, priority = false }: { product: ShowcaseProduct; priority?: boolean }) {
+  const { t } = useI18n()
   return (
     <article className="group flex flex-col rounded-xl border border-slate-200 bg-white p-3 shadow-xs transition-all duration-200 hover:-translate-y-1 hover:border-slate-300 hover:shadow-md">
       <div className="relative mb-3 flex h-40 items-center justify-center overflow-hidden rounded-lg bg-gradient-to-b from-slate-50 to-slate-100/50">
@@ -102,7 +106,7 @@ function ProductTile({ product, priority = false }: { product: ShowcaseProduct; 
                 )}
               </>
             ) : product.offersCount > 0 ? (
-              <span className="text-sm font-medium text-slate-400">Épuisé</span>
+              <span className="text-sm font-medium text-slate-400">{t("detail.out_of_stock")}</span>
             ) : (
               <span className="text-sm font-medium text-slate-400">-</span>
             )}
@@ -111,14 +115,14 @@ function ProductTile({ product, priority = false }: { product: ShowcaseProduct; 
           <div className="flex items-center justify-between">
             {product.offersCount > 0 && (
               <span className="text-[11px] font-medium text-slate-400">
-                {product.offersCount} {product.offersCount === 1 ? "seller" : "sellers"}
+                {product.offersCount} {product.offersCount === 1 ? t("home.seller") : t("home.sellers")}
               </span>
             )}
             <Link
               href={`/B2C/products/${product.id}`}
               className="ml-auto inline-flex h-7 items-center rounded-full bg-slate-100 px-3 text-[11px] font-medium text-slate-600 transition-all hover:bg-orange-500 hover:text-white"
             >
-              View
+              {t("home.view")}
             </Link>
           </div>
         </div>
@@ -140,6 +144,7 @@ function SectionHeader({
   color?: string
   iconColor?: string
 }) {
+  const { t } = useI18n()
   return (
     <div className="mb-5 flex items-center justify-between">
       <div className="flex items-center gap-3">
@@ -153,7 +158,7 @@ function SectionHeader({
           href={href}
           className="inline-flex items-center gap-1 text-sm font-medium text-orange-600 transition-colors hover:text-orange-700"
         >
-          See all <ChevronRight className="h-4 w-4" />
+          {t("home.see_all")} <ChevronRight className="h-4 w-4" />
         </Link>
       )}
     </div>
@@ -193,13 +198,15 @@ function homeWriteLs(key: string, data: unknown) {
   try { localStorage.setItem(key, JSON.stringify({ data, ts: Date.now() })) } catch {}
 }
 
-function prefetchCategory(ids: string) {
+function prefetchCategory(ids: string, locale: string) {
   if (typeof window === "undefined") return
-  fetch(`/api/products?categoryIds=${encodeURIComponent(ids)}`).catch(() => {})
-  fetch(`/api/product-listings`).catch(() => {})
+  fetch(`/api/products?categoryIds=${encodeURIComponent(ids)}&lang=${locale}`).catch(() => {})
+  fetch(`/api/product-listings?lang=${locale}`).catch(() => {})
 }
 
 export default function ClientHomePage() {
+  const apiUrl = useApiUrl()
+  const { locale, t } = useI18n()
   const [loading, setLoading] = useState(true)
   const [rootCategories, setRootCategories] = useState<CategoryWithChildren[]>([])
   const [productsForShowcase, setProductsForShowcase] = useState<ShowcaseProduct[]>([])
@@ -223,9 +230,9 @@ export default function ClientHomePage() {
     async function load() {
       try {
         const [catsRes, prodsRes, listRes] = await Promise.all([
-          homeCachedFetch("/api/categories"),
-          homeCachedFetch("/api/products?limit=200"),
-          homeCachedFetch("/api/product-listings"),
+          homeCachedFetch(apiUrl("/api/categories")),
+          homeCachedFetch(apiUrl("/api/products?limit=200")),
+          homeCachedFetch(apiUrl("/api/product-listings")),
         ])
 
         if (cancelled) return
@@ -312,6 +319,7 @@ export default function ClientHomePage() {
           setLoading(false)
           homeWriteLs("b2c_home_showcase", showcase)
           homeWriteLs("b2c_home_cats", filtered)
+          // Categories loaded
         }
       } catch {
         if (!cancelled) setLoading(false)
@@ -327,7 +335,7 @@ export default function ClientHomePage() {
       <div className="flex min-h-[70vh] items-center justify-center">
         <div className="text-center">
           <Spinner className="mx-auto mb-4 h-10 w-10" />
-          <p className="text-sm text-muted-foreground">Chargement...</p>
+          <p className="text-sm text-muted-foreground">{t("general.loading")}</p>
         </div>
       </div>
     )
@@ -350,7 +358,7 @@ export default function ClientHomePage() {
                 {rootCategories.slice(0, 8).map((category) => (
                   <NavigationMenuItem key={category.id} className="static">
                     <NavigationMenuTrigger className="h-9 rounded-lg px-3 text-sm font-medium transition-colors hover:bg-slate-100">
-                      {category.name}
+                      {translateCategoryName(locale, category.name)}
                     </NavigationMenuTrigger>
                     <NavigationMenuContent className="absolute left-0 top-full z-50 mt-1 w-screen max-w-300 rounded-xl border bg-white p-6 shadow-lg">
                       {category.children.length > 0 ? (
@@ -360,9 +368,9 @@ export default function ClientHomePage() {
                               <Link
                                 href={`/B2C/products?categoryIds=${encodeURIComponent(item.allCategoryIds.join(","))}&categoryName=${encodeURIComponent(item.name)}`}
                                 className="block text-sm font-semibold text-foreground transition-colors hover:text-orange-600"
-                                onMouseEnter={() => prefetchCategory(item.allCategoryIds.join(","))}
+                                onMouseEnter={() => prefetchCategory(item.allCategoryIds.join(","), locale)}
                               >
-                                {item.name}
+                                {translateCategoryName(locale, item.name)}
                               </Link>
                               {item.children.length > 0 && (
                                 <>
@@ -373,9 +381,9 @@ export default function ClientHomePage() {
                                         <Link
                                           href={`/B2C/products?categoryIds=${encodeURIComponent(child.allCategoryIds.join(","))}&categoryName=${encodeURIComponent(child.name)}`}
                                           className="text-sm leading-6 text-muted-foreground transition-colors hover:text-orange-600"
-                                          onMouseEnter={() => prefetchCategory(child.allCategoryIds.join(","))}
+                                          onMouseEnter={() => prefetchCategory(child.allCategoryIds.join(","), locale)}
                                         >
-                                          {child.name}
+                                          {translateCategoryName(locale, child.name)}
                                         </Link>
                                       </li>
                                     ))}
@@ -386,7 +394,7 @@ export default function ClientHomePage() {
                           ))}
                         </div>
                       ) : (
-                        <p className="text-sm text-muted-foreground">No subcategories</p>
+                        <p className="text-sm text-muted-foreground">{t("category.no_subcategories")}</p>
                       )}
                     </NavigationMenuContent>
                   </NavigationMenuItem>
@@ -395,7 +403,7 @@ export default function ClientHomePage() {
                   <NavigationMenuItem className="static">
                     <NavigationMenuTrigger className="h-9 rounded-lg px-3 text-sm font-medium">
                       <Menu className="h-4 w-4" />
-                      <span className="ml-1.5">More</span>
+                      <span className="ml-1.5">{t("nav.more")}</span>
                     </NavigationMenuTrigger>
                     <NavigationMenuContent className="absolute left-0 top-full z-50 mt-1 w-screen max-w-xs rounded-xl border bg-white p-4 shadow-lg">
                       <div className="space-y-1">
@@ -404,9 +412,9 @@ export default function ClientHomePage() {
                             key={cat.id}
                             href={`/B2C/products?categoryIds=${encodeURIComponent(cat.id.toString())}&categoryName=${encodeURIComponent(cat.name)}`}
                             className="block rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-slate-100"
-                            onMouseEnter={() => prefetchCategory(cat.id.toString())}
+                            onMouseEnter={() => prefetchCategory(cat.id.toString(), locale)}
                           >
-                            {cat.name}
+                            {translateCategoryName(locale, cat.name)}
                           </Link>
                         ))}
                       </div>
@@ -428,16 +436,15 @@ export default function ClientHomePage() {
               <div className="absolute -bottom-12 -left-12 h-56 w-56 rounded-full bg-orange-500/10 blur-3xl" />
               <div className="relative">
                 <span className="inline-block rounded-full bg-orange-500/20 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-orange-300 backdrop-blur-sm">
-                  ProductRadar
+                  {t("home.brand")}
                 </span>
                 <h1 className="mt-5 text-3xl font-bold leading-tight tracking-tight sm:text-4xl lg:text-5xl">
-                  Smart shopping
+                  {t("home.hero_title_line1")}
                   <br />
-                  <span className="bg-gradient-to-r from-orange-400 to-amber-300 bg-clip-text text-transparent">starts here</span>
+                  <span className="bg-gradient-to-r from-orange-400 to-amber-300 bg-clip-text text-transparent">{t("home.hero_title_line2")}</span>
                 </h1>
                 <p className="mt-4 max-w-lg text-base leading-7 text-slate-300">
-                  Compare prices across stores, find the hottest deals, and make smarter purchasing decisions — all in one
-                  place.
+                  {t("home.hero_description")}
                 </p>
                 <div className="mt-7 flex flex-wrap gap-3">
                   <Button
@@ -446,7 +453,7 @@ export default function ClientHomePage() {
                   >
                     <Link href="/B2C/products">
                       <ShoppingBag className="mr-1.5 h-4 w-4" />
-                      Start browsing
+                      {t("home.start_browsing")}
                     </Link>
                   </Button>
                   <Button
@@ -456,7 +463,7 @@ export default function ClientHomePage() {
                   >
                     <Link href="/B2C/profile/plans">
                       <Sparkles className="mr-1.5 h-4 w-4" />
-                      Premium plans
+                      {t("home.premium_plans")}
                     </Link>
                   </Button>
                 </div>
@@ -487,12 +494,12 @@ export default function ClientHomePage() {
                       <>
                         <p className="mt-1 text-base font-bold text-orange-600">{toMoney(product.bestPrice)}</p>
                         {product.discountPercent > 0 && (
-                          <p className="text-xs font-medium text-emerald-600">-{product.discountPercent}% off</p>
+                          <p className="text-xs font-medium text-emerald-600">-{product.discountPercent}% {t("home.off")}</p>
                         )}
                       </>
                     ) : (
                       <p className="mt-1 text-sm font-medium text-slate-400">
-                        {product.offersCount > 0 ? "Épuisé" : "-"}
+                        {product.offersCount > 0 ? t("detail.out_of_stock") : "-"}
                       </p>
                     )}
                   </div>
@@ -505,7 +512,7 @@ export default function ClientHomePage() {
 
         {/* ─── Featured Products ─── */}
         <section>
-          <SectionHeader icon={Sparkles} label="Featured products" href="/B2C/products" color="bg-amber-100" iconColor="text-amber-600" />
+          <SectionHeader icon={Sparkles} label={t("home.featured")} href="/B2C/products" color="bg-amber-100" iconColor="text-amber-600" />
           {featuredGrid.length > 0 ? (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {featuredGrid.map((product, i) => (
@@ -515,14 +522,14 @@ export default function ClientHomePage() {
           ) : (
             <div className="rounded-xl border border-dashed bg-white py-16 text-center">
               <ShoppingBag className="mx-auto h-10 w-10 text-slate-200" />
-              <p className="mt-3 text-sm text-muted-foreground">No products available yet.</p>
+              <p className="mt-3 text-sm text-muted-foreground">{t("home.no_products")}</p>
             </div>
           )}
         </section>
 
         {/* ─── Best Deals ─── */}
         <section className="rounded-2xl bg-gradient-to-br from-orange-50 via-amber-50 to-yellow-50 p-6 shadow-sm ring-1 ring-orange-100/50">
-          <SectionHeader icon={TicketPercent} label="Best deals" href="/B2C/products?sort=discount" color="bg-orange-100" iconColor="text-orange-600" />
+          <SectionHeader icon={TicketPercent} label={t("home.best_deals")} href="/B2C/products?sort=discount" color="bg-orange-100" iconColor="text-orange-600" />
           {bestDeals.length > 0 ? (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
               {bestDeals.map((product) => (
@@ -530,13 +537,13 @@ export default function ClientHomePage() {
               ))}
             </div>
           ) : (
-            <p className="py-10 text-center text-sm text-muted-foreground">No deals available right now.</p>
+            <p className="py-10 text-center text-sm text-muted-foreground">{t("home.no_deals")}</p>
           )}
         </section>
 
         {/* ─── Trending Now ─── */}
         <section>
-          <SectionHeader icon={Flame} label="Trending now" href="/B2C/products" color="bg-red-100" iconColor="text-red-500" />
+          <SectionHeader icon={Flame} label={t("home.trending")} href="/B2C/products" color="bg-red-100" iconColor="text-red-500" />
           {trendingGrid.length > 0 ? (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {trendingGrid.map((product) => (
@@ -546,7 +553,7 @@ export default function ClientHomePage() {
           ) : (
             <div className="rounded-xl border border-dashed bg-white py-16 text-center">
               <ShoppingBag className="mx-auto h-10 w-10 text-slate-200" />
-              <p className="mt-3 text-sm text-muted-foreground">No trending products right now.</p>
+              <p className="mt-3 text-sm text-muted-foreground">{t("home.no_trending")}</p>
             </div>
           )}
           <div className="mt-8 text-center">
@@ -555,7 +562,7 @@ export default function ClientHomePage() {
               className="h-12 rounded-full bg-gradient-to-r from-slate-800 to-slate-700 px-10 shadow-sm transition-all hover:from-slate-900 hover:to-slate-800"
             >
               <Link href="/B2C/products" className="inline-flex items-center gap-2 text-sm">
-                Browse all products
+                {t("home.browse_all")}
                 <ArrowRight className="h-4 w-4" />
               </Link>
             </Button>
@@ -564,7 +571,7 @@ export default function ClientHomePage() {
 
         {/* ─── Gaming Zone ─── */}
         <section className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200/50">
-          <SectionHeader icon={Gamepad2} label="Gaming zone" color="bg-purple-100" iconColor="text-purple-600" />
+          <SectionHeader icon={Gamepad2} label={t("home.gaming_zone")} color="bg-purple-100" iconColor="text-purple-600" />
           <div className="grid gap-6 lg:grid-cols-[1.3fr_1fr]">
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
               {gamingGrid.length > 0 ? (
@@ -572,9 +579,9 @@ export default function ClientHomePage() {
                   <ProductTile key={product.id} product={product} />
                 ))
               ) : (
-                <p className="col-span-full py-10 text-center text-sm text-muted-foreground">
-                  No gaming products available.
-                </p>
+                  <p className="col-span-full py-10 text-center text-sm text-muted-foreground">
+                    {t("home.no_gaming")}
+                  </p>
               )}
             </div>
             <aside className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-900 via-purple-800 to-indigo-700 p-7 text-white">
@@ -582,9 +589,9 @@ export default function ClientHomePage() {
               <div className="absolute -bottom-6 -left-6 h-32 w-32 rounded-full bg-purple-400/10 blur-2xl" />
               <div className="relative">
                 <Gamepad2 className="h-10 w-10 text-cyan-300" />
-                <h3 className="mt-4 text-2xl font-bold leading-tight">Level up your setup</h3>
+                <h3 className="mt-4 text-2xl font-bold leading-tight">{t("home.level_up")}</h3>
                 <p className="mt-3 text-sm leading-6 text-cyan-50/80">
-                  Pro-grade gear, top-rated peripherals, and the latest releases — all at the best prices across every store.
+                  {t("home.gaming_description")}
                 </p>
                 <Button
                   asChild
@@ -592,7 +599,7 @@ export default function ClientHomePage() {
                   className="mt-6 rounded-full border-white/25 bg-white/10 text-white shadow-xs backdrop-blur-sm transition-all hover:bg-white/20"
                 >
                   <Link href="/B2C/products?search=gaming">
-                    Explore gaming
+                    {t("home.explore_gaming")}
                     <ArrowRight className="ml-1.5 h-4 w-4" />
                   </Link>
                 </Button>
@@ -604,7 +611,7 @@ export default function ClientHomePage() {
         {/* ─── Footer ─── */}
         <footer className="border-t border-slate-200 pb-6 pt-8 text-center">
           <p className="text-xs text-slate-400">
-            ProductRadar &mdash; Compare. Decide. Save.
+            {t("home.footer_tagline")}
           </p>
         </footer>
       </main>

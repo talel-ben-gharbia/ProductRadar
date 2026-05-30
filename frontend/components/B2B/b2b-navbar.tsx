@@ -8,6 +8,7 @@ import { useB2B } from "@/components/B2B/b2b-context"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
+import { LanguageSelector } from "@/components/B2C/language-selector"
 
 const PAGE_TITLES: Record<string, string> = {
   "/B2B/dashboard": "Overview",
@@ -38,7 +39,7 @@ function B2BNavbar() {
   }, [pathname])
 
   return (
-    <header className="flex h-16 items-center justify-between border-b bg-background/95 px-4 backdrop-blur sm:px-6 lg:px-8">
+    <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b bg-background/95 px-4 backdrop-blur sm:px-6 lg:px-8">
       <div className="flex items-center gap-3">
         <SidebarTrigger />
         <Separator orientation="vertical" className="hidden h-5! sm:block" />
@@ -58,6 +59,7 @@ function B2BNavbar() {
       </div>
 
       <div className="flex items-center gap-3">
+        <LanguageSelector />
         {planType && (
           <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ${
             isGold

@@ -7,7 +7,8 @@ export default function DataManagementPage() {
     <section className="w-full max-w-none space-y-4">
       <h1 className="text-2xl font-bold">Data Management</h1>
       <p className="text-sm text-muted-foreground">
-        Use focused pages to manage sources and inspect ingestion activity.
+        <strong className="text-foreground">Scraping Logs</strong> shows execution history/failures,
+        and <strong className="text-foreground">Manual Scraping</strong> lets you trigger immediate collection.
       </p>
 
       <Card>
@@ -35,21 +36,7 @@ export default function DataManagementPage() {
         </CardContent>
       </Card>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader>
-            <CardTitle>Data Sources</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="mb-4 text-sm text-muted-foreground">
-              Register and maintain ingestion endpoints (API providers and scraper sources).
-            </p>
-            <Link href="/admin/data-management/sources" className="text-sm font-medium text-primary underline-offset-4 hover:underline">
-              Open Data Sources
-            </Link>
-          </CardContent>
-        </Card>
-
+      <div className="grid gap-4 md:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle>Scraping Logs</CardTitle>

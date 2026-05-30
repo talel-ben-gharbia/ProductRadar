@@ -115,10 +115,6 @@ const SIDEBAR_CONSTANTS: SidebarItem[] = [
         url: "/admin/data-management",
       },
       {
-        title: "Data Sources",
-        url: "/admin/data-management/sources",
-      },
-      {
         title: "Scraping Logs",
         url: "/admin/data-management/scraping-logs",
       },
