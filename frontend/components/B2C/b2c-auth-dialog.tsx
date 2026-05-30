@@ -212,6 +212,7 @@ export function B2CAuthDialogTrigger() {
         className="h-9 rounded-full px-4"
         onClick={openAuthDialog}
       >
+        <LogIn className="h-4 w-4" />
         Log in
       </Button>
 
