@@ -1,4 +1,6 @@
-import { BACKEND_URL } from "@/utils/admin/constants"
+﻿import { BACKEND_URL } from "@/utils/admin/constants"
+import { cachedFetch } from "@/lib/fetch-with-cache"
+import { withCache } from "@/lib/server-cache"
 import type { PriceHistoryEntry } from "@/utils/types"
 
 async function fetchPriceHistoryFromApi(
@@ -15,24 +17,17 @@ async function fetchPriceHistoryFromApi(
     }
 
     const query = params.toString()
-    const isServer = typeof window === "undefined"
-    const endpoint = isServer
-      ? `${BACKEND_URL}/price-history${query ? "?" + query : ""}`
-      : `/api/price-history${query ? "?" + query : ""}`
+    const endpoint =
+      typeof window === "undefined"
+        ? `${BACKEND_URL}/price-history${query ? "?" + query : ""}`
+        : `/api/price-history${query ? "?" + query : ""}`
 
-    const headers: Record<string, string> = {}
-    if (isServer) {
-      headers["X-Admin-Api-Key"] =
-        process.env.ADMIN_API_KEY ?? "dev-admin-api-key-change-me"
-      headers["X-Admin-Role"] = "ROLE_SUPER_ADMIN"
-    }
+    const cacheKey = `price-history:p${productId ?? 0}:l${listingId ?? 0}`
 
-    const res = await fetch(endpoint, { cache: "no-store", headers })
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}))
-      throw new Error(data?.error ?? `HTTP ${res.status}`)
-    }
-    return await res.json()
+    return await cachedFetch<PriceHistoryEntry[]>(endpoint, {
+      cacheKey,
+      cacheTtl: 300,
+    })
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Unknown price history fetch error"
@@ -40,10 +35,10 @@ async function fetchPriceHistoryFromApi(
   }
 }
 
-export async function getPriceHistory(
+export const getPriceHistory = withCache(async (
   productId?: number,
   listingId?: number
-): Promise<PriceHistoryEntry[]> {
+): Promise<PriceHistoryEntry[]> => {
   try {
     return await fetchPriceHistoryFromApi(productId, listingId)
   } catch (error) {
@@ -59,4 +54,4 @@ export async function getPriceHistory(
       "Unable to load price history from backend. Unknown price history service error"
     )
   }
-}
+})

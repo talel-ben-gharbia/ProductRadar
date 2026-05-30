@@ -1,4 +1,4 @@
-export type DataSourceItem = {
+﻿export type DataSourceItem = {
   id: number
   name: string
   base_url: string
@@ -28,6 +28,7 @@ export type SourceHealthResponse = {
 }
 
 import { cachedFetch } from "@/lib/fetch-with-cache"
+import { withCache } from "@/lib/server-cache"
 
 function buildQuery(params: Record<string, string | number | undefined>): string {
   const searchParams = new URLSearchParams()
@@ -40,12 +41,12 @@ function buildQuery(params: Record<string, string | number | undefined>): string
   return query ? `?${query}` : ""
 }
 
-export async function getDataSources(filters: {
+export const getDataSources = withCache(async (filters: {
   limit?: number
   offset?: number
   search?: string
   active?: string
-} = {}): Promise<DataSourcesResponse> {
+} = {}): Promise<DataSourcesResponse> => {
   const query = buildQuery({
     limit: filters.limit,
     offset: filters.offset,
@@ -59,7 +60,7 @@ export async function getDataSources(filters: {
     cacheKey,
     cacheTtl: 300,
   })
-}
+})
 
 async function parseJson(response: Response): Promise<unknown> {
   return response.json().catch(() => ({}))
@@ -103,9 +104,9 @@ export async function updateDataSource(
   return data as DataSourceItem
 }
 
-export async function testDataSourceHealth(sourceName: string): Promise<SourceHealthResponse> {
+export const testDataSourceHealth = withCache(async (sourceName: string): Promise<SourceHealthResponse> => {
   return cachedFetch<SourceHealthResponse>(
     `/api/admin/scraping-logs/source/${encodeURIComponent(sourceName)}/health`,
     { cacheKey: `data_sources:health:${sourceName}`, cacheTtl: 300 },
   )
-}
+})

@@ -30,7 +30,7 @@ export default function RootLayout({
       className={cn("antialiased", fontMono.variable, "font-sans", fontSans.variable)}
     >
       <body suppressHydrationWarning>
-        <Script id="remove-injected-dom-attrs" strategy="beforeInteractive">
+        <Script id="remove-injected-dom-attrs" strategy="afterInteractive">
           {`
             (function () {
               var attrs = ["bis_skin_checked", "data-new-gr-c-s-check-loaded", "data-gr-ext-installed"];

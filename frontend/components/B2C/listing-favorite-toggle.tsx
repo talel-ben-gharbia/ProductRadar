@@ -10,15 +10,25 @@ import type { B2CFavorite } from "@/utils/types"
 
 type ListingFavoriteToggleProps = {
   productListingId: number
+  defaultFavorited?: boolean
+  defaultFavoriteId?: number | null
 }
 
-export function ListingFavoriteToggle({ productListingId }: ListingFavoriteToggleProps) {
+export function ListingFavoriteToggle({
+  productListingId,
+  defaultFavorited,
+  defaultFavoriteId,
+}: ListingFavoriteToggleProps) {
   const { openAuthDialog } = useAuthDialog()
-  const [favoriteId, setFavoriteId] = useState<number | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [favoriteId, setFavoriteId] = useState<number | null>(
+    defaultFavorited ? (defaultFavoriteId ?? null) : null,
+  )
+  const [loading, setLoading] = useState(!defaultFavorited)
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
+    if (defaultFavorited !== undefined) return
+
     let cancelled = false
 
     async function loadFavorite() {
@@ -64,7 +74,7 @@ export function ListingFavoriteToggle({ productListingId }: ListingFavoriteToggl
     return () => {
       cancelled = true
     }
-  }, [productListingId])
+  }, [productListingId, defaultFavorited])
 
   async function toggleFavorite(e: React.MouseEvent) {
     e.stopPropagation()

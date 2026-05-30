@@ -1,5 +1,6 @@
-import { BACKEND_URL } from "@/utils/admin/constants"
+﻿import { BACKEND_URL } from "@/utils/admin/constants"
 import { cachedFetch } from "@/lib/fetch-with-cache"
+import { withCache } from "@/lib/server-cache"
 import type { ProductListing } from "@/utils/types"
 
 async function parseJson(response: Response): Promise<unknown> {
@@ -37,7 +38,7 @@ async function fetchProductListingsFromApi(
           ? `/api/product-listings?${query}`
           : "/api/product-listings"
 
-    const cacheKey = `listings:p${productId ?? 0}:s${sellerId ?? 0}:p${page ?? 1}` + (limit !== undefined && limit > 0 ? `:l${limit}` : '')
+    const cacheKey = `listings:p${productId || "all"}:s${sellerId || "all"}:p${page || "1"}${limit !== undefined && limit > 0 ? `:l${limit}` : ''}`
 
     const productListings = await cachedFetch<ProductListing[]>(endpoint, {
       cacheKey,
@@ -49,16 +50,16 @@ async function fetchProductListingsFromApi(
       error instanceof Error
         ? error.message
         : "Unknown product listings fetch error"
-    throw new Error(`Unable to load product listings from backend. ${message}`)
+    throw new Error("Unable to load product listings from backend.")
   }
 }
 
-export async function getProductListings(
+export const getProductListings = withCache(async (
   productId?: number,
   sellerId?: number,
   page?: number,
   limit?: number
-): Promise<ProductListing[]> {
+): Promise<ProductListing[]> => {
   try {
     const productListings = await fetchProductListingsFromApi(productId, sellerId, page, limit)
     return productListings
@@ -73,7 +74,7 @@ export async function getProductListings(
       }
 
       throw new Error(
-        `Unable to load product listings from backend. ${error.message}`
+        "Unable to load product listings from backend."
       )
     }
 
@@ -81,7 +82,7 @@ export async function getProductListings(
       "Unable to load product listings from backend. Unknown product listings service error"
     )
   }
-}
+})
 
 export async function updateProductListing(
   id: number,
@@ -96,7 +97,7 @@ export async function updateProductListing(
     sellerId?: number
   }
 ): Promise<{ id?: number }> {
-  const response = await fetch(`/api/product-listings/${id}`, {
+  const response = await fetch("/api/product-listings/", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -114,7 +115,7 @@ export async function setProductListingActive(
   id: number,
   isActive: boolean,
 ): Promise<{ id?: number; is_active?: boolean }> {
-  const response = await fetch(`/api/product-listings/${id}`, {
+  const response = await fetch("/api/product-listings/", {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ is_active: isActive }),
@@ -129,7 +130,7 @@ export async function setProductListingActive(
 }
 
 export async function deleteProductListing(id: number): Promise<{ success?: boolean }> {
-  const response = await fetch(`/api/product-listings/${id}`, {
+  const response = await fetch("/api/product-listings/", {
     method: "DELETE",
   })
 

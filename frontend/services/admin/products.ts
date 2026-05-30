@@ -1,5 +1,6 @@
-import { BACKEND_URL } from "@/utils/admin/constants"
+﻿import { BACKEND_URL } from "@/utils/admin/constants"
 import { cachedFetch } from "@/lib/fetch-with-cache"
+import { withCache } from "@/lib/server-cache"
 import type { Product } from "@/utils/types"
 
 async function fetchProductsFromApi(categoryId?: number): Promise<Product[]> {
@@ -10,7 +11,7 @@ async function fetchProductsFromApi(categoryId?: number): Promise<Product[]> {
         ? `${BACKEND_URL}/products${query}`
         : `/api/products${query}`
 
-    const cacheKey = categoryId ? `products:cat${categoryId}` : "products:all"
+    const cacheKey = categoryId ? `products:cat` : "products:all"
 
     const products = await cachedFetch<Product[]>(endpoint, {
       cacheKey,
@@ -23,6 +24,8 @@ async function fetchProductsFromApi(categoryId?: number): Promise<Product[]> {
     throw new Error(`Unable to load products from backend. ${message}`)
   }
 }
+
+export const getProducts = withCache(fetchProductsFromApi)
 
 export async function updateProduct(
   id: number,
@@ -59,23 +62,4 @@ export async function deleteProduct(id: number): Promise<{ success?: boolean }> 
   }
 
   return data as { success?: boolean }
-}
-
-export async function getProducts(categoryId?: number): Promise<Product[]> {
-  try {
-    const products = await fetchProductsFromApi(categoryId)
-    return products
-  } catch (error) {
-    if (error instanceof Error) {
-      if (error.message.startsWith("Unable to load products from backend.")) {
-        throw error
-      }
-
-      throw new Error(`Unable to load products from backend. ${error.message}`)
-    }
-
-    throw new Error(
-      "Unable to load products from backend. Unknown products service error"
-    )
-  }
 }

@@ -2,7 +2,7 @@ import { cookies } from "next/headers"
 import { NextRequest, NextResponse } from "next/server"
 
 import { verifySessionToken, COOKIE_NAME } from "@/lib/admin-session"
-import { cachedFetch } from "@/lib/fetch-with-cache"
+import { cachedFetch, invalidateCache } from "@/lib/fetch-with-cache"
 import { BACKEND_URL } from "@/utils/admin/constants"
 
 async function isSuperAdmin(): Promise<boolean> {
@@ -19,12 +19,13 @@ async function isSuperAdmin(): Promise<boolean> {
 
 export async function GET(request: NextRequest) {
   try {
-    const categoryId = request.nextUrl.searchParams.get("categoryId")
-    const query = categoryId ? `?categoryId=${encodeURIComponent(categoryId)}` : ""
+    const query = request.nextUrl.searchParams.toString()
+    const endpoint = query ? `${BACKEND_URL}/products?${query}` : `${BACKEND_URL}/products`
+    const cacheKey = query ? `products:${query}` : "products:all"
 
-    const data = await cachedFetch<unknown>(`${BACKEND_URL}/products${query}`, {
-      cacheKey: `products:${categoryId || "all"}`,
-      cacheTtl: 60,
+    const data = await cachedFetch<unknown>(endpoint, {
+      cacheKey,
+      cacheTtl: 600,
     })
     return NextResponse.json(data)
   } catch {
@@ -68,6 +69,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    await invalidateCache("products:*")
     return NextResponse.json(data, { status: 201 })
   } catch {
     return NextResponse.json(

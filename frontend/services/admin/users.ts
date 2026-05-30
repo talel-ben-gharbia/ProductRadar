@@ -1,4 +1,4 @@
-export type UserAccountType = "B2C" | "B2B_COMPANY" | "B2B_MARKET"
+﻿export type UserAccountType = "B2C" | "B2B_COMPANY" | "B2B_MARKET"
 export type UserAccountStatus = "ACTIVE" | "SUSPENDED" | "BANNED"
 export type B2BStatus = "PENDING" | "APPROVED" | "REJECTED"
 
@@ -91,6 +91,7 @@ export type UserFilters = {
 }
 
 import { cachedFetch } from "@/lib/fetch-with-cache"
+import { withCache } from "@/lib/server-cache"
 
 function buildQuery(params: Record<string, string | number | undefined>): string {
   const searchParams = new URLSearchParams()
@@ -107,11 +108,11 @@ async function parseJson(response: Response): Promise<unknown> {
   return response.json().catch(() => ({}))
 }
 
-export async function getUsers(
+export const getUsers = withCache(async (
   limit: number,
   offset: number,
   filters: UserFilters = {},
-): Promise<PaginatedUsersResponse> {
+): Promise<PaginatedUsersResponse> => {
   const query = buildQuery({
     limit,
     offset,
@@ -121,20 +122,20 @@ export async function getUsers(
     b2bStatus: filters.b2bStatus,
   })
 
-  const cacheKey = `users:list:l${limit}:o${offset}:${JSON.stringify(filters)}`
+  const cacheKey = `users:list:${limit}:${offset}`
 
-  return cachedFetch<PaginatedUsersResponse>(`/api/admin/users${query}`, {
+  return cachedFetch<PaginatedUsersResponse>(`/api/admin/users`, {
     cacheKey,
     cacheTtl: 300,
   })
-}
+})
 
-export async function getUserAdminStats(): Promise<UserAdminStatsResponse> {
+export const getUserAdminStats = withCache(async (): Promise<UserAdminStatsResponse> => {
   return cachedFetch<UserAdminStatsResponse>(`/api/admin/users/stats`, {
     cacheKey: "users:stats",
     cacheTtl: 300,
   })
-}
+})
 
 export async function updateUserStatus(
   id: number,
@@ -154,19 +155,19 @@ export async function updateUserStatus(
   return data as AdminUser
 }
 
-export async function getPendingB2BUsers(
+export const getPendingB2BUsers = withCache(async (
   limit: number,
   offset: number,
   search?: string,
-): Promise<PaginatedUsersResponse> {
+): Promise<PaginatedUsersResponse> => {
   const query = buildQuery({ limit, offset, search })
-  const cacheKey = `users:b2b_pending:l${limit}:o${offset}:${search ?? ''}`
+  const cacheKey = `users:b2b_pending:${limit}:${offset}`
 
-  return cachedFetch<PaginatedUsersResponse>(`/api/admin/users/b2b/pending${query}`, {
+  return cachedFetch<PaginatedUsersResponse>(`/api/admin/users/b2b/pending`, {
     cacheKey,
     cacheTtl: 300,
   })
-}
+})
 
 export async function updateB2BStatus(
   id: number,
@@ -198,12 +199,12 @@ export async function updateB2BStatus(
   return data as AdminUser
 }
 
-export async function getRecentB2BReviews(limit = 10): Promise<RecentB2BReviewsResponse> {
+export const getRecentB2BReviews = withCache(async (limit = 10): Promise<RecentB2BReviewsResponse> => {
   const query = buildQuery({ limit })
-  const cacheKey = `users:b2b_recent:l${limit}`
+  const cacheKey = `users:b2b_recent:${limit}`
 
-  return cachedFetch<RecentB2BReviewsResponse>(`/api/admin/users/b2b/recent${query}`, {
+  return cachedFetch<RecentB2BReviewsResponse>(`/api/admin/users/b2b/recent`, {
     cacheKey,
     cacheTtl: 300,
   })
-}
+})

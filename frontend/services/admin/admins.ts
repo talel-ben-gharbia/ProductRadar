@@ -1,4 +1,4 @@
-export type AdminUser = {
+﻿export type AdminUser = {
   id: number
   email: string
   role: string
@@ -7,13 +7,14 @@ export type AdminUser = {
 }
 
 import { cachedFetch } from "@/lib/fetch-with-cache"
+import { withCache } from "@/lib/server-cache"
 
-export async function getAdmins(): Promise<AdminUser[]> {
+export const getAdmins = withCache(async (): Promise<AdminUser[]> => {
   return cachedFetch<AdminUser[]>("/api/admin/admins", {
     cacheKey: "admins:list",
     cacheTtl: 300,
   })
-}
+})
 
 export async function createAdmin(payload: {
   email: string

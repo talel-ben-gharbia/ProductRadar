@@ -1,4 +1,4 @@
-export type SubscriptionItem = {
+﻿export type SubscriptionItem = {
   id: number
   plan_type: string
   active: boolean
@@ -47,6 +47,7 @@ export type SubscriptionResyncResponse = {
 }
 
 import { cachedFetch } from "@/lib/fetch-with-cache"
+import { withCache } from "@/lib/server-cache"
 
 function buildQuery(params: Record<string, string | number | undefined>): string {
   const searchParams = new URLSearchParams()
@@ -59,11 +60,11 @@ function buildQuery(params: Record<string, string | number | undefined>): string
   return query ? `?${query}` : ""
 }
 
-export async function getSubscriptions(
+export const getSubscriptions = withCache(async (
   limit: number,
   offset: number,
   filters: { planType?: string; active?: string; accountType?: string } = {},
-): Promise<SubscriptionsResponse> {
+): Promise<SubscriptionsResponse> => {
   const query = buildQuery({
     limit,
     offset,
@@ -72,20 +73,20 @@ export async function getSubscriptions(
     accountType: filters.accountType,
   })
 
-  const cacheKey = `subscriptions:list:l${limit}:o${offset}:${JSON.stringify(filters)}`
+  const cacheKey = `subscriptions:list:${limit}:${offset}`
 
   return cachedFetch<SubscriptionsResponse>(`/api/admin/subscriptions${query}`, {
     cacheKey,
     cacheTtl: 300,
   })
-}
+})
 
-export async function getSubscriptionDetail(id: number): Promise<SubscriptionItem> {
+export const getSubscriptionDetail = withCache(async (id: number): Promise<SubscriptionItem> => {
   return cachedFetch<SubscriptionItem>(`/api/admin/subscriptions/${id}`, {
     cacheKey: `subscriptions:detail:${id}`,
     cacheTtl: 300,
   })
-}
+})
 
 export async function resyncAllSubscriptions(): Promise<SubscriptionResyncResponse> {
   const response = await fetch('/api/admin/subscriptions/resync', {

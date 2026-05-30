@@ -1,4 +1,4 @@
-export interface ReviewAnalytics {
+﻿export interface ReviewAnalytics {
   analytics: {
     total: number;
     approved: number;
@@ -32,22 +32,23 @@ export interface SourceHealth {
 }
 
 import { cachedFetch } from "@/lib/fetch-with-cache"
+import { withCache } from "@/lib/server-cache"
 
-export async function getReviewAnalytics(): Promise<ReviewAnalytics> {
+export const getReviewAnalytics = withCache(async (): Promise<ReviewAnalytics> => {
   return cachedFetch<ReviewAnalytics>('/api/admin/reviews/analytics', {
     cacheKey: 'reviews:analytics',
     cacheTtl: 300,
   });
-}
+});
 
-export async function getAutoModerationSuggestion(
+export const getAutoModerationSuggestion = withCache(async (
   reviewId: number,
-): Promise<AutoModerationSuggestion> {
+): Promise<AutoModerationSuggestion> => {
   return cachedFetch<AutoModerationSuggestion>(`/api/admin/reviews/${reviewId}/auto-moderate`, {
     cacheKey: `reviews:auto_moderate:${reviewId}`,
     cacheTtl: 300,
   });
-}
+});
 
 export async function batchModerationReviews(
   reviewIds: number[],
@@ -63,9 +64,9 @@ export async function batchModerationReviews(
   return res.json();
 }
 
-export async function getSourceHealth(sourceName: string): Promise<SourceHealth> {
+export const getSourceHealth = withCache(async (sourceName: string): Promise<SourceHealth> => {
   return cachedFetch<SourceHealth>(
-    `/api/admin/scraping-logs/source/${encodeURIComponent(sourceName)}/health`,
+    `/api/admin/scraping-logs/source/${sourceName}/health`,
     { cacheKey: `scraping_logs:health:${sourceName}`, cacheTtl: 300 },
   );
-}
+});

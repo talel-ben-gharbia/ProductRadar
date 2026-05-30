@@ -9,6 +9,7 @@ import { Bell, BellRing, Heart, Menu, Search, Target, X } from "lucide-react"
 import { B2CNavAuth } from "@/components/B2C/b2c-nav-auth"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { useAuthDialog } from "@/lib/auth-dialog-context"
 
 type LiveSearchProduct = {
   id: number
@@ -36,8 +37,15 @@ function formatPrice(value: number | null): string {
   return `${value.toFixed(2)} DT`
 }
 
-export function B2CNavbar() {
+type B2CNavbarProps = {
+  title?: string
+  backHref?: string
+  backLabel?: string
+}
+
+export function B2CNavbar({ title, backHref, backLabel }: B2CNavbarProps) {
   const router = useRouter()
+  const { openAuthDialog } = useAuthDialog()
   const [query, setQuery] = useState("")
   const [results, setResults] = useState<LiveSearchProduct[]>([])
   const [isLoading, setIsLoading] = useState(false)
@@ -262,19 +270,34 @@ export function B2CNavbar() {
   return (
     <header className="sticky top-0 z-50 h-16 border-b bg-white/95 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-white/80">
       <div className="mx-auto w-full flex h-full max-w-8xl items-center gap-3 px-4 sm:px-10">
-        {/* Brand */}
-        <Link
-          href="/"
-          className="flex shrink-0 items-center gap-2 font-bold text-foreground transition-opacity hover:opacity-80"
-        >
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-foreground text-background">
-            <Target className="h-4 w-4" />
+        {/* Brand / Title */}
+        {backHref ? (
+          <div className="flex shrink-0 items-center gap-2">
+            <Link
+              href={backHref}
+              className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><path d="m15 18-6-6 6-6"/></svg>
+              {backLabel && <span className="hidden sm:inline">{backLabel}</span>}
+            </Link>
+            {title && (
+              <span className="hidden text-base font-bold sm:block">{title}</span>
+            )}
           </div>
-          <span className="hidden text-base sm:block">ProductRadar</span>
-        </Link>
+        ) : (
+          <Link
+            href="/"
+            className="flex shrink-0 items-center gap-2 font-bold text-foreground transition-opacity hover:opacity-80"
+          >
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-foreground text-background">
+              <Target className="h-4 w-4" />
+            </div>
+            <span className="hidden text-base sm:block">{title || "ProductRadar"}</span>
+          </Link>
+        )}
 
         {/* Search */}
-        <div ref={containerRef} className="relative min-w-0 flex-1 sm:max-w-md lg:max-w-lg">
+        <div ref={containerRef} className="relative min-w-0 flex-1">
           <form
             action="/B2C/products"
             method="get"
@@ -351,7 +374,13 @@ export function B2CNavbar() {
               variant="ghost"
               size="icon"
               className="relative h-9 w-9 rounded-full text-muted-foreground hover:text-foreground"
-              onClick={() => setNotificationsOpen((v) => !v)}
+              onClick={() => {
+                if (!isAuthenticated) {
+                  openAuthDialog()
+                  return
+                }
+                setNotificationsOpen((v) => !v)
+              }}
               aria-label="Notifications"
             >
               <Bell className="h-4 w-4" />
@@ -366,29 +395,19 @@ export function B2CNavbar() {
 
           {!isB2BSession && (
             <Button
-              asChild
               variant="ghost"
               size="sm"
               className="h-9 gap-1.5 rounded-full text-muted-foreground hover:text-foreground"
+              onClick={() => {
+                if (isAuthenticated) {
+                  router.push("/B2C/profile/favorites")
+                } else {
+                  openAuthDialog()
+                }
+              }}
             >
-              <Link href="/B2C/profile/favorites">
-                <Heart className="h-4 w-4" />
-                <span>Favorites</span>
-              </Link>
-            </Button>
-          )}
-
-          {!isB2BSession && (
-            <Button
-              asChild
-              variant="ghost"
-              size="sm"
-              className="h-9 gap-1.5 rounded-full text-muted-foreground hover:text-foreground"
-            >
-              <Link href="/B2C/profile/alerts">
-                <BellRing className="h-4 w-4" />
-                <span>Alerts</span>
-              </Link>
+              <Heart className="h-4 w-4" />
+              <span>Favorites</span>
             </Button>
           )}
 
@@ -424,7 +443,13 @@ export function B2CNavbar() {
               variant="ghost"
               size="icon"
               className="relative h-9 w-9 rounded-full"
-              onClick={() => setNotificationsOpen((v) => !v)}
+              onClick={() => {
+                if (!isAuthenticated) {
+                  openAuthDialog()
+                  return
+                }
+                setNotificationsOpen((v) => !v)
+              }}
               aria-label="Notifications"
             >
               <Bell className="h-4 w-4" />
@@ -463,22 +488,21 @@ export function B2CNavbar() {
             >
               Browse Products
             </Link>
-            <Link
-              href="/B2C/profile/favorites"
-              onClick={() => setMobileMenuOpen(false)}
-              className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm transition-colors hover:bg-slate-50"
+            <button
+              type="button"
+              onClick={() => {
+                setMobileMenuOpen(false)
+                if (isAuthenticated) {
+                  router.push("/B2C/profile/favorites")
+                } else {
+                  openAuthDialog()
+                }
+              }}
+              className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-sm transition-colors hover:bg-slate-50"
             >
               <Heart className="h-4 w-4 text-muted-foreground" />
               Favorites
-            </Link>
-            <Link
-              href="/B2C/profile/alerts"
-              onClick={() => setMobileMenuOpen(false)}
-              className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm transition-colors hover:bg-slate-50"
-            >
-              <BellRing className="h-4 w-4 text-muted-foreground" />
-              My Alerts
-            </Link>
+            </button>
             {isB2BSession ? (
               <Link
                 href="/B2B/dashboard"

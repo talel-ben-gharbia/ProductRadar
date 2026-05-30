@@ -1,5 +1,6 @@
-import { BACKEND_URL } from "@/utils/admin/constants"
+﻿import { BACKEND_URL } from "@/utils/admin/constants"
 import { cachedFetch } from "@/lib/fetch-with-cache"
+import { withCache } from "@/lib/server-cache"
 import type { BestTimeToBuyPrediction } from "@/utils/types"
 
 interface BestTimeToBuyResponse {
@@ -9,10 +10,10 @@ interface BestTimeToBuyResponse {
   friendly_message?: string
 }
 
-export async function getBestTimeToBuy(
+export const getBestTimeToBuy = withCache(async (
   productId: number,
   alerterId: number,
-): Promise<BestTimeToBuyResponse> {
+): Promise<BestTimeToBuyResponse> => {
   const params = new URLSearchParams({
     productId: String(productId),
     alerterId: String(alerterId),
@@ -31,4 +32,4 @@ export async function getBestTimeToBuy(
   }
 
   return data
-}
+})

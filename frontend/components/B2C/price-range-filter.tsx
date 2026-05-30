@@ -11,7 +11,8 @@ type PriceRangeFilterProps = {
   maxBound: number
   initialMin: number
   initialMax: number
-  baseParams: Record<string, string>
+  baseParams?: Record<string, string>
+  onPriceChange?: (min?: number, max?: number) => void
 }
 
 function clamp(value: number, min: number, max: number) {
@@ -23,7 +24,8 @@ export function PriceRangeFilter({
   maxBound,
   initialMin,
   initialMax,
-  baseParams,
+  baseParams = {},
+  onPriceChange,
 }: PriceRangeFilterProps) {
   const router = useRouter()
 
@@ -41,6 +43,10 @@ export function PriceRangeFilter({
   }, [range])
 
   function applyRange() {
+    if (onPriceChange) {
+      onPriceChange(displayRange[0], displayRange[1])
+      return
+    }
     const params = new URLSearchParams(baseParams)
     params.set("minPrice", String(displayRange[0]))
     params.set("maxPrice", String(displayRange[1]))
@@ -49,6 +55,10 @@ export function PriceRangeFilter({
   }
 
   function clearRange() {
+    if (onPriceChange) {
+      onPriceChange(undefined, undefined)
+      return
+    }
     const params = new URLSearchParams(baseParams)
     params.delete("minPrice")
     params.delete("maxPrice")

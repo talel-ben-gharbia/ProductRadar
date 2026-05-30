@@ -1,12 +1,17 @@
 "use client"
 
+import dynamic from "next/dynamic"
 import { usePathname } from "next/navigation"
 import type { ReactNode } from "react"
 
 import { AdminProvider } from "@/components/admin/admin-context"
 import AdminNavbar from "@/components/admin/adminNavbar"
-import AdminSidebar from "@/components/admin/adminSidebar"
 import { SidebarProvider } from "@/components/ui/sidebar"
+
+const AdminSidebar = dynamic(() => import("@/components/admin/adminSidebar"), {
+  ssr: false,
+  loading: () => <div className="w-64 shrink-0" />,
+})
 
 type AdminLayoutProps = {
   children: ReactNode
