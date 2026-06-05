@@ -19,7 +19,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { timeAgo, ordinalSuffix } from "@/components/B2B/b2b-utils"
 
 
-const CHART_COLORS = ["#6366f1", "#8b5cf6", "#a78bfa", "#c4b5fd", "#818cf8", "#7c3aed"]
+const CHART_COLORS = ["#0ea5e9", "#06b6d4", "#14b8a6", "#10b981", "#3b82f6", "#6366f1"]
 
 function fmt(value: unknown): string {
   if (typeof value === "number") return new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(value)
@@ -88,25 +88,25 @@ export default function DemoOverviewPage() {
 
   return (
     <div className="space-y-6">
-      <section className="rounded-2xl border border-border/50 bg-gradient-to-br from-indigo-950/95 via-slate-900/95 to-violet-950/95 p-6 text-white shadow-sm dark:from-indigo-950 dark:via-slate-950 dark:to-violet-950">
+      <section className="rounded-2xl border border-slate-200 bg-white p-6 text-slate-900 shadow-sm">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-xl font-bold tracking-tight sm:text-2xl">{summary.user?.company_name ?? "Demo Workspace"}</h1>
-              <Badge className="rounded-full bg-amber-500/20 px-3 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-400 ring-1 ring-amber-500/30">
+              <h1 className="text-xl font-bold tracking-tight sm:text-2xl">{summary.user?.name ?? "Demo Workspace"}</h1>
+              <Badge className="rounded-full bg-amber-100 px-3 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-700 ring-1 ring-amber-200">
                 {planLabel}
               </Badge>
-              <Badge className="rounded-full bg-emerald-500/20 px-3 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-400 ring-1 ring-emerald-500/30">
+              <Badge className="rounded-full bg-emerald-100 px-3 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-700 ring-1 ring-emerald-200">
                 Active
               </Badge>
             </div>
-            <p className="text-sm text-indigo-200/70">
+            <p className="text-sm text-slate-500">
               {mode === "market" ? "Market Intelligence Dashboard" : "Vendor Performance Dashboard"}
-              <span className="ml-3 text-xs text-indigo-300/50">Demo mode</span>
+              <span className="ml-3 text-xs text-slate-400">Demo mode</span>
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="secondary" size="sm" onClick={handleExportDashboard} className="h-8 gap-1.5 bg-white/10 text-xs text-white hover:bg-white/20">
+            <Button variant="outline" size="sm" onClick={handleExportDashboard} className="h-8 gap-1.5 text-xs">
               <Download className="size-3.5" />
               Export
             </Button>
@@ -114,15 +114,15 @@ export default function DemoOverviewPage() {
         </div>
         <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {[
-            { label: "Products", value: productsCount, sub: newProductsThisWeek > 0 ? `+${newProductsThisWeek} this week` : null, color: "text-indigo-300" },
-            { label: "Listings", value: listingsCount, sub: null, color: "text-violet-300" },
-            { label: "Avg Trust Score", value: avgTrust, sub: "out of 100", color: "text-emerald-300" },
-            { label: "Active Alerts", value: notificationsCount, sub: "needs attention", color: notificationsCount > 0 ? "text-amber-300" : "text-emerald-300" },
+            { label: "Products", value: productsCount, sub: newProductsThisWeek > 0 ? `+${newProductsThisWeek} this week` : null, color: "text-blue-600" },
+            { label: "Listings", value: listingsCount, sub: null, color: "text-cyan-600" },
+            { label: "Avg Trust Score", value: avgTrust, sub: "out of 100", color: "text-emerald-600" },
+            { label: "Active Alerts", value: notificationsCount, sub: "needs attention", color: notificationsCount > 0 ? "text-amber-600" : "text-emerald-600" },
           ].map((item) => (
-            <div key={item.label} className="rounded-xl bg-white/5 px-4 py-3 ring-1 ring-white/10">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-indigo-200/60">{item.label}</p>
+            <div key={item.label} className="rounded-xl bg-slate-50 px-4 py-3 ring-1 ring-slate-200/60">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{item.label}</p>
               <p className={`mt-0.5 text-2xl font-black tracking-tight ${item.color}`}>{fmt(item.value)}</p>
-              {item.sub && <p className="text-[10px] text-indigo-200/50">{item.sub}</p>}
+              {item.sub && <p className="text-[10px] text-slate-400">{item.sub}</p>}
             </div>
           ))}
         </div>
@@ -587,7 +587,7 @@ export default function DemoOverviewPage() {
           return [
             { title: "Reports", desc: undercutCount > 0 ? `${undercutCount} products need pricing review` : "Generate and download business reports", href: "/B2B/demo/reports", icon: FileText, color: "text-violet-500", bgHover: "hover:bg-violet-50/80 dark:hover:bg-violet-950/30" },
             { title: mode === "market" ? "Share of Shelf" : "Competitor Pricing", desc: mode === "market" ? "Category shelf analysis" : "Price comparison analysis", href: mode === "market" ? "/B2B/demo/share-of-shelf" : "/B2B/demo/competitor-pricing", icon: TrendingUp, color: "text-indigo-500", bgHover: "hover:bg-indigo-50/80 dark:hover:bg-indigo-950/30" },
-            { title: mode === "market" ? "Stock Intelligence" : "Stock Monitoring", desc: stockAlertCount > 0 ? `${stockAlertCount} stock alerts to review` : "Availability and stock-out tracking", href: mode === "market" ? "/B2B/demo/stock-intelligence" : "/B2B/demo/stock-monitoring", icon: AlertTriangle, color: "text-amber-500", bgHover: "hover:bg-amber-50/80 dark:hover:bg-amber-950/30" },
+            { title: "Stock Monitoring", desc: stockAlertCount > 0 ? `${stockAlertCount} stock alerts to review` : "Availability and stock-out tracking", href: "/B2B/demo/stock-monitoring", icon: AlertTriangle, color: "text-amber-500", bgHover: "hover:bg-amber-50/80 dark:hover:bg-amber-950/30" },
             { title: "Watchlist", desc: "Follow and monitor competitor products", href: "/B2B/demo/watchlist", icon: ShoppingCart, color: "text-emerald-500", bgHover: "hover:bg-emerald-50/80 dark:hover:bg-emerald-950/30" },
           ].map((action) => (
             <Card key={action.title} className={`border-border/50 shadow-sm ${action.bgHover}`}>

@@ -1,12 +1,45 @@
+export type CanonicalSpecs = {
+  ram?: string;
+  storage?: string;
+  screen?: string;
+  resolution?: string;
+  panel?: string;
+  refresh?: string;
+  camera?: string;
+  cpu?: string;
+  gpu?: string;
+  os?: string;
+  color?: string;
+  battery?: string;
+  weight?: string;
+  water?: string;
+}
+
+export const SPEC_LABELS: Record<keyof CanonicalSpecs, string> = {
+  ram: 'RAM', storage: 'Storage', screen: 'Display', resolution: 'Resolution',
+  panel: 'Panel', refresh: 'Refresh Rate', camera: 'Camera', cpu: 'CPU',
+  gpu: 'GPU', os: 'OS', color: 'Color', battery: 'Battery', weight: 'Weight',
+  water: 'Water Resistance'
+}
+
 export type Product = {
   id: number
   name: string
   brand: string | null
   description: string
-  specs_json: Record<string, unknown> | null
+  specs_json?: Record<string, string> | null
   image_url: string | null
   categoryId: number | null
   listingCount?: number
+}
+
+export type SpecGroupRaw = {
+  id: string;
+  matchTier: 'EXACT' | 'STRONG' | 'SUBSET';
+  confidence: number;
+  products: Array<Product & { canonical_specs?: CanonicalSpecs }>;
+  matchingKeys: string[];
+  differingKeys: string[];
 }
 
 export type ProductListing = {

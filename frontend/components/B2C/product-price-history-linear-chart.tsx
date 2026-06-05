@@ -30,6 +30,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import type { B2CAlert, BestTimeToBuyPrediction, PriceHistoryEntry } from "@/utils/types"
+import { useI18n } from "@/lib/i18n-context"
 
 type Props = {
   productId: number
@@ -125,6 +126,10 @@ export default function ProductPriceHistoryLinearChart({
   friendlyMessage,
   historyAccessMonths = 1,
 }: Props) {
+<<<<<<< HEAD
+=======
+  const { t } = useI18n()
+>>>>>>> 22ec7a01fddf8580f93bdad12bc6d92e41d4420e
   const [dialogOpen, setDialogOpen] = useState(false)
   const [alertId, setAlertId] = useState<number | null>(null)
   const [isPriceNotif, setIsPriceNotif] = useState(true)
@@ -172,7 +177,7 @@ export default function ProductPriceHistoryLinearChart({
       })
       .catch(() => {
         if (!cancelled) {
-          setAlertMessage("Unable to load existing alert settings.")
+          setAlertMessage(t("general.error"))
         }
       })
 
@@ -211,7 +216,7 @@ export default function ProductPriceHistoryLinearChart({
       }
 
       if (!response.ok) {
-        setAlertMessage(data.error || "Unable to save alert.")
+        setAlertMessage(data.error || t("general.error"))
         return
       }
 
@@ -219,10 +224,10 @@ export default function ProductPriceHistoryLinearChart({
         setAlertId(data.alert.id)
       }
 
-      setAlertMessage(alertId ? "Alert updated successfully." : "Alert added successfully.")
+      setAlertMessage(alertId ? t("alert.update") : t("alert.activate"))
       setDialogOpen(false)
     } catch {
-      setAlertMessage("Unable to connect. Please try again.")
+      setAlertMessage(t("general.error"))
     } finally {
       setIsSavingAlert(false)
     }
@@ -236,8 +241,8 @@ export default function ProductPriceHistoryLinearChart({
   return (
     <Card className="rounded-xl border">
       <CardHeader className="pb-2">
-        <CardTitle>Evolution du prix</CardTitle>
-        <CardDescription>Timeline of recorded prices</CardDescription>
+        <CardTitle>{t("history.chart_title")}</CardTitle>
+        <CardDescription>{t("history.chart_subtitle")}</CardDescription>
       </CardHeader>
 
       <CardContent>
@@ -246,6 +251,7 @@ export default function ProductPriceHistoryLinearChart({
             
             <div className="flex items-center justify-between gap-2">
               <div className="font-medium">
+<<<<<<< HEAD
                 {bestTimePrediction.action === "WAIT" ? "Premium tip: wait before buying." : "Premium tip: buy now."}
               </div>
               <div className="text-xs font-semibold uppercase tracking-wide text-blue-700">CONFIDENCE {formatPercent(bestTimePrediction.confidence * 100)}</div>
@@ -253,6 +259,15 @@ export default function ProductPriceHistoryLinearChart({
 
             <div className="mt-1 text-xs text-blue-800/90">
               <span>Current price: {toMoney(bestTimePrediction.current_price)}</span>
+=======
+                {bestTimePrediction.action === "WAIT" ? t("history.wait") : t("history.buy_now")}
+              </div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-blue-700">{t("history.confidence")}{formatPercent(bestTimePrediction.confidence * 100)}</div>
+            </div>
+
+            <div className="mt-1 text-xs text-blue-800/90">
+              <span>{t("history.current_price")}{toMoney(bestTimePrediction.current_price)}</span>
+>>>>>>> 22ec7a01fddf8580f93bdad12bc6d92e41d4420e
             </div>
           </div>
         ) : null}
@@ -330,7 +345,11 @@ export default function ProductPriceHistoryLinearChart({
           </ChartContainer>
         ) : (
           <div className="rounded-lg border border-dashed bg-muted/20 px-4 py-8 text-center text-sm text-muted-foreground">
+<<<<<<< HEAD
             No chart data available for the selected history range. Try 3M or 6M.
+=======
+            {t("history.no_chart_data")}
+>>>>>>> 22ec7a01fddf8580f93bdad12bc6d92e41d4420e
           </div>
         )}
 
@@ -341,15 +360,15 @@ export default function ProductPriceHistoryLinearChart({
               className="mt-4 w-full border-blue-300 bg-white text-blue-700 hover:bg-blue-50"
             >
               <BellRing className="mr-2 h-4 w-4" />
-              {alertId ? "Update alert" : "Activer une alerte prix"}
+              {alertId ? t("alert.update") : t("alert.activate")}
             </Button>
           </DialogTrigger>
 
           <DialogContent className="max-w-sm">
             <DialogHeader>
-              <DialogTitle>Choose alert type</DialogTitle>
+              <DialogTitle>{t("alert.type")}</DialogTitle>
               <DialogDescription>
-                Select the alert you want for this product.
+                {t("alert.type_desc")}
               </DialogDescription>
             </DialogHeader>
 
@@ -360,7 +379,7 @@ export default function ProductPriceHistoryLinearChart({
                 className="justify-start"
                 onClick={() => setIsPriceNotif((value) => !value)}
               >
-                Price alert {isPriceNotif ? "ON" : "OFF"}
+                {isPriceNotif ? t("alert.price_on") : t("alert.price_off")}
               </Button>
 
               <Button
@@ -369,14 +388,14 @@ export default function ProductPriceHistoryLinearChart({
                 className="justify-start"
                 onClick={() => setIsStockNotif((value) => !value)}
               >
-                Stock alert {isStockNotif ? "ON" : "OFF"}
+                {isStockNotif ? t("alert.stock_on") : t("alert.stock_off")}
               </Button>
             </div>
 
             <div className="mt-3 rounded-md border bg-muted/30 p-3 text-sm text-muted-foreground">
               {hasSelectedType
-                ? "Choose one or both notifications, then click Add alert."
-                : "Select at least one type to activate alerts."}
+                ? t("alert.hint")
+                : t("alert.select_hint")}
             </div>
 
             {alertMessage ? <p className="text-sm text-muted-foreground">{alertMessage}</p> : null}
@@ -387,7 +406,7 @@ export default function ProductPriceHistoryLinearChart({
                 onClick={saveAlert}
                 disabled={!hasSelectedType || isSavingAlert}
               >
-                {isSavingAlert ? "Saving..." : "Add alert"}
+                {isSavingAlert ? t("alert.saving") : t("alert.add")}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -397,15 +416,15 @@ export default function ProductPriceHistoryLinearChart({
       <CardFooter className="flex-col items-start gap-1 text-sm">
         <div className="flex items-center gap-2 leading-none font-medium">
           {isUp
-            ? `Trending up by ${Math.abs(deltaPercent).toFixed(1)}%`
-            : `Trending down by ${Math.abs(deltaPercent).toFixed(1)}%`}
+            ? t("history.trending_up", { pct: Math.abs(deltaPercent).toFixed(1) })
+            : t("history.trending_down", { pct: Math.abs(deltaPercent).toFixed(1) })}
           {isUp ? (
             <TrendingUp className="h-4 w-4 text-orange-600" />
           ) : (
             <TrendingDown className="h-4 w-4 text-orange-600" />
           )}
         </div>
-        <div className="leading-none text-muted-foreground">Latest price: {toMoney(latest)}</div>
+        <div className="leading-none text-muted-foreground">{t("history.latest_price")}{toMoney(latest)}</div>
       </CardFooter>
     </Card>
   )

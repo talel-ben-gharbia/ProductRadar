@@ -1,18 +1,16 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
-import { Bell, Check, Filter } from "lucide-react"
+import { Bell, Check } from "lucide-react"
 import B2BErrorState from "@/components/B2B/b2b-error-state"
 
-import { useB2B } from "@/components/B2B/b2b-context"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 
 import type { B2BNotification as Notification } from "@/types/b2b"
 
 export default function AlertsPage() {
-  const { firebaseUid } = useB2B()
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<"all" | "unread">("all")

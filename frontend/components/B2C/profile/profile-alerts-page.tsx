@@ -3,6 +3,7 @@
 import Image from "next/image"
 import Link from "next/link"
 import { useEffect, useState } from "react"
+import { useI18n } from "@/lib/i18n-context"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -25,6 +26,7 @@ function AlertsEditor({
   alert: B2CAlert
   onSaved: (updated: B2CAlert) => void
 }) {
+  const { t } = useI18n()
   const [isPriceNotif, setIsPriceNotif] = useState(Boolean(alert.is_price_notif))
   const [isStockNotif, setIsStockNotif] = useState(Boolean(alert.is_stock_notif))
   const [open, setOpen] = useState(false)
@@ -66,13 +68,13 @@ function AlertsEditor({
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button size="sm" variant="outline">
-          Update
+          {t("profile.alert_update")}
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-sm">
         <DialogHeader>
-          <DialogTitle>Update alert</DialogTitle>
-          <DialogDescription>Choose which notifications should stay active.</DialogDescription>
+          <DialogTitle>{t("profile.alert_update_title")}</DialogTitle>
+          <DialogDescription>{t("profile.alert_update_desc")}</DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-2">
@@ -82,7 +84,7 @@ function AlertsEditor({
             className="justify-start"
             onClick={() => setIsPriceNotif((value) => !value)}
           >
-            Price alert {isPriceNotif ? "ON" : "OFF"}
+            {isPriceNotif ? t("profile.alert_price_on") : t("profile.alert_price_off")}
           </Button>
           <Button
             type="button"
@@ -90,13 +92,13 @@ function AlertsEditor({
             className="justify-start"
             onClick={() => setIsStockNotif((value) => !value)}
           >
-            Stock alert {isStockNotif ? "ON" : "OFF"}
+            {isStockNotif ? t("profile.alert_stock_on") : t("profile.alert_stock_off")}
           </Button>
         </div>
 
         <DialogFooter>
           <Button type="button" onClick={saveChanges} disabled={!canSave || saving}>
-            {saving ? "Saving..." : "Save"}
+            {saving ? t("profile.alert_saving") : t("profile.alert_save")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -105,6 +107,7 @@ function AlertsEditor({
 }
 
 export function ProfileAlertsPage() {
+  const { t } = useI18n()
   const [loading, setLoading] = useState(true)
   const [alerts, setAlerts] = useState<B2CAlert[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -124,7 +127,7 @@ export function ProfileAlertsPage() {
         }
 
         if (!response.ok) {
-          setError(data.error || "Unable to load alerts.")
+          setError(data.error || t("general.error"))
           setAlerts([])
           setLoading(false)
           return
@@ -136,7 +139,7 @@ export function ProfileAlertsPage() {
       })
       .catch(() => {
         if (!cancelled) {
-          setError("Unable to load alerts.")
+          setError(t("general.error"))
           setAlerts([])
           setLoading(false)
         }
@@ -165,14 +168,14 @@ export function ProfileAlertsPage() {
     <div className="space-y-4">
       <Card className="rounded-xl border bg-background shadow-sm">
         <CardHeader>
-          <CardTitle>Alerts</CardTitle>
-          <CardDescription>Manage the alerts attached to your tracked products.</CardDescription>
+          <CardTitle>{t("profile.alert_title")}</CardTitle>
+          <CardDescription>{t("profile.alert_desc")}</CardDescription>
         </CardHeader>
       </Card>
 
       {loading ? (
         <Card className="rounded-xl border bg-background shadow-sm">
-          <CardContent className="py-6 text-sm text-muted-foreground">Loading alerts...</CardContent>
+          <CardContent className="py-6 text-sm text-muted-foreground">{t("profile.alert_loading")}</CardContent>
         </Card>
       ) : error ? (
         <Card className="rounded-xl border-destructive/40 bg-destructive/5 shadow-sm">
@@ -181,8 +184,8 @@ export function ProfileAlertsPage() {
       ) : alerts.length === 0 ? (
         <Card className="rounded-xl border bg-background shadow-sm">
           <CardHeader>
-            <CardTitle>No alerts yet</CardTitle>
-            <CardDescription>You have no active alerts. Open a product and add one.</CardDescription>
+            <CardTitle>{t("profile.alert_empty_title")}</CardTitle>
+            <CardDescription>{t("profile.alert_empty_desc")}</CardDescription>
           </CardHeader>
         </Card>
       ) : (
@@ -195,33 +198,33 @@ export function ProfileAlertsPage() {
                     {alert.productImageUrl ? (
                       <Image
                         src={alert.productImageUrl}
-                        alt={alert.productName || "Product"}
+                        alt={alert.productName || t("profile.alert_unknown")}
                         width={120}
                         height={120}
                         className="h-14 w-14 object-contain"
                         unoptimized
                       />
                     ) : (
-                      <span className="text-xs text-muted-foreground">No image</span>
+                      <span className="text-xs text-muted-foreground">{t("profile.alert_no_image")}</span>
                     )}
                   </div>
 
                   <div>
-                    <p className="font-medium">{alert.productName || "Unknown product"}</p>
+                    <p className="font-medium">{alert.productName || t("profile.alert_unknown")}</p>
                     <div className="mt-1 flex gap-2">
-                      {alert.is_price_notif ? <Badge variant="default">Price alert</Badge> : null}
-                      {alert.is_stock_notif ? <Badge variant="secondary">Stock alert</Badge> : null}
+                      {alert.is_price_notif ? <Badge variant="default">{t("profile.alert_price")}</Badge> : null}
+                      {alert.is_stock_notif ? <Badge variant="secondary">{t("profile.alert_stock")}</Badge> : null}
                     </div>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-2">
                   <Button asChild variant="ghost" size="sm">
-                    <Link href={`/B2C/products/${alert.productId}`}>Open product</Link>
+                    <Link href={`/B2C/products/${alert.productId}`}>{t("profile.alert_open_product")}</Link>
                   </Button>
                   <AlertsEditor alert={alert} onSaved={updateAlertInState} />
                   <Button variant="destructive" size="sm" onClick={() => removeAlert(alert.id)}>
-                    Delete
+                    {t("profile.alert_delete")}
                   </Button>
                 </div>
               </CardContent>

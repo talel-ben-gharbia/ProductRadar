@@ -1,31 +1,46 @@
 "use client"
 
+import { useState } from "react"
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
-import { LineChart as LineChartIcon } from "lucide-react"
+import { ChevronLeft, ChevronRight, LineChart as LineChartIcon } from "lucide-react"
 
 import { useB2B } from "@/components/B2B/b2b-context"
+import B2BPlanGate from "@/components/B2B/b2b-plan-gate"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 
 const COLORS = ["#6366f1", "#8b5cf6", "#a78bfa", "#c4b5fd", "#818cf8", "#7c3aed"]
 
 type DispersionItem = {
-  product_id?: number; product_name?: string; min_price?: number; max_price?: number;
+  product_id?: number; product_name?: string; category_name?: string; min_price?: number; max_price?: number;
   price_range?: number; dispersion_pct?: number; sellers_count?: number; seller_with_min?: string; seller_with_max?: string
 }
 
+const PER_PAGE = 20
+
 export default function PriceDispersionPage() {
-  const { summary, loading } = useB2B()
+  const { summary, loading, isGold } = useB2B()
   const metrics = summary?.metrics as Record<string, unknown> | undefined
   const data = ((metrics?.price_dispersion ?? []) as DispersionItem[])
 
-  const chartData = data.slice(0, 12).map((item) => ({
-    name: String(item.product_name ?? "Product").slice(0, 18),
-    dispersion: Number(item.dispersion_pct ?? 0),
-  }))
+  const [page, setPage] = useState(1)
+
+  const chartData = [...data]
+    .sort((a, b) => Number(b.dispersion_pct ?? 0) - Number(a.dispersion_pct ?? 0))
+    .slice(0, 12)
+    .map((item) => ({
+      name: String(item.product_name ?? "Product").slice(0, 18),
+      dispersion: Number(item.dispersion_pct ?? 0),
+    }))
 
   const avgDispersion = data.length > 0 ? data.reduce((s, d) => s + Number(d.dispersion_pct ?? 0), 0) / data.length : 0
   const highDispersion = data.filter((d) => Number(d.dispersion_pct ?? 0) > 30).length
+
+  const totalPages = Math.max(1, Math.ceil(data.length / PER_PAGE))
+  const safePage = Math.min(page, totalPages)
+  const pageStart = (safePage - 1) * PER_PAGE
+  const pageData = data.slice(pageStart, pageStart + PER_PAGE)
 
   if (loading && !summary) {
     return (
@@ -41,11 +56,15 @@ export default function PriceDispersionPage() {
     )
   }
 
+  if (!isGold) return <B2BPlanGate featureName="Price Dispersion" />
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Price Dispersion</h1>
-        <p className="text-sm text-muted-foreground">Analyze pricing spread across sellers for each product.</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Price Dispersion</h1>
+          <p className="text-sm text-muted-foreground">Analyze pricing spread across sellers for each product.</p>
+        </div>
       </div>
 
       <section className="grid gap-4 md:grid-cols-3">
@@ -107,6 +126,7 @@ export default function PriceDispersionPage() {
               <thead className="bg-muted/40 text-left text-xs uppercase tracking-wider text-muted-foreground">
                 <tr>
                   <th className="px-4 py-3 font-medium">Product</th>
+                  <th className="px-4 py-3 font-medium">Category</th>
                   <th className="px-4 py-3 font-medium text-right">Min Price</th>
                   <th className="px-4 py-3 font-medium text-right">Max Price</th>
                   <th className="px-4 py-3 font-medium text-right">Range</th>
@@ -118,17 +138,18 @@ export default function PriceDispersionPage() {
               </thead>
               <tbody className="divide-y divide-border/50">
                 {data.length === 0 ? (
-                  <tr><td colSpan={8} className="px-4 py-16 text-center">
+                  <tr><td colSpan={9} className="px-4 py-16 text-center">
                     <LineChartIcon className="mx-auto mb-3 size-10 text-muted-foreground/30" />
                     <p className="text-sm font-medium text-muted-foreground">No price range data yet</p>
                     <p className="text-xs text-muted-foreground/70 mt-1">Price range details will appear when products have multiple competing sellers.</p>
                   </td></tr>
                 ) : (
-                  data.map((item, i) => {
+                  pageData.map((item, i) => {
                     const dispersion = Number(item.dispersion_pct ?? 0)
                     return (
                       <tr key={item.product_id ?? i} className="transition-colors hover:bg-muted/20">
                         <td className="max-w-[180px] truncate px-4 py-3 font-medium">{item.product_name ?? "-"}</td>
+                        <td className="px-4 py-3 text-xs text-muted-foreground">{item.category_name ?? "-"}</td>
                         <td className="px-4 py-3 text-right font-mono text-emerald-600">{Number(item.min_price ?? 0).toFixed(2)} DT</td>
                         <td className="px-4 py-3 text-right font-mono text-red-600">{Number(item.max_price ?? 0).toFixed(2)} DT</td>
                         <td className="px-4 py-3 text-right font-mono">{Number(item.price_range ?? 0).toFixed(2)} DT</td>
@@ -145,6 +166,24 @@ export default function PriceDispersionPage() {
               </tbody>
             </table>
           </div>
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between border-t px-4 py-3">
+              <p className="text-xs text-muted-foreground">
+                Showing {pageStart + 1}–{Math.min(pageStart + PER_PAGE, data.length)} of {data.length} products
+              </p>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" disabled={safePage <= 1} onClick={() => setPage(safePage - 1)}>
+                  <ChevronLeft className="size-3.5 mr-1" /> Previous
+                </Button>
+                <span className="text-xs text-muted-foreground">
+                  Page {safePage} of {totalPages}
+                </span>
+                <Button variant="outline" size="sm" disabled={safePage >= totalPages} onClick={() => setPage(safePage + 1)}>
+                  Next <ChevronRight className="size-3.5 ml-1" />
+                </Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

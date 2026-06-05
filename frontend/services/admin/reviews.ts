@@ -1,4 +1,4 @@
-export type ReviewItem = {
+﻿export type ReviewItem = {
   id: number
   status: "PENDING" | "APPROVED" | "REJECTED" | string
   rating: number
@@ -30,6 +30,7 @@ export type ReviewsResponse = {
 }
 
 import { cachedFetch } from "@/lib/fetch-with-cache"
+import { withCache } from "@/lib/server-cache"
 
 function buildQuery(params: Record<string, string | number | undefined>): string {
   const searchParams = new URLSearchParams()
@@ -46,11 +47,11 @@ async function parseJson(response: Response): Promise<unknown> {
   return response.json().catch(() => ({}))
 }
 
-export async function getReviews(
+export const getReviews = withCache(async (
   limit: number,
   offset: number,
   filters: { status?: string; search?: string } = {},
-): Promise<ReviewsResponse> {
+): Promise<ReviewsResponse> => {
   const query = buildQuery({
     limit,
     offset,
@@ -64,7 +65,7 @@ export async function getReviews(
     cacheKey,
     cacheTtl: 300,
   })
-}
+})
 
 export async function updateReviewStatus(
   id: number,

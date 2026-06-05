@@ -69,6 +69,17 @@ class SubscriptionRepository extends ServiceEntityRepository
             }
         }
 
+        if (!empty($filters['accountType'])) {
+            $accountType = strtoupper(trim((string) $filters['accountType']));
+            if ($accountType === 'B2C') {
+                $qb->andWhere('s.owner_type = :ownerType')->setParameter('ownerType', 'USER');
+                $countQb->andWhere('s.owner_type = :ownerType')->setParameter('ownerType', 'USER');
+            } elseif ($accountType === 'B2B') {
+                $qb->andWhere('s.owner_type IN (:b2bTypes)')->setParameter('b2bTypes', ['COMPANY', 'B2B_COMPANY', 'MARKET', 'B2B_MARKET']);
+                $countQb->andWhere('s.owner_type IN (:b2bTypes)')->setParameter('b2bTypes', ['COMPANY', 'B2B_COMPANY', 'MARKET', 'B2B_MARKET']);
+            }
+        }
+
         /** @var Subscription[] $items */
         $items = $qb->getQuery()->getResult();
 
@@ -89,21 +100,26 @@ class SubscriptionRepository extends ServiceEntityRepository
             ->select(
                 'COUNT(s.id) AS total',
                 'SUM(CASE WHEN s.active = true THEN 1 ELSE 0 END) AS activeCount',
-                'SUM(CASE WHEN UPPER(s.plan_type) LIKE :premiumPrefix THEN 1 ELSE 0 END) AS premiumCount'
+                'SUM(CASE WHEN UPPER(s.plan_type) LIKE :premiumPrefix THEN 1 ELSE 0 END) AS premiumCount',
+                'SUM(CASE WHEN UPPER(s.plan_type) LIKE :b2bPrefix THEN 1 ELSE 0 END) AS b2bCount'
             )
             ->setParameter('premiumPrefix', 'PREMIUM%')
+            ->setParameter('b2bPrefix', 'B2B_%')
             ->getQuery()
             ->getSingleResult();
 
         $total = (int) ($result['total'] ?? 0);
         $active = (int) ($result['activeCount'] ?? 0);
         $premium = (int) ($result['premiumCount'] ?? 0);
+        $b2b = (int) ($result['b2bCount'] ?? 0);
+        $free = max(0, $total - $premium - $b2b);
 
         return [
             'total' => $total,
             'active' => $active,
             'premium' => $premium,
-            'free' => max(0, $total - $premium),
+            'b2b' => $b2b,
+            'free' => $free,
         ];
     }
 }

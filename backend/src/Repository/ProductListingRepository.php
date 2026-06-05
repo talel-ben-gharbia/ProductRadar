@@ -28,7 +28,7 @@ class ProductListingRepository extends ServiceEntityRepository
      * @param int $limit number of items per page
      * @return array<int, array<string, mixed>>
      */
-    public function findListingRows(?int $productId = null, ?int $sellerId = null, int $page = 1, int $limit = 0): array
+    public function findListingRows(?int $productId = null, ?int $sellerId = null, int $page = 1, int $limit = 0, array $categoryIds = []): array
     {
         $queryBuilder = $this->createBaseRowsQueryBuilder();
 
@@ -42,6 +42,12 @@ class ProductListingRepository extends ServiceEntityRepository
             $queryBuilder
                 ->andWhere('s.id = :sellerId')
                 ->setParameter('sellerId', $sellerId);
+        }
+
+        if (!empty($categoryIds)) {
+            $queryBuilder
+                ->andWhere('c.id IN (:categoryIds)')
+                ->setParameter('categoryIds', $categoryIds, ArrayParameterType::INTEGER);
         }
 
         // Apply ordering and pagination to bound memory usage.
@@ -60,7 +66,36 @@ class ProductListingRepository extends ServiceEntityRepository
         return $this->enrichWithTrustScores($rows);
     }
 
-    
+    public function findListingRowsByBrandId(int $brandId, ?int $marketSellerId = null, int $page = 1, int $limit = 0): array
+    {
+        $queryBuilder = $this->createBaseRowsQueryBuilder();
+
+        $queryBuilder
+            ->andWhere('b.id = :brandId')
+            ->setParameter('brandId', $brandId);
+
+        if ($marketSellerId !== null && $marketSellerId > 0) {
+            $queryBuilder
+                ->orWhere('s.id = :sellerId')
+                ->setParameter('sellerId', $marketSellerId);
+        }
+
+        $query = $queryBuilder->orderBy('pl.id', 'DESC')->getQuery();
+
+        // Normalize page/limit; limit=0 means no limit
+        $page = max(1, $page);
+        if ($limit > 0) {
+            $limit = min(5000, $limit);
+            $offset = ($page - 1) * $limit;
+            $query->setFirstResult($offset)->setMaxResults($limit);
+        }
+
+        $rows = $query->setCacheable(true)->setLifetime(300)->getArrayResult();
+
+        return $this->enrichWithTrustScores($rows);
+    }
+
+
 
     /**
      * Return one best listing per seller for the target product.
@@ -142,13 +177,15 @@ class ProductListingRepository extends ServiceEntityRepository
             ->addSelect('pl.is_active AS is_active')
             ->addSelect('p.id AS productId')
             ->addSelect('p.name AS productName')
-            ->addSelect('p.brand AS productBrand')
+            ->addSelect('COALESCE(b.name, p.brand) AS productBrand')
             ->addSelect('p.image_url AS productImageUrl')
+            ->addSelect('IDENTITY(p.brandEntity) AS brandId')
             ->addSelect('c.id AS categoryId')
             ->addSelect('c.name AS categoryName')
             ->addSelect('s.id AS sellerId')
             ->addSelect('s.name AS sellerName')
             ->leftJoin('pl.product', 'p')
+            ->leftJoin('p.brandEntity', 'b')
             ->leftJoin('p.category', 'c')
             ->leftJoin('pl.seller', 's');
     }
@@ -225,7 +262,8 @@ SQL;
     {
         return $this->createQueryBuilder('pl')
             ->join('pl.product', 'p')
-            ->where('LOWER(p.brand) = :brand')
+            ->leftJoin('p.brandEntity', 'b')
+            ->where('LOWER(COALESCE(b.name, p.brand)) = :brand')
             ->setParameter('brand', mb_strtolower(trim($brandName)))
             ->getQuery()
             ->getResult();

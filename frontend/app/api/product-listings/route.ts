@@ -2,7 +2,7 @@ import { cookies } from "next/headers"
 import { NextRequest, NextResponse } from "next/server"
 
 import { verifySessionToken, COOKIE_NAME } from "@/lib/admin-session"
-import { cachedFetch } from "@/lib/fetch-with-cache"
+import { cachedFetch, invalidateCache } from "@/lib/fetch-with-cache"
 import { BACKEND_URL } from "@/utils/admin/constants"
 
 async function isSuperAdmin(): Promise<boolean> {
@@ -19,25 +19,15 @@ async function isSuperAdmin(): Promise<boolean> {
 
 export async function GET(request: NextRequest) {
   try {
-    const productId = request.nextUrl.searchParams.get("productId")
-    const sellerId = request.nextUrl.searchParams.get("sellerId")
-    const page = request.nextUrl.searchParams.get("page")
-    const limit = request.nextUrl.searchParams.get("limit")
-
-    const params = new URLSearchParams()
-    if (productId) params.set("productId", productId)
-    if (sellerId) params.set("sellerId", sellerId)
-    if (page) params.set("page", page)
-    if (limit) params.set("limit", limit)
-
-    const query = params.toString()
+    const query = request.nextUrl.searchParams.toString()
     const endpoint = query
       ? `${BACKEND_URL}/product-listings?${query}`
       : `${BACKEND_URL}/product-listings`
+    const cacheKey = query ? `listings:${query}` : "listings:all"
 
     const data = await cachedFetch<unknown>(endpoint, {
-      cacheKey: `listings:p${productId || "all"}:s${sellerId || "all"}:p${page || "1"}` + (limit ? `:l${limit}` : ''),
-      cacheTtl: 60,
+      cacheKey,
+      cacheTtl: 600,
     })
     return NextResponse.json(data)
   } catch {
@@ -86,6 +76,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    await invalidateCache("listings:*")
     return NextResponse.json(data, { status: 201 })
   } catch {
     return NextResponse.json({ error: "Unable to connect to the backend." }, { status: 502 })

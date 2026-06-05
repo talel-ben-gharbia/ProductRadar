@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 
+import { useApiUrl } from "@/lib/use-api-url"
+import { useI18n } from "@/lib/i18n-context"
 import { Button } from "@/components/ui/button"
 import { BACKEND_URL } from "@/utils/admin/constants"
 
@@ -17,6 +19,8 @@ type CustomerSession = {
 
 export default function B2CDashboardPage() {
   const router = useRouter()
+  const apiUrl = useApiUrl()
+  const { t } = useI18n()
   const [loading, setLoading] = useState(true)
   const [customer, setCustomer] = useState<CustomerSession | null>(null)
   const [banners, setBanners] = useState<B2BBannerCampaign[]>([])
@@ -39,7 +43,7 @@ export default function B2CDashboardPage() {
         }
       })
 
-    fetch("/api/b2c/banners", { cache: "no-store" })
+    fetch(apiUrl("/api/b2c/banners"), { cache: "no-store" })
       .then((r) => r.json())
       .then((data) => {
         if (!cancelled) setBanners(data.items ?? [])
@@ -53,22 +57,21 @@ export default function B2CDashboardPage() {
 
   async function logout() {
     await fetch("/api/b2c/auth/logout", { method: "POST" })
-    router.push("/")
-    router.refresh()
+    window.location.href = "/"
   }
 
   if (loading) {
-    return <div className="p-10 text-sm text-muted-foreground">Loading account...</div>
+    return <div className="p-10 text-sm text-muted-foreground">{t("b2c.loading_account")}</div>
   }
 
   if (!customer) {
     return (
       <div className="p-10">
-        <h1 className="text-2xl font-semibold">B2C Area</h1>
+        <h1 className="text-2xl font-semibold">{t("b2c.area_title")}</h1>
         <p className="mt-2 text-muted-foreground">
-          You are not authenticated. Go back to the landing page and sign in with Google.
+          {t("b2c.not_authenticated")}
         </p>
-        <Button className="mt-6" onClick={() => router.push("/")}>Back to home</Button>
+        <Button className="mt-6" onClick={() => router.push("/")}>{t("b2c.back_home")}</Button>
       </div>
     )
   }
@@ -87,7 +90,7 @@ export default function B2CDashboardPage() {
             >
               <img
                 src={`${BACKEND_URL}${banner.image_url}`}
-                alt={banner.company_name ?? "Sponsored banner"}
+                alt={banner.company_name ?? t("b2c.sponsored_banner")}
                 width={banner.width ?? undefined}
                 height={banner.height ?? undefined}
                 className="w-full h-auto"
@@ -97,11 +100,11 @@ export default function B2CDashboardPage() {
         </div>
       )}
 
-      <h1 className="text-2xl font-semibold">Welcome, customer</h1>
-      <p className="mt-2 text-muted-foreground">Email: {customer.email}</p>
-      <p className="text-muted-foreground">Type: {customer.type}</p>
+      <h1 className="text-2xl font-semibold">{t("b2c.welcome_customer")} {customer.email}</h1>
+      <p className="mt-2 text-muted-foreground">{t("b2c.email")}{customer.email}</p>
+      <p className="text-muted-foreground">{t("b2c.type")}{customer.type}</p>
       <Button variant="outline" className="mt-6" onClick={logout}>
-        Logout
+        {t("b2c.logout")}
       </Button>
     </div>
   )

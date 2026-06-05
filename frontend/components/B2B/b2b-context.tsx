@@ -7,8 +7,8 @@ export type B2BUserInfo = {
   id?: number | null
   email?: string | null
   full_name?: string | null
-  company_name?: string | null
-  company_market?: string | null
+  name?: string | null
+  sector?: string | null
   company_country?: string | null
   company_website?: string | null
   b2b_status?: string | null
@@ -48,6 +48,10 @@ type B2BContextValue = {
   planType: string | null
   isGold: boolean
   isSilver: boolean
+  brandFilter: string | null
+  setBrandFilter: (brand: string | null) => void
+  sellerId: number | null
+  setSellerId: (id: number | null) => void
   refresh: () => Promise<void>
   logout: () => Promise<void>
 }
@@ -61,6 +65,10 @@ const B2BContext = createContext<B2BContextValue>({
   planType: null,
   isGold: false,
   isSilver: false,
+  brandFilter: null,
+  setBrandFilter: () => {},
+  sellerId: null,
+  setSellerId: () => {},
   refresh: async () => {},
   logout: async () => {},
 })
@@ -77,12 +85,13 @@ export function B2BProvider({ children, initialSummary, firebaseUid }: {
   const [summary, setSummary] = useState<B2BSummary | null>(initialSummary)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [brandFilter, setBrandFilterState] = useState<string | null>(null)
+  const [sellerId, setSellerIdState] = useState<number | null>(null)
 
   const mode: "vendor" | "market" =
     summary?.user?.type === "B2B_MARKET" ? "market" : "vendor"
 
   const planType = (summary?.subscription?.plan_type as string | null) ?? null
-  // Handle both 'B2B_GOLD' and 'GOLD' plan type formats
   const isGold = planType != null && planType.toUpperCase().includes("GOLD")
   const isSilver = planType != null && planType.toUpperCase().includes("SILVER")
 
@@ -91,7 +100,9 @@ export function B2BProvider({ children, initialSummary, firebaseUid }: {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch(`/api/b2b/workspace?endpoint=summary`)
+      const params = new URLSearchParams({ endpoint: "summary" })
+      if (brandFilter) params.set("brand", brandFilter)
+      const res = await fetch(`/api/b2b/workspace?${params}`)
       if (!res.ok) {
         const data = (await res.json().catch(() => ({}))) as { error?: string }
         throw new Error(data.error ?? "Failed to load workspace data")
@@ -103,9 +114,16 @@ export function B2BProvider({ children, initialSummary, firebaseUid }: {
     } finally {
       setLoading(false)
     }
-  }, [firebaseUid])
+  }, [firebaseUid, brandFilter, sellerId])
 
-  // Auto-retry on mount if server-side fetch failed (summary is null)
+  const setBrandFilter = useCallback((brand: string | null) => {
+    setBrandFilterState(brand)
+  }, [])
+
+  const setSellerId = useCallback((id: number | null) => {
+    setSellerIdState(id)
+  }, [])
+
   useEffect(() => {
     if (firebaseUid && !initialSummary) {
       refresh()
@@ -114,13 +132,13 @@ export function B2BProvider({ children, initialSummary, firebaseUid }: {
 
   const logout = useCallback(async () => {
     setSummary(null)
-    try { await signOut(getAuth()) } catch { /* firebase signOut is best-effort */ }
-    document.cookie = "b2c_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT"
-    window.location.href = "/B2B"
+    try { await signOut(getAuth()) } catch { /* best-effort */ }
+    try { await fetch("/api/b2c/auth/logout", { method: "POST" }) } catch { /* best-effort */ }
+    window.location.href = "/"
   }, [])
 
   return (
-    <B2BContext.Provider value={{ summary, loading, error, firebaseUid, mode, planType, isGold, isSilver, refresh, logout }}>
+    <B2BContext.Provider value={{ summary, loading, error, firebaseUid, mode, planType, isGold, isSilver, brandFilter, setBrandFilter, sellerId, setSellerId, refresh, logout }}>
       {children}
     </B2BContext.Provider>
   )

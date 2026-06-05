@@ -8,11 +8,14 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import type { B2CFavorite } from "@/utils/types"
+import { useI18n } from "@/lib/i18n-context"
 
 export function ProfileFavoritesPage() {
   const [loading, setLoading] = useState(true)
   const [favorites, setFavorites] = useState<B2CFavorite[]>([])
   const [error, setError] = useState<string | null>(null)
+
+  const { t } = useI18n()
 
   useEffect(() => {
     let cancelled = false
@@ -29,7 +32,7 @@ export function ProfileFavoritesPage() {
         }
 
         if (!response.ok) {
-          setError(data.error || "Unable to load favorites.")
+          setError(data.error || t("general.error"))
           setFavorites([])
           setLoading(false)
           return
@@ -41,7 +44,7 @@ export function ProfileFavoritesPage() {
       })
       .catch(() => {
         if (!cancelled) {
-          setError("Unable to load favorites.")
+          setError(t("general.error"))
           setFavorites([])
           setLoading(false)
         }
@@ -66,14 +69,14 @@ export function ProfileFavoritesPage() {
     <div className="space-y-4">
       <Card className="rounded-xl border bg-background shadow-sm">
         <CardHeader>
-          <CardTitle>Favorites</CardTitle>
-          <CardDescription>Review the listings you saved from product cards or listing pages.</CardDescription>
+          <CardTitle>{t("profile.fav_title")}</CardTitle>
+          <CardDescription>{t("profile.fav_desc")}</CardDescription>
         </CardHeader>
       </Card>
 
       {loading ? (
         <Card className="rounded-xl border bg-background shadow-sm">
-          <CardContent className="py-6 text-sm text-muted-foreground">Loading favorites...</CardContent>
+          <CardContent className="py-6 text-sm text-muted-foreground">{t("profile.fav_loading")}</CardContent>
         </Card>
       ) : error ? (
         <Card className="rounded-xl border-destructive/40 bg-destructive/5 shadow-sm">
@@ -82,9 +85,9 @@ export function ProfileFavoritesPage() {
       ) : favorites.length === 0 ? (
         <Card className="rounded-xl border bg-background shadow-sm">
           <CardHeader>
-            <CardTitle>No favorites yet</CardTitle>
+            <CardTitle>{t("profile.fav_empty_title")}</CardTitle>
             <CardDescription>
-              Use the heart toggle on a listing to save it here.
+              {t("profile.fav_empty_desc")}
             </CardDescription>
           </CardHeader>
         </Card>
@@ -98,32 +101,32 @@ export function ProfileFavoritesPage() {
                     {favorite.productImageUrl ? (
                       <Image
                         src={favorite.productImageUrl}
-                        alt={favorite.productName || "Product"}
+                        alt={favorite.productName || t("profile.fav_unknown")}
                         width={120}
                         height={120}
                         className="h-14 w-14 object-contain"
                         unoptimized
                       />
                     ) : (
-                      <span className="text-xs text-muted-foreground">No image</span>
+                      <span className="text-xs text-muted-foreground">{t("profile.fav_no_image")}</span>
                     )}
                   </div>
 
                   <div>
-                    <p className="font-medium">{favorite.productName || "Unknown product"}</p>
+                    <p className="font-medium">{favorite.productName || t("profile.fav_unknown")}</p>
                     <p className="text-sm text-muted-foreground">
-                      Seller: {favorite.sellerName || "Unknown seller"}
+                      {t("profile.fav_seller")}{favorite.sellerName || t("profile.fav_unknown_seller")}
                     </p>
                     <div className="mt-1 flex flex-wrap gap-2">
                       <Badge variant="outline">
                         {favorite.price !== null ? `${favorite.price.toFixed(2)} DT` : "-"}
                       </Badge>
                       {favorite.availability === null ? (
-                        <Badge variant="outline">Unknown</Badge>
+                        <Badge variant="outline">{t("profile.fav_unknown_status")}</Badge>
                       ) : favorite.availability ? (
-                        <Badge variant="secondary">In stock</Badge>
+                        <Badge variant="secondary">{t("profile.fav_in_stock")}</Badge>
                       ) : (
-                        <Badge variant="destructive">Out of stock</Badge>
+                        <Badge variant="destructive">{t("profile.fav_out_of_stock")}</Badge>
                       )}
                     </div>
                   </div>

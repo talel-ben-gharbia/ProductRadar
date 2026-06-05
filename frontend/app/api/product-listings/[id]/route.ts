@@ -3,6 +3,7 @@ import { cookies } from "next/headers"
 
 import { verifySessionToken, COOKIE_NAME } from "@/lib/admin-session"
 import { BACKEND_URL } from "@/utils/admin/constants"
+import { invalidateCache } from "@/lib/fetch-with-cache"
 
 async function isSuperAdmin(): Promise<boolean> {
   const cookieStore = await cookies()
@@ -60,7 +61,9 @@ export async function PATCH(
           { status: response.status }
         )
       }
-      return NextResponse.json(await response.json())
+      const data = await response.json()
+      await invalidateCache("listings:*")
+      return NextResponse.json(data)
     }
 
     const response = await fetch(
@@ -78,6 +81,7 @@ export async function PATCH(
         { status: response.status }
       )
     }
+    await invalidateCache("listings:*")
     return NextResponse.json(await response.json())
   } catch {
     return NextResponse.json(
@@ -122,6 +126,7 @@ export async function PUT(
       )
     }
 
+    await invalidateCache("listings:*")
     return NextResponse.json(await response.json())
   } catch {
     return NextResponse.json({ error: "Unable to connect to the backend." }, { status: 502 })
@@ -152,6 +157,7 @@ export async function DELETE(
       )
     }
 
+    await invalidateCache("listings:*")
     return NextResponse.json(await response.json())
   } catch {
     return NextResponse.json({ error: "Unable to connect to the backend." }, { status: 502 })

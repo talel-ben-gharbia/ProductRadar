@@ -1,5 +1,6 @@
-import { BACKEND_URL } from "@/utils/admin/constants"
+﻿import { BACKEND_URL } from "@/utils/admin/constants"
 import { cachedFetch } from "@/lib/fetch-with-cache"
+import { withCache } from "@/lib/server-cache"
 import type { CategoryWithParent } from "@/utils/types"
 
 export type CategoryRaw = {
@@ -14,7 +15,7 @@ async function fetchCategoriesFromApi(): Promise<CategoryApiItem[]> {
 	try {
 		const endpoint =
 			typeof window === "undefined"
-				? `${BACKEND_URL}/categories`
+			? `${BACKEND_URL}/categories`
 				: "/api/categories"
 
 		const categories = await cachedFetch<CategoryApiItem[]>(endpoint, {
@@ -25,11 +26,11 @@ async function fetchCategoriesFromApi(): Promise<CategoryApiItem[]> {
 	} catch (error) {
 		const message =
 			error instanceof Error ? error.message : "Unknown categories fetch error"
-		throw new Error(`Unable to load categories from backend. ${message}`)
+		throw new Error("Unable to load categories from backend.")
 	}
 }
 
-export async function getCategoriesWithParents(): Promise<CategoryWithParent[]> {
+export const getCategoriesWithParents = withCache(async (): Promise<CategoryWithParent[]> => {
 	try {
 		const categories = await fetchCategoriesFromApi()
 
@@ -79,15 +80,15 @@ export async function getCategoriesWithParents(): Promise<CategoryWithParent[]> 
 				throw error
 			}
 
-			throw new Error(`Unable to load categories from backend. ${error.message}`)
+			throw new Error("Unable to load categories from backend.")
 		}
 
 		throw new Error(
 			"Unable to load categories from backend. Unknown categories transform error"
 		)
 	}
-}
+})
 
-export async function getRawCategories(): Promise<CategoryRaw[]> {
+export const getRawCategories = withCache(async (): Promise<CategoryRaw[]> => {
 	return fetchCategoriesFromApi()
-}
+})

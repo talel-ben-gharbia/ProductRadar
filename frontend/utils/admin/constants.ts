@@ -115,10 +115,6 @@ const SIDEBAR_CONSTANTS: SidebarItem[] = [
         url: "/admin/data-management",
       },
       {
-        title: "Data Sources",
-        url: "/admin/data-management/sources",
-      },
-      {
         title: "Scraping Logs",
         url: "/admin/data-management/scraping-logs",
       },
@@ -134,8 +130,8 @@ const SIDEBAR_CONSTANTS: SidebarItem[] = [
     icon: Briefcase,
     items: [
       {
-        title: "B2B Subscriptions",
-        url: "/admin/b2b-workflows/subscriptions",
+        title: "Sponsored Products",
+        url: "/admin/b2b/sponsored-products",
       },
       {
         title: "Renewal Requests",
@@ -146,12 +142,12 @@ const SIDEBAR_CONSTANTS: SidebarItem[] = [
         url: "/admin/b2b-workflows/ads-requests",
       },
       {
-        title: "Scraping Requests",
-        url: "/admin/b2b-workflows/scraping-requests",
-      },
-      {
         title: "Business Reports",
         url: "/admin/b2b-workflows/reports",
+      },
+      {
+        title: "Brand Scope",
+        url: "/admin/b2b-management/brand-scope",
       },
     ],
   },

@@ -4,6 +4,9 @@ import Image from "next/image"
 import { ArrowRight, BarChart2, Star } from "lucide-react"
 import { useRouter } from "next/navigation"
 
+import { useApiUrl } from "@/lib/use-api-url"
+import { useI18n } from "@/lib/i18n-context"
+import { useCompare } from "@/lib/compare-context"
 import { ListingFavoriteToggle } from "@/components/B2C/listing-favorite-toggle"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -17,6 +20,7 @@ type ProductCardProps = {
   offersCount: number
   bestTrustScore?: number | null
   favoriteListingId?: number
+  isFavorited?: boolean
   isSponsored?: boolean
 }
 
@@ -30,19 +34,21 @@ function getTrustScorePercentage(value?: number | null) {
   return Math.max(0, Math.min(100, value))
 }
 
-function getTrustMeta(value?: number | null): { label: string; color: string; bg: string } {
+function getTrustMeta(value?: number | null, t?: (key: string) => string): { label: string; color: string; bg: string } {
+  const L = t ?? ((s: string) => s)
   if (value === null || value === undefined || Number.isNaN(value))
-    return { label: "N/A", color: "text-slate-400", bg: "bg-slate-100" }
-  if (value >= 90) return { label: "Excellent", color: "text-emerald-700", bg: "bg-emerald-50" }
-  if (value >= 75) return { label: "Très bien", color: "text-green-700", bg: "bg-green-50" }
-  if (value >= 60) return { label: "Bien", color: "text-lime-700", bg: "bg-lime-50" }
-  if (value >= 40) return { label: "Moyen", color: "text-amber-700", bg: "bg-amber-50" }
-  return { label: "Faible", color: "text-red-700", bg: "bg-red-50" }
+    return { label: L("detail.na"), color: "text-slate-400", bg: "bg-slate-100" }
+  if (value >= 90) return { label: L("trust.excellent"), color: "text-emerald-700", bg: "bg-emerald-50" }
+  if (value >= 75) return { label: L("trust.very_good"), color: "text-green-700", bg: "bg-green-50" }
+  if (value >= 60) return { label: L("trust.good"), color: "text-lime-700", bg: "bg-lime-50" }
+  if (value >= 40) return { label: L("trust.average"), color: "text-amber-700", bg: "bg-amber-50" }
+  return { label: L("trust.low"), color: "text-red-700", bg: "bg-red-50" }
 }
 
 function TrustBar({ score }: { score: number | null | undefined }) {
+  const { t } = useI18n()
   const pct = getTrustScorePercentage(score)
-  const { label, color, bg } = getTrustMeta(score)
+  const { label, color, bg } = getTrustMeta(score, t)
 
   if (pct === null) return null
 
@@ -77,12 +83,24 @@ export function ProductCard({
   offersCount,
   bestTrustScore,
   favoriteListingId,
+  isFavorited,
   isSponsored,
 }: ProductCardProps) {
   const router = useRouter()
+  const apiUrl = useApiUrl()
+  const { t } = useI18n()
+  const { toggleCompare, isInCompare } = useCompare()
+  const inCompare = isInCompare(product.id)
 
   function openDetails() {
     router.push(`/B2C/products/${product.id}`)
+  }
+
+  function prefetchDetail() {
+    if (typeof window === "undefined") return
+    fetch(apiUrl(`/api/products/${product.id}`)).catch(() => {})
+    fetch(apiUrl(`/api/product-listings`)).catch(() => {})
+    fetch(apiUrl(`/api/price-history?productId=${product.id}`)).catch(() => {})
   }
 
   return (
@@ -97,6 +115,7 @@ export function ProductCard({
           openDetails()
         }
       }}
+      onMouseEnter={prefetchDetail}
     >
       {/* ── Image zone ── */}
       <div className="relative bg-slate-50">
@@ -113,7 +132,7 @@ export function ProductCard({
           {isSponsored && (
             <Badge className="flex items-center gap-1 rounded-md bg-amber-400 px-2 py-0.5 text-[10px] font-bold text-amber-900 hover:bg-amber-400">
               <Star className="size-2.5 fill-amber-900" />
-              Sponsorisé
+              {t("card.sponsored")}
             </Badge>
           )}
         </div>
@@ -124,7 +143,10 @@ export function ProductCard({
             className="absolute right-3 top-3 z-10"
             onClick={(e) => e.stopPropagation()}
           >
-            <ListingFavoriteToggle productListingId={favoriteListingId} />
+            <ListingFavoriteToggle
+              productListingId={favoriteListingId}
+              defaultFavorited={isFavorited}
+            />
           </div>
         ) : null}
 
@@ -141,7 +163,7 @@ export function ProductCard({
             />
           ) : (
             <div className="flex h-full w-full items-center justify-center text-sm text-slate-300">
-              Aucune image
+              {t("card.no_image")}
             </div>
           )}
         </div>
@@ -160,13 +182,13 @@ export function ProductCard({
         {/* price + offers */}
         <div className="flex items-end justify-between gap-2">
           <div>
-            <p className="text-[11px] font-medium text-slate-400">À partir de</p>
+            <p className="text-[11px] font-medium text-slate-400">{t("card.from")}</p>
             <p className="text-2xl font-extrabold leading-none tracking-tight text-slate-900">
               {bestPriceLabel}
             </p>
           </div>
           <span className="mb-0.5 shrink-0 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-[12px] font-semibold text-slate-600">
-            {offersCount} offre{offersCount > 1 ? "s" : ""}
+            {offersCount} {offersCount > 1 ? t("card.offers_plural") : t("card.offers")}
           </span>
         </div>
 
@@ -176,16 +198,20 @@ export function ProductCard({
             className="h-10 flex-1 rounded-xl bg-slate-900 text-[13px] font-semibold text-white hover:bg-slate-700"
             onClick={openDetails}
           >
-            Voir les offres
+            {t("card.view_offers")}
             <ArrowRight className="ml-1.5 size-3.5" />
           </Button>
           <Button
             type="button"
-            variant="outline"
+            variant={inCompare ? "default" : "outline"}
             size="icon"
-            className="h-10 w-10 shrink-0 rounded-xl border-slate-200 text-slate-600 hover:bg-slate-50"
-            onClick={(e) => { e.stopPropagation(); openDetails() }}
-            aria-label="Comparer ce produit"
+            className={`h-10 w-10 shrink-0 rounded-xl ${
+              inCompare
+                ? "bg-orange-500 text-white hover:bg-orange-600 border-orange-500"
+                : "border-slate-200 text-slate-600 hover:bg-slate-50"
+            }`}
+            onClick={(e) => { e.stopPropagation(); toggleCompare(product.id) }}
+            aria-label={t("card.compare")}
           >
             <BarChart2 className="size-4" />
           </Button>

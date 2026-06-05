@@ -14,7 +14,7 @@ type Report = {
   status: string
   period_start?: string
   period_end?: string
-  company_name?: string
+  name?: string
   market_name?: string
   created_at: string
   file_url?: string
@@ -88,7 +88,7 @@ export default function B2BReportsAdminPage() {
                     reports.map((r) => (
                       <tr key={r.id} className="transition-colors hover:bg-muted/20">
                         <td className="px-4 py-3 font-mono text-xs">#{r.id}</td>
-                        <td className="px-4 py-3 font-medium">{r.company_name ?? r.market_name ?? "—"}</td>
+                        <td className="px-4 py-3 font-medium">{r.name ?? r.market_name ?? "—"}</td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
                             <FileText className="size-3 text-indigo-500" />

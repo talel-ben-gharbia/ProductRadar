@@ -200,7 +200,7 @@ final class SubscriptionAdminController extends AbstractController
         if (!$company instanceof B2BCompany) {
             return "Company #{$companyId}";
         }
-        return (string) ($company->getCompanyName() ?? $company->getFullName() ?? $company->getEmail() ?? "Company #{$companyId}");
+        return (string) ($company->getName() ?? $company->getFullName() ?? $company->getEmail() ?? "Company #{$companyId}");
     }
 
     private function resolveMarketName(int $marketId): string
@@ -209,7 +209,7 @@ final class SubscriptionAdminController extends AbstractController
         if (!$market instanceof B2BMarket) {
             return "Market #{$marketId}";
         }
-        return (string) ($market->getCompanyName() ?? $market->getCompanyMarket() ?? $market->getEmail() ?? "Market #{$marketId}");
+        return (string) ($market->getName() ?? $market->getSector() ?? $market->getEmail() ?? "Market #{$marketId}");
     }
 
 }

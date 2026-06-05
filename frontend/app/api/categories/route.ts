@@ -2,7 +2,7 @@ import { cookies } from "next/headers"
 import { NextRequest, NextResponse } from "next/server"
 
 import { verifySessionToken, COOKIE_NAME } from "@/lib/admin-session"
-import { cachedFetch } from "@/lib/fetch-with-cache"
+import { cachedFetch, invalidateCache } from "@/lib/fetch-with-cache"
 import { BACKEND_URL } from "@/utils/admin/constants"
 
 async function isSuperAdmin(): Promise<boolean> {
@@ -60,6 +60,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    await invalidateCache("categories:*")
     return NextResponse.json(data, { status: 201 })
   } catch {
     return NextResponse.json(

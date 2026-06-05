@@ -3,7 +3,6 @@
 namespace App\Controller;
 
 use App\Entity\ScrapingLog;
-use App\Repository\DataSourceRepository;
 use App\Security\WebhookGuard;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -18,7 +17,6 @@ final class ScrapingWebhookController extends AbstractController
     public function ingest(
         Request $request,
         WebhookGuard $webhookGuard,
-        DataSourceRepository $dataSourceRepository,
         EntityManagerInterface $entityManager,
     ): JsonResponse {
         $authError = $webhookGuard->assertAuthorized($request);
@@ -65,18 +63,6 @@ final class ScrapingWebhookController extends AbstractController
         $log->setErrorMessage($errorMessage);
         $log->setExecutedAt($executedAt);
         $entityManager->persist($log);
-
-        $source = $dataSourceRepository->findOneBy(['name' => $sourceName]);
-        if ($source !== null) {
-            $source->setUpdatedAt(new \DateTimeImmutable());
-
-            if ($statusRaw === 'SUCCESS') {
-                $source->setLastSuccessAt($executedAt);
-                $source->setLastError(null);
-            } else {
-                $source->setLastError($errorMessage ?? 'Scraping workflow failed.');
-            }
-        }
 
         $entityManager->flush();
 

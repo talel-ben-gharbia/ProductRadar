@@ -8,8 +8,11 @@ import { Bell, BellRing, Heart, Menu, Search, Target, X } from "lucide-react"
 
 import { B2CNavAuth } from "@/components/B2C/b2c-nav-auth"
 import { Button } from "@/components/ui/button"
+import { useApiUrl } from "@/lib/use-api-url"
+import { useI18n } from "@/lib/i18n-context"
 import { Input } from "@/components/ui/input"
 import { useAuthDialog } from "@/lib/auth-dialog-context"
+import { LanguageSelector, MobileLanguageSelector } from "@/components/B2C/language-selector"
 
 type LiveSearchProduct = {
   id: number
@@ -37,8 +40,16 @@ function formatPrice(value: number | null): string {
   return `${value.toFixed(2)} DT`
 }
 
-export function B2CNavbar() {
+type B2CNavbarProps = {
+  title?: string
+  backHref?: string
+  backLabel?: string
+}
+
+export function B2CNavbar({ title, backHref, backLabel }: B2CNavbarProps) {
   const router = useRouter()
+  const apiUrl = useApiUrl()
+  const { t } = useI18n()
   const { openAuthDialog } = useAuthDialog()
   const [query, setQuery] = useState("")
   const [results, setResults] = useState<LiveSearchProduct[]>([])
@@ -50,6 +61,8 @@ export function B2CNavbar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [sessionType, setSessionType] = useState<SessionType>(null)
+  const [firebaseUid, setFirebaseUid] = useState<string | null>(null)
+  const [b2bUnreadCount, setB2bUnreadCount] = useState(0)
   const containerRef = useRef<HTMLDivElement | null>(null)
   const notificationsRef = useRef<HTMLDivElement | null>(null)
   const abortRef = useRef<AbortController | null>(null)
@@ -85,7 +98,7 @@ export function B2CNavbar() {
 
       try {
         const response = await fetch(
-          `/api/b2c/products/search?q=${encodeURIComponent(trimmedQuery)}&limit=8`,
+          apiUrl(`/api/b2c/products/search?q=${encodeURIComponent(trimmedQuery)}&limit=8`),
           { signal: controller.signal },
         )
         if (!response.ok) throw new Error("Search failed")
@@ -114,7 +127,7 @@ export function B2CNavbar() {
       }
       setNotificationsLoading(true)
       try {
-        const response = await fetch("/api/b2c/notifications", { cache: "no-store" })
+        const response = await fetch(apiUrl("/api/b2c/notifications"), { cache: "no-store" })
         if (!response.ok) throw new Error("Failed to load notifications")
         const data = (await response.json()) as { notifications?: B2CNotification[] }
         setNotifications(data.notifications ?? [])
@@ -131,12 +144,13 @@ export function B2CNavbar() {
     let cancelled = false
 
     fetch("/api/b2c/auth/me", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((data: { customer?: { id?: number; type?: SessionType } | null }) => {
+.then((r) => r.json())
+      .then((data: { customer?: { id?: number; type?: SessionType; firebase_uid?: string } | null }) => {
         if (cancelled) return
         const authenticated = Boolean(data.customer?.id)
         setIsAuthenticated(authenticated)
         setSessionType(authenticated ? (data.customer?.type ?? null) : null)
+        setFirebaseUid(data.customer?.firebase_uid ?? null)
         if (authenticated) loadNotifications(true)
         else setNotifications([])
       })
@@ -158,6 +172,29 @@ export function B2CNavbar() {
   }, [loadNotifications, notificationsOpen, isAuthenticated])
 
   const isB2BSession = sessionType === "b2b_company" || sessionType === "b2b_market"
+ useEffect(() => {
+    if (!isB2BSession || !firebaseUid) {
+      setB2bUnreadCount(0)
+      return
+    }
+
+    let cancelled = false
+
+    fetch(apiUrl(`/api/b2b/workspace?endpoint=notifications&limit=50&offset=0&userId=${firebaseUid}`), { cache: "no-store" })
+      .then((res) => res.json())
+      .then((data: { items?: Array<{ is_read?: boolean }> }) => {
+        if (!cancelled) {
+          const items = data.items ?? []
+          setB2bUnreadCount(items.filter((n) => !n.is_read).length)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setB2bUnreadCount(0)
+      })
+
+    return () => { cancelled = true }
+  }, [isB2BSession, firebaseUid])
+
   const unreadCount = notifications.filter((n) => !n.is_read).length
 
   async function handleNotificationClick(notification: B2CNotification) {
@@ -180,17 +217,17 @@ export function B2CNavbar() {
   const NotificationsDropdown = (
     <div className="absolute right-0 z-50 mt-2 w-80 overflow-hidden rounded-2xl border bg-white shadow-xl">
       <div className="flex items-center justify-between border-b px-4 py-3">
-        <p className="text-sm font-semibold">Notifications</p>
+        <p className="text-sm font-semibold">{t("nav.notifications")}</p>
         <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-muted-foreground">
-          {unreadCount} unread
+          {unreadCount} {t("nav.unread")}
         </span>
       </div>
       {notificationsLoading ? (
-        <p className="px-4 py-3 text-sm text-muted-foreground">Loading...</p>
+        <p className="px-4 py-3 text-sm text-muted-foreground">{t("nav.loading")}</p>
       ) : !isAuthenticated ? (
-        <p className="px-4 py-3 text-sm text-muted-foreground">Login to view notifications.</p>
+        <p className="px-4 py-3 text-sm text-muted-foreground">{t("nav.login_to_view")}</p>
       ) : notifications.length === 0 ? (
-        <p className="px-4 py-3 text-sm text-muted-foreground">No notifications yet.</p>
+        <p className="px-4 py-3 text-sm text-muted-foreground">{t("nav.no_notifications")}</p>
       ) : (
         <ul className="max-h-96 divide-y overflow-auto">
           {notifications.map((notification) => (
@@ -216,10 +253,10 @@ export function B2CNavbar() {
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">
-                    {notification.productName || "Product update"}
+                    {notification.productName || t("nav.product_update")}
                   </p>
                   <p className="line-clamp-2 text-xs text-muted-foreground">
-                    {notification.message || "A new update is available."}
+                    {notification.message || t("nav.new_update")}
                   </p>
                   {notification.productPrice !== null && (
                     <p className="mt-0.5 text-xs font-medium text-emerald-700">
@@ -238,16 +275,31 @@ export function B2CNavbar() {
   return (
     <header className="sticky top-0 z-50 h-16 border-b bg-white/95 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-white/80">
       <div className="mx-auto w-full flex h-full max-w-8xl items-center gap-3 px-4 sm:px-10">
-        {/* Brand */}
-        <Link
-          href="/"
-          className="flex shrink-0 items-center gap-2 font-bold text-foreground transition-opacity hover:opacity-80"
-        >
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-foreground text-background">
-            <Target className="h-4 w-4" />
+        {/* Brand / Title */}
+        {backHref ? (
+          <div className="flex shrink-0 items-center gap-2">
+            <Link
+              href={backHref}
+              className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><path d="m15 18-6-6 6-6"/></svg>
+              {backLabel && <span className="hidden sm:inline">{backLabel}</span>}
+            </Link>
+            {title && (
+              <span className="hidden text-base font-bold sm:block">{title}</span>
+            )}
           </div>
-          <span className="hidden text-base sm:block">ProductRadar</span>
-        </Link>
+        ) : (
+          <Link
+            href="/"
+            className="flex shrink-0 items-center gap-2 font-bold text-foreground transition-opacity hover:opacity-80"
+          >
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-foreground text-background">
+              <Target className="h-4 w-4" />
+            </div>
+            <span className="hidden text-base sm:block">{title || t("nav.brand")}</span>
+          </Link>
+        )}
 
         {/* Search */}
         <div ref={containerRef} className="relative min-w-0 flex-1">
@@ -261,7 +313,7 @@ export function B2CNavbar() {
             <Input
               type="search"
               name="search"
-              placeholder="Search products..."
+              placeholder={t("nav.search_placeholder")}
               className="h-9 rounded-full border-slate-200 bg-slate-50 pl-9 pr-3 text-sm transition-colors focus:bg-white"
               autoComplete="off"
               value={query}
@@ -275,9 +327,9 @@ export function B2CNavbar() {
           {isOpen && trimmedQuery.length >= 2 ? (
             <div className="absolute left-0 right-0 top-full z-50 mt-2 overflow-hidden rounded-2xl border bg-white shadow-xl">
               {isLoading ? (
-                <p className="px-4 py-3 text-sm text-muted-foreground">Searching...</p>
+                <p className="px-4 py-3 text-sm text-muted-foreground">{t("nav.searching")}</p>
               ) : results.length === 0 ? (
-                <p className="px-4 py-3 text-sm text-muted-foreground">No products found.</p>
+                <p className="px-4 py-3 text-sm text-muted-foreground">{t("nav.no_results")}</p>
               ) : (
                 <ul className="max-h-80 divide-y overflow-auto">
                   {results.map((product) => (
@@ -301,7 +353,7 @@ export function B2CNavbar() {
                               unoptimized
                             />
                           ) : (
-                            <span className="text-[10px] text-muted-foreground">No img</span>
+                            <span className="text-[10px] text-muted-foreground">{t("nav.no_img")}</span>
                           )}
                         </div>
                         <div className="min-w-0 flex-1">
@@ -320,7 +372,7 @@ export function B2CNavbar() {
         </div>
 
         {/* Desktop actions */}
-        <div className="hidden items-center gap-1 lg:flex">
+        <div className="hidden items-center gap-1 lg:flex ml-auto">
           <div className="relative" ref={notificationsRef}>
             <Button
               type="button"
@@ -346,41 +398,36 @@ export function B2CNavbar() {
             {notificationsOpen && NotificationsDropdown}
           </div>
 
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-9 gap-1.5 rounded-full text-muted-foreground hover:text-foreground"
-            onClick={() => {
-              if (isAuthenticated) {
-                router.push("/B2C/profile/favorites")
-              } else {
-                openAuthDialog()
-              }
-            }}
-          >
-            <Heart className="h-4 w-4" />
-            <span>Favorites</span>
-          </Button>
+          <LanguageSelector />
 
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-9 gap-1.5 rounded-full text-muted-foreground hover:text-foreground"
-            onClick={() => {
-              if (isAuthenticated) {
-                router.push("/B2C/profile/alerts")
-              } else {
-                openAuthDialog()
-              }
-            }}
-          >
-            <BellRing className="h-4 w-4" />
-            <span>Alerts</span>
+          {!isB2BSession && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-9 gap-1.5 rounded-full text-muted-foreground hover:text-foreground"
+              onClick={() => {
+                if (isAuthenticated) {
+                  router.push("/B2C/profile/favorites")
+                } else {
+                  openAuthDialog()
+                }
+              }}
+            >
+              <Heart className="h-4 w-4" />
+            <span>{t("nav.favorites")}</span>
           </Button>
+          )}
 
           {isB2BSession && (
-            <Button asChild variant="ghost" size="sm" className="h-9 rounded-full">
-              <Link href="/B2B/dashboard">B2B Dashboard</Link>
+            <Button asChild variant="ghost" size="sm" className="relative h-9 rounded-full">
+              <Link href="/B2B/dashboard">
+                {t("nav.dashboard")}
+                {b2bUnreadCount > 0 && (
+                  <span className="absolute -right-2 -top-2 inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-[11px] font-semibold text-white">
+                    {b2bUnreadCount > 99 ? "99+" : b2bUnreadCount}
+                  </span>
+                )}
+              </Link>
             </Button>
           )}
 
@@ -389,7 +436,7 @@ export function B2CNavbar() {
 
             {!isB2BSession && (
               <Button asChild size="sm" className="h-9 rounded-full px-4">
-                <Link href="/B2B">Become a Partner</Link>
+                <Link href="/B2B">{t("nav.become_partner")}</Link>
               </Button>
             )}
           </div>
@@ -446,7 +493,7 @@ export function B2CNavbar() {
               onClick={() => setMobileMenuOpen(false)}
               className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors hover:bg-slate-50"
             >
-              Browse Products
+              {t("nav.browse_products")}
             </Link>
             <button
               type="button"
@@ -461,22 +508,7 @@ export function B2CNavbar() {
               className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-sm transition-colors hover:bg-slate-50"
             >
               <Heart className="h-4 w-4 text-muted-foreground" />
-              Favorites
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setMobileMenuOpen(false)
-                if (isAuthenticated) {
-                  router.push("/B2C/profile/alerts")
-                } else {
-                  openAuthDialog()
-                }
-              }}
-              className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-sm transition-colors hover:bg-slate-50"
-            >
-              <BellRing className="h-4 w-4 text-muted-foreground" />
-              My Alerts
+              {t("nav.favorites")}
             </button>
             {isB2BSession ? (
               <Link
@@ -484,7 +516,7 @@ export function B2CNavbar() {
                 onClick={() => setMobileMenuOpen(false)}
                 className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm transition-colors hover:bg-slate-50"
               >
-                B2B Dashboard
+                {t("nav.b2b_dashboard")}
               </Link>
             ) : (
               <Link
@@ -492,9 +524,14 @@ export function B2CNavbar() {
                 onClick={() => setMobileMenuOpen(false)}
                 className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium text-primary transition-colors hover:bg-slate-50"
               >
-                Become a Partner
+                {t("nav.become_partner")}
               </Link>
             )}
+            <div className="border-t pt-2 mt-2">
+              <div className="px-3">
+                <MobileLanguageSelector onClose={() => setMobileMenuOpen(false)} />
+              </div>
+            </div>
           </nav>
         </div>
       )}

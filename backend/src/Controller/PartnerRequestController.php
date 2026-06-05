@@ -33,6 +33,7 @@ final class PartnerRequestController extends AbstractController
         $password = (string) ($payload['password'] ?? '');
         $confirmPassword = (string) ($payload['confirmPassword'] ?? $payload['passwordConfirmation'] ?? $payload['comfirmPassword'] ?? '');
         $accountType = strtoupper(trim((string) ($payload['accountType'] ?? '')));
+        $fullName = $this->normalizeOptional((string) ($payload['fullName'] ?? ''));
         $companyName = $this->normalizeOptional((string) ($payload['companyName'] ?? ''));
         $companyMarket = $this->normalizeOptional((string) ($payload['companyMarket'] ?? ''));
         $companyCountry = strtoupper(trim((string) ($payload['companyCountry'] ?? '')));
@@ -80,7 +81,7 @@ final class PartnerRequestController extends AbstractController
 
         $partnerRequest = new PartnerRequest();
         $partnerRequest->setEmail($email);
-        $partnerRequest->setFullName(null);
+        $partnerRequest->setFullName($fullName);
         $partnerRequest->setAccountType($accountType);
         $partnerRequest->setCompanyName($companyName);
         $partnerRequest->setCompanyMarket($companyMarket);
@@ -93,14 +94,14 @@ final class PartnerRequestController extends AbstractController
         // Also create an unverified B2B user record immediately so the business can be tracked.
         $b2bUser = $accountType === 'B2B_MARKET' ? new B2BMarket() : new B2BCompany();
         $b2bUser->setEmail($email);
-        $b2bUser->setFullName(null);
+        $b2bUser->setFullName($fullName);
         // firebase_uid is non-nullable in the schema; use a temporary placeholder until provisioning completes
         $b2bUser->setFirebaseUid('pending_' . uniqid('', true));
         $b2bUser->setIsActive(true);
         $b2bUser->setAccountStatus('PENDING_REVIEW');
 
-        $b2bUser->setCompanyName($companyName);
-        $b2bUser->setCompanyMarket($companyMarket);
+        $b2bUser->setName($companyName);
+        $b2bUser->setSector($companyMarket);
         $b2bUser->setCompanyCountry($companyCountry);
         $b2bUser->setCompanyWebsite($companyWebsite);
         $b2bUser->setB2bStatus('PENDING');

@@ -8,7 +8,6 @@ use App\Entity\B2BAdsCampaign;
 use App\Entity\B2BCompany;
 use App\Entity\B2BMarket;
 use App\Entity\B2BReport;
-use App\Entity\B2BScrapingRequest;
 use App\Entity\Subscription;
 use App\Entity\TrustScoreWeight;
 use App\Service\B2BNotificationService;
@@ -22,6 +21,7 @@ use Symfony\Component\HttpFoundation\Request;
 use App\Security\AdminApiGuard;
 use Symfony\Component\Routing\Attribute\Route;
 
+
 #[Route('/api/b2b/admin')]
 final class B2BAdminController extends AbstractController
 {
@@ -30,7 +30,6 @@ final class B2BAdminController extends AbstractController
     private const CACHE_KEY_REPORTS = 'b2b_admin.reports';
     private const CACHE_KEY_SUBSCRIPTIONS = 'b2b_admin.subscriptions';
     private const CACHE_KEY_ADS = 'b2b_admin.ads_requests';
-    private const CACHE_KEY_SCRAPING = 'b2b_admin.scraping_requests';
     private const CACHE_KEY_COMPANIES = 'b2b_admin.companies';
     private const CACHE_KEY_MARKETS = 'b2b_admin.markets';
     private const CACHE_KEY_WEIGHTS = 'b2b_admin.trust_score_weights';
@@ -208,68 +207,6 @@ final class B2BAdminController extends AbstractController
         return $this->json(['status' => 'REJECTED']);
     }
 
-    #[Route('/scraping-requests/{requestId}/approve', name: 'b2b_admin_approve_scraping_request', methods: ['POST'])]
-    public function approveScrapingRequest(
-        int $requestId,
-        Request $request,
-        AdminApiGuard $adminApiGuard,
-        EntityManagerInterface $entityManager,
-        B2BNotificationService $b2bNotificationService,
-    ): JsonResponse {
-        if ($errorResponse = $adminApiGuard->assertAuthorized($request)) {
-            return $errorResponse;
-        }
-
-        $scrapingRequest = $entityManager->find(B2BScrapingRequest::class, $requestId);
-        if (!$scrapingRequest instanceof B2BScrapingRequest) {
-            return $this->json(['error' => 'Scraping request not found.'], 404);
-        }
-
-        $scrapingRequest->setStatus('APPROVED');
-        $scrapingRequest->setUpdatedAt(new \DateTimeImmutable());
-
-        $entityManager->flush();
-
-        $b2bNotificationService->notifyScrapingRequestApproved($scrapingRequest);
-
-        return $this->json([
-            'id' => $scrapingRequest->getId(),
-            'status' => 'APPROVED',
-        ]);
-    }
-
-    #[Route('/scraping-requests/{requestId}/reject', name: 'b2b_admin_reject_scraping_request', methods: ['POST'])]
-    public function rejectScrapingRequest(
-        int $requestId,
-        Request $request,
-        AdminApiGuard $adminApiGuard,
-        EntityManagerInterface $entityManager,
-        B2BNotificationService $b2bNotificationService,
-    ): JsonResponse {
-        if ($errorResponse = $adminApiGuard->assertAuthorized($request)) {
-            return $errorResponse;
-        }
-
-        $scrapingRequest = $entityManager->find(B2BScrapingRequest::class, $requestId);
-        if (!$scrapingRequest instanceof B2BScrapingRequest) {
-            return $this->json(['error' => 'Scraping request not found.'], 404);
-        }
-
-        $body = json_decode((string) $request->getContent(), true);
-        $rejectionReason = is_array($body) ? trim((string) ($body['reason'] ?? '')) : '';
-
-        $scrapingRequest->setStatus('REJECTED');
-        if ($rejectionReason !== '') {
-            $scrapingRequest->setNotes($rejectionReason);
-        }
-        $scrapingRequest->setUpdatedAt(new \DateTimeImmutable());
-
-        $entityManager->flush();
-
-        $b2bNotificationService->notifyScrapingRequestRejected($scrapingRequest, $rejectionReason);
-
-        return $this->json(['status' => 'REJECTED']);
-    }
 
     #[Route('/subscriptions/{subscriptionId}/approve-renewal', name: 'b2b_admin_approve_renewal', methods: ['POST'])]
     public function approveRenewal(
@@ -390,8 +327,8 @@ final class B2BAdminController extends AbstractController
                         'created_at' => $sub->getCreatedAt()?->format(\DateTimeInterface::ATOM),
                         'company_id' => $company?->getId(),
                         'market_id' => $market?->getId(),
-                        'company_name' => $company?->getCompanyName(),
-                        'market_name' => $market?->getCompanyName(),
+                        'name' => $company?->getName(),
+                        'market_name' => $market?->getName(),
                     ];
                 }, $items),
         ]);
@@ -434,8 +371,8 @@ final class B2BAdminController extends AbstractController
                     'status' => $r->getStatus(),
                     'period_start' => $r->getPeriodStart()?->format(\DateTimeInterface::ATOM),
                     'period_end' => $r->getPeriodEnd()?->format(\DateTimeInterface::ATOM),
-                    'company_name' => $r->getCompany()?->getCompanyName(),
-                    'market_name' => $r->getMarket()?->getCompanyName(),
+                    'name' => $r->getCompany()?->getName(),
+                    'market_name' => $r->getMarket()?->getName(),
                     'created_at' => $r->getCreatedAt()?->format(\DateTimeInterface::ATOM),
                     'file_url' => $r->getFilePath(),
                 ], $items),
@@ -498,8 +435,8 @@ final class B2BAdminController extends AbstractController
                         'activated_at' => $sub->getActivatedAt()?->format(\DateTimeInterface::ATOM),
                         'company_id' => $company?->getId(),
                         'market_id' => $market?->getId(),
-                        'company_name' => $company?->getCompanyName(),
-                        'market_name' => $market?->getCompanyName(),
+                        'name' => $company?->getName(),
+                        'market_name' => $market?->getName(),
                     ];
                 }, $items),
                 'pagination' => [
@@ -557,7 +494,7 @@ final class B2BAdminController extends AbstractController
                     'image_mime_type' => $ar->getImageMimeType(),
                     'status' => $ar->getStatus(),
                     'company_id' => $ar->getCompany()?->getId(),
-                    'company_name' => $ar->getCompany()?->getCompanyName(),
+                    'name' => $ar->getCompany()?->getName(),
                     'created_at' => $ar->getCreatedAt()?->format(\DateTimeInterface::ATOM),
                     'updated_at' => $ar->getUpdatedAt()?->format(\DateTimeInterface::ATOM),
                 ], $items),
@@ -568,132 +505,6 @@ final class B2BAdminController extends AbstractController
                 ],
             ];
         });
-    }
-
-    #[Route('/scraping-requests', name: 'b2b_admin_list_scraping_requests', methods: ['GET'])]
-    public function listScrapingRequests(
-        Request $request,
-        AdminApiGuard $adminApiGuard,
-        EntityManagerInterface $entityManager,
-    ): JsonResponse {
-        if ($errorResponse = $adminApiGuard->assertAuthorized($request)) {
-            return $errorResponse;
-        }
-
-        $limit = max(1, min(100, $request->query->getInt('limit', 25)));
-        $offset = max(0, $request->query->getInt('offset', 0));
-        $status = trim((string) $request->query->get('status', ''));
-
-        $cacheKey = self::CACHE_KEY_SCRAPING . ".l{$limit}o{$offset}s{$status}";
-
-        return $this->cachedGet($this->cache, $cacheKey, static function () use ($entityManager, $limit, $offset, $status): array {
-            $qb = $entityManager->createQueryBuilder()
-                ->select('sr')
-                ->from(B2BScrapingRequest::class, 'sr')
-                ->orderBy('sr.created_at', 'DESC')
-                ->setMaxResults($limit)
-                ->setFirstResult($offset);
-
-            if ($status !== '') {
-                $qb->andWhere('sr.status = :status')
-                    ->setParameter('status', strtoupper($status));
-            }
-
-            $items = $qb->getQuery()->getResult();
-            $total = $entityManager->createQueryBuilder()
-                ->select('COUNT(sr.id)')
-                ->from(B2BScrapingRequest::class, 'sr')
-                ->getQuery()
-                ->getSingleScalarResult();
-
-            return [
-                'items' => array_map(fn (B2BScrapingRequest $sr) => [
-                    'id' => $sr->getId(),
-                    'owner_type' => $sr->getOwnerType(),
-                    'target_type' => $sr->getTargetType(),
-                    'target_url' => $sr->getTargetUrl(),
-                    'status' => $sr->getStatus(),
-                    'is_duplicate' => $sr->isDuplicate(),
-                    'company_id' => $sr->getCompany()?->getId(),
-                    'market_id' => $sr->getMarket()?->getId(),
-                    'company_name' => $sr->getCompany()?->getCompanyName(),
-                    'market_name' => $sr->getMarket()?->getCompanyName(),
-                    'created_at' => $sr->getCreatedAt()?->format(\DateTimeInterface::ATOM),
-                ], $items),
-                'pagination' => [
-                    'limit' => $limit,
-                    'offset' => $offset,
-                    'total' => $total,
-                ],
-            ];
-        });
-    }
-
-    #[Route('/subscriptions', name: 'b2b_admin_create_subscription', methods: ['POST'])]
-    public function createSubscription(
-        Request $request,
-        AdminApiGuard $adminApiGuard,
-        EntityManagerInterface $entityManager,
-    ): JsonResponse {
-        if ($errorResponse = $adminApiGuard->assertAuthorized($request)) {
-            return $errorResponse;
-        }
-
-        $body = json_decode((string) $request->getContent(), true);
-        if (!is_array($body)) {
-            return $this->json(['error' => 'Invalid request body.'], 400);
-        }
-
-        $ownerType = strtoupper((string) ($body['ownerType'] ?? 'COMPANY'));
-        $rawPlan = strtoupper((string) ($body['planType'] ?? 'SILVER'));
-        $planType = str_starts_with($rawPlan, 'B2B_') ? $rawPlan : 'B2B_' . $rawPlan;
-        $durationMonths = max(1, (int) ($body['durationMonths'] ?? 12));
-
-        $subscription = new Subscription();
-        $subscription->setOwnerType($ownerType);
-        $subscription->setPlanType($planType);
-        $subscription->setDurationMonths($durationMonths);
-        $subscription->setStartDate(new \DateTimeImmutable());
-        $subscription->setEndDate((new \DateTimeImmutable())->modify("+{$durationMonths} months"));
-        $subscription->setActive(true);
-        $subscription->setCreatedAt(new \DateTimeImmutable());
-
-        if ($ownerType === 'COMPANY' && !empty($body['companyId'])) {
-            $subscription->setOwnerId((int) $body['companyId']);
-        } elseif ($ownerType === 'MARKET' && !empty($body['marketId'])) {
-            $subscription->setOwnerId((int) $body['marketId']);
-        }
-
-        $entityManager->persist($subscription);
-        $entityManager->flush();
-
-        return $this->json(['id' => $subscription->getId(), 'status' => 'created'], 201);
-    }
-
-    #[Route('/subscriptions/{id}', name: 'b2b_admin_update_subscription', methods: ['PATCH'])]
-    public function updateSubscription(
-        int $id,
-        Request $request,
-        AdminApiGuard $adminApiGuard,
-        EntityManagerInterface $entityManager,
-    ): JsonResponse {
-        if ($errorResponse = $adminApiGuard->assertAuthorized($request)) {
-            return $errorResponse;
-        }
-
-        $subscription = $entityManager->find(Subscription::class, $id);
-        if (!$subscription instanceof Subscription) {
-            return $this->json(['error' => 'Subscription not found.'], 404);
-        }
-
-        $body = json_decode((string) $request->getContent(), true);
-        if (isset($body['active'])) {
-            $subscription->setActive((bool) $body['active']);
-        }
-        $subscription->setUpdatedAt(new \DateTimeImmutable());
-        $entityManager->flush();
-
-        return $this->json(['id' => $subscription->getId(), 'active' => $subscription->isActive()]);
     }
 
     #[Route('/companies', name: 'b2b_admin_list_companies', methods: ['GET'])]
@@ -721,14 +532,13 @@ final class B2BAdminController extends AbstractController
 
             $items = $qb->getQuery()->getResult();
 
-            $scrapingRepo = $entityManager->getRepository(B2BScrapingRequest::class);
             $reportRepo = $entityManager->getRepository(B2BReport::class);
             $listingRepo = $entityManager->getRepository(\App\Entity\ProductListing::class);
 
             $total = $entityManager->createQueryBuilder()->select('COUNT(c.id)')->from(B2BCompany::class, 'c')->getQuery()->getSingleScalarResult();
 
             return [
-                'items' => array_map(function (B2BCompany $c) use ($scrapingRepo, $reportRepo, $listingRepo) {
+                'items' => array_map(function (B2BCompany $c) use ($reportRepo, $listingRepo) {
                     $listingsCount = 0;
                     if ($c->getSeller()) {
                         $listingsCount = (int) $listingRepo->createQueryBuilder('pl')
@@ -742,12 +552,11 @@ final class B2BAdminController extends AbstractController
                     return [
                         'id' => $c->getId(),
                         'email' => $c->getEmail(),
-                        'company_name' => $c->getCompanyName(),
+                        'name' => $c->getName(),
                         'status' => $c->getB2bStatus(),
                         'is_verified' => $c->isVerified(),
                         'joined_at' => $c->getJoinedAt()?->format(\DateTimeInterface::ATOM),
                         'listings_count' => $listingsCount,
-                        'scraping_requests_count' => (int) $scrapingRepo->createQueryBuilder('sr')->select('COUNT(sr.id)')->where('sr.company = :company')->setParameter('company', $c)->getQuery()->getSingleScalarResult(),
                         'reports_count' => (int) $reportRepo->createQueryBuilder('r')->select('COUNT(r.id)')->where('r.company = :company')->setParameter('company', $c)->getQuery()->getSingleScalarResult(),
                     ];
                 }, $items),
@@ -780,21 +589,19 @@ final class B2BAdminController extends AbstractController
                 ->setFirstResult($offset);
 
             $items = $qb->getQuery()->getResult();
-            $scrapingRepo = $entityManager->getRepository(B2BScrapingRequest::class);
             $reportRepo = $entityManager->getRepository(B2BReport::class);
 
             $total = $entityManager->createQueryBuilder()->select('COUNT(m.id)')->from(B2BMarket::class, 'm')->getQuery()->getSingleScalarResult();
 
             return [
-                'items' => array_map(function (B2BMarket $m) use ($scrapingRepo, $reportRepo) {
+                'items' => array_map(function (B2BMarket $m) use ($reportRepo) {
                     return [
                         'id' => $m->getId(),
                         'email' => $m->getEmail(),
-                        'company_name' => $m->getCompanyName(),
+                        'name' => $m->getName(),
                         'status' => $m->getB2bStatus(),
                         'is_verified' => $m->isVerified(),
                         'joined_at' => $m->getJoinedAt()?->format(\DateTimeInterface::ATOM),
-                        'scraping_requests_count' => (int) $scrapingRepo->createQueryBuilder('sr')->select('COUNT(sr.id)')->where('sr.market = :market')->setParameter('market', $m)->getQuery()->getSingleScalarResult(),
                         'reports_count' => (int) $reportRepo->createQueryBuilder('r')->select('COUNT(r.id)')->where('r.market = :market')->setParameter('market', $m)->getQuery()->getSingleScalarResult(),
                     ];
                 }, $items),

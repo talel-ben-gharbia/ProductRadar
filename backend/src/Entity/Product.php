@@ -22,6 +22,10 @@ class Product
     #[ORM\Column(length: 255, nullable: true)]
     private ?string $brand = null;
 
+    #[ORM\ManyToOne(targetEntity: Brand::class)]
+    #[ORM\JoinColumn(name: 'brand_id', referencedColumnName: 'id', nullable: true)]
+    private ?Brand $brandEntity = null;
+
     #[ORM\Column(type: Types::TEXT)]
     private ?string $description = null;
 
@@ -85,6 +89,18 @@ class Product
     public function setBrand(?string $brand): static
     {
         $this->brand = $brand;
+
+        return $this;
+    }
+
+    public function getBrandEntity(): ?Brand
+    {
+        return $this->brandEntity;
+    }
+
+    public function setBrandEntity(?Brand $brandEntity): static
+    {
+        $this->brandEntity = $brandEntity;
 
         return $this;
     }

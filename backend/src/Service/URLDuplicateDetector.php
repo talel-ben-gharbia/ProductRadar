@@ -247,11 +247,12 @@ final class URLDuplicateDetector
     private function checkExactMatch(string $normalizedUrl, string $tableName): ?array
     {
         if ($tableName === 'product_listing') {
-            // Check product_listing.source_url
+            // Check product_listing.product_url
             $qb = $this->entityManager->createQueryBuilder()
-                ->select('pl.id, pl.product_name as name')
+                ->select('pl.id, p.name as name')
                 ->from(ProductListing::class, 'pl')
-                ->where('LOWER(pl.source_url) = :url')
+                ->join('pl.product', 'p')
+                ->where('LOWER(pl.product_url) = :url')
                 ->setParameter('url', $normalizedUrl)
                 ->setMaxResults(1);
 
@@ -284,9 +285,10 @@ final class URLDuplicateDetector
 
         // Find URLs with same domain but different path/query
         $qb = $this->entityManager->createQueryBuilder()
-            ->select('pl.id, pl.source_url, pl.product_name')
+            ->select('pl.id, pl.product_url as source_url, p.name as product_name')
             ->from(ProductListing::class, 'pl')
-            ->where('LOWER(pl.source_url) LIKE :domainPattern')
+            ->join('pl.product', 'p')
+            ->where('LOWER(pl.product_url) LIKE :domainPattern')
             ->setParameter('domainPattern', '%' . $domain . '%')
             ->setMaxResults(5);
 

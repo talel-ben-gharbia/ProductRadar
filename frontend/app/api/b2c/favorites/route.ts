@@ -25,19 +25,29 @@ export async function GET(request: NextRequest) {
   }
 
   const productListingId = request.nextUrl.searchParams.get("productListingId")?.trim() || ""
-  const params = new URLSearchParams({ clientId: String(session.id) })
+  const productListingIds = request.nextUrl.searchParams.get("productListingIds")?.trim() || ""
+
+  let endpoint = `${BACKEND_URL}/favorites?clientId=${encodeURIComponent(String(session.id))}`
 
   if (productListingId) {
-    params.set("productListingId", productListingId)
+    endpoint += `&productListingId=${encodeURIComponent(productListingId)}`
+  }
+
+  if (productListingIds) {
+    const ids = productListingIds.split(",").map((id) => id.trim()).filter(Boolean)
+    for (const id of ids) {
+      endpoint += `&productListingId=${encodeURIComponent(id)}`
+    }
   }
 
   try {
-    const data = await cachedFetch<unknown>(`${BACKEND_URL}/favorites?${params.toString()}`, {
+    const data = await cachedFetch<unknown>(endpoint, {
       cacheKey: `b2c:favs:${session.id}`,
       cacheTtl: 60,
     })
 
-    return NextResponse.json({ favorites: data }, { status: 200 })
+    const favorites = Array.isArray(data) ? data : []
+    return NextResponse.json({ favorites }, { status: 200 })
   } catch {
     return NextResponse.json({ error: "Unable to connect to backend." }, { status: 502 })
   }

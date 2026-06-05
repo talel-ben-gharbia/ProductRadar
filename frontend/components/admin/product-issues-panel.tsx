@@ -27,7 +27,7 @@ import {
   getProductListings,
   setProductListingActive,
 } from "@/services/admin/product-listings"
-import { getProducts, updateProduct } from "@/services/admin/products"
+import { deleteProduct, getProducts, updateProduct } from "@/services/admin/products"
 import type { Product, ProductListing } from "@/utils/types"
 
 type NoBrandItem = {
@@ -60,10 +60,20 @@ type InactiveItem = {
   isActive: boolean | null
 }
 
+type ZeroListingItem = {
+  productId: number
+  name: string
+  brand: string | null
+  description: string
+  imageUrl: string | null
+  categoryId: number | null
+}
+
 type ProductIssuesPanelProps = {
   noBrandProducts: NoBrandItem[]
   zeroPriceListings: ZeroPriceItem[]
   inactiveListings: InactiveItem[]
+  zeroListingProducts: ZeroListingItem[]
 }
 
 type ProductDetails = Product & {
@@ -94,14 +104,14 @@ async function fetchProductDetails(id: number): Promise<ProductDetails> {
     name: String(data.name ?? ""),
     brand: (data.brand ?? null) as string | null,
     description: String(data.description ?? ""),
-    specs_json: (data.specs_json ?? null) as Record<string, unknown> | null,
+    specs_json: (data.specs_json ?? null) as Record<string, string> | null,
     image_url: (data.image_url ?? null) as string | null,
     categoryId: (data.categoryId ?? null) as number | null,
     listings: Array.isArray(data.listings) ? data.listings : [],
   }
 }
 
-export default function ProductIssuesPanel({ noBrandProducts, zeroPriceListings, inactiveListings }: ProductIssuesPanelProps) {
+export default function ProductIssuesPanel({ noBrandProducts: initialNoBrandProducts, zeroPriceListings: initialZeroPriceListings, inactiveListings: initialInactiveListings, zeroListingProducts: initialZeroListingProducts }: ProductIssuesPanelProps) {
   const router = useRouter()
 
   const [dialogTab, setDialogTab] = useState<ActiveTab | null>(null)
@@ -113,14 +123,22 @@ export default function ProductIssuesPanel({ noBrandProducts, zeroPriceListings,
   const [submitting, setSubmitting] = useState(false)
 
   const [selectedListingIds, setSelectedListingIds] = useState<Record<number, boolean>>({})
+  const [selectedProductIds, setSelectedProductIds] = useState<Record<number, boolean>>({})
   const [bulkActionLoading, setBulkActionLoading] = useState(false)
+  const [deletingProductId, setDeletingProductId] = useState<number | null>(null)
 
   const [showAllNoBrand, setShowAllNoBrand] = useState(false)
   const [showAllZeroPrice, setShowAllZeroPrice] = useState(false)
   const [showAllInactive, setShowAllInactive] = useState(false)
-  const [selectMode, setSelectMode] = useState<"zero-price" | "inactive">("zero-price")
+  const [showAllZeroListings, setShowAllZeroListings] = useState(false)
+  const [selectMode, setSelectMode] = useState<"zero-price" | "inactive" | "zero-listings">("zero-price")
 
   const [query, setQuery] = useState("")
+
+  const [noBrandProducts, setNoBrandProducts] = useState(initialNoBrandProducts)
+  const [zeroPriceListings, setZeroPriceListings] = useState(initialZeroPriceListings)
+  const [inactiveListings, setInactiveListings] = useState(initialInactiveListings)
+  const [zeroListingProducts, setZeroListingProducts] = useState(initialZeroListingProducts)
 
   const filteredNoBrand = useMemo(() => {
     if (!query) return noBrandProducts
@@ -146,9 +164,18 @@ export default function ProductIssuesPanel({ noBrandProducts, zeroPriceListings,
     )
   }, [inactiveListings, query])
 
+  const filteredZeroListings = useMemo(() => {
+    if (!query) return zeroListingProducts
+    const q = normalizeText(query)
+    return zeroListingProducts.filter((p) =>
+      normalizeText([p.name, p.productId, p.brand, p.description].join(" ")).includes(q),
+    )
+  }, [zeroListingProducts, query])
+
   const visibleNoBrand = showAllNoBrand ? filteredNoBrand : filteredNoBrand.slice(0, 10)
   const visibleZeroPrice = showAllZeroPrice ? filteredZeroPrice : filteredZeroPrice.slice(0, 10)
   const visibleInactive = showAllInactive ? filteredInactive : filteredInactive.slice(0, 10)
+  const visibleZeroListings = showAllZeroListings ? filteredZeroListings : filteredZeroListings.slice(0, 10)
 
   useEffect(() => {
     if (dialogProductId === null) return
@@ -212,8 +239,11 @@ export default function ProductIssuesPanel({ noBrandProducts, zeroPriceListings,
   async function applyActivateListing(listingId: number) {
     try {
       await setProductListingActive(listingId, true)
+      setInactiveListings((prev) => prev.filter((l) => l.listingId !== listingId))
+      setZeroPriceListings((prev) =>
+        prev.map((l) => (l.listingId === listingId ? { ...l, isActive: true } : l)),
+      )
       toast.success(`Listing #${listingId} activated.`)
-      router.refresh()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to activate listing.")
     }
@@ -222,18 +252,80 @@ export default function ProductIssuesPanel({ noBrandProducts, zeroPriceListings,
   async function applyDeactivateListing(listingId: number) {
     try {
       await setProductListingActive(listingId, false)
+      setZeroPriceListings((prev) =>
+        prev.map((l) => (l.listingId === listingId ? { ...l, isActive: false } : l)),
+      )
+      setInactiveListings((prev) =>
+        prev.some((l) => l.listingId === listingId)
+          ? prev.map((l) => (l.listingId === listingId ? { ...l, isActive: false } : l))
+          : prev,
+      )
       toast.success(`Listing #${listingId} deactivated.`)
-      router.refresh()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to deactivate listing.")
+    }
+  }
+
+  async function applyDeleteProduct(productId: number) {
+    if (!window.confirm(`Delete product #${productId} permanently? This cannot be undone.`)) return
+    setDeletingProductId(productId)
+    try {
+      await deleteProduct(productId)
+      setZeroListingProducts((prev) => prev.filter((p) => p.productId !== productId))
+      setDeletingProductId(null)
+      toast.success(`Product #${productId} deleted.`)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to delete product.")
+      setDeletingProductId(null)
+    }
+  }
+
+  function toggleSelectProduct(productId: number) {
+    setSelectedProductIds((current) => ({
+      ...current,
+      [productId]: !current[productId],
+    }))
+  }
+
+  function selectAllZeroListings() {
+    const next: Record<number, boolean> = {}
+    for (const p of filteredZeroListings) {
+      next[p.productId] = true
+    }
+    setSelectedProductIds(next)
+    setSelectMode("zero-listings")
+  }
+
+  async function bulkDeleteProducts() {
+    const ids = Object.entries(selectedProductIds)
+      .filter(([_, selected]) => selected)
+      .map(([id]) => Number(id))
+    if (ids.length === 0) {
+      toast.error("Select at least one product to delete.")
+      return
+    }
+    if (!window.confirm(`Delete ${ids.length} product(s) permanently? This cannot be undone.`)) return
+    setBulkActionLoading(true)
+    try {
+      for (const id of ids) {
+        await deleteProduct(id)
+        setZeroListingProducts((prev) => prev.filter((p) => p.productId !== id))
+      }
+      setSelectedProductIds({})
+      toast.success(`Deleted ${ids.length} product(s).`)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to delete some products.")
+    } finally {
+      setBulkActionLoading(false)
     }
   }
 
   async function applyDeleteListing(listingId: number) {
     try {
       await deleteProductListing(listingId)
+      setZeroPriceListings((prev) => prev.filter((l) => l.listingId !== listingId))
+      setInactiveListings((prev) => prev.filter((l) => l.listingId !== listingId))
       toast.success(`Listing #${listingId} deleted.`)
-      router.refresh()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to delete listing.")
     }
@@ -280,10 +372,19 @@ export default function ProductIssuesPanel({ noBrandProducts, zeroPriceListings,
 
     setBulkActionLoading(true)
     try {
-      await Promise.all(listingIds.map((id) => setProductListingActive(id, false)))
-      toast.success(`Deactivated ${listingIds.length} listing(s).`)
+      for (const id of listingIds) {
+        await setProductListingActive(id, false)
+        setZeroPriceListings((prev) =>
+          prev.map((l) => (l.listingId === id ? { ...l, isActive: false } : l)),
+        )
+        setInactiveListings((prev) =>
+          prev.some((l) => l.listingId === id)
+            ? prev.map((l) => (l.listingId === id ? { ...l, isActive: false } : l))
+            : prev,
+        )
+      }
       setSelectedListingIds({})
-      router.refresh()
+      toast.success(`Deactivated ${listingIds.length} listing(s).`)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to bulk deactivate listings.")
     } finally {
@@ -303,10 +404,15 @@ export default function ProductIssuesPanel({ noBrandProducts, zeroPriceListings,
 
     setBulkActionLoading(true)
     try {
-      await Promise.all(listingIds.map((id) => setProductListingActive(id, true)))
-      toast.success(`Activated ${listingIds.length} listing(s).`)
+      for (const id of listingIds) {
+        await setProductListingActive(id, true)
+        setInactiveListings((prev) => prev.filter((l) => l.listingId !== id))
+        setZeroPriceListings((prev) =>
+          prev.map((l) => (l.listingId === id ? { ...l, isActive: true } : l)),
+        )
+      }
       setSelectedListingIds({})
-      router.refresh()
+      toast.success(`Activated ${listingIds.length} listing(s).`)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to bulk activate listings.")
     } finally {
@@ -326,10 +432,13 @@ export default function ProductIssuesPanel({ noBrandProducts, zeroPriceListings,
 
     setBulkActionLoading(true)
     try {
-      await Promise.all(listingIds.map((id) => deleteProductListing(id)))
-      toast.success(`Deleted ${listingIds.length} listing(s).`)
+      for (const id of listingIds) {
+        await deleteProductListing(id)
+        setZeroPriceListings((prev) => prev.filter((l) => l.listingId !== id))
+        setInactiveListings((prev) => prev.filter((l) => l.listingId !== id))
+      }
       setSelectedListingIds({})
-      router.refresh()
+      toast.success(`Deleted ${listingIds.length} listing(s).`)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to bulk delete listings.")
     } finally {
@@ -337,7 +446,7 @@ export default function ProductIssuesPanel({ noBrandProducts, zeroPriceListings,
     }
   }
 
-  const selectedCount = Object.values(selectedListingIds).filter(Boolean).length
+  const selectedCount = Object.values(selectedListingIds).filter(Boolean).length + Object.values(selectedProductIds).filter(Boolean).length
 
   const activeZeroPriceListings = filteredZeroPrice.filter((l) => l.isActive !== false).length
   const inactiveZeroPriceListings = filteredZeroPrice.filter((l) => l.isActive === false).length
@@ -361,7 +470,7 @@ export default function ProductIssuesPanel({ noBrandProducts, zeroPriceListings,
           </div>
         </div>
         <div className="mt-2 text-xs text-muted-foreground">
-          {filteredNoBrand.length} missing brand | {filteredZeroPrice.length} zero-price | {filteredInactive.length} inactive
+          {filteredNoBrand.length} missing brand | {filteredZeroPrice.length} zero-price | {filteredInactive.length} inactive | {filteredZeroListings.length} zero-listings
           {query ? ` (filtered)` : ""}
         </div>
       </div>
@@ -369,7 +478,9 @@ export default function ProductIssuesPanel({ noBrandProducts, zeroPriceListings,
       {selectedCount > 0 ? (
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
           <span className="text-sm font-medium text-amber-800">
-            {selectedCount} listing(s) selected
+            {selectMode === "zero-listings"
+              ? `${Object.values(selectedProductIds).filter(Boolean).length} product(s) selected`
+              : `${selectedCount} listing(s) selected`}
           </span>
           {selectMode === "inactive" ? (
             <Button
@@ -381,7 +492,7 @@ export default function ProductIssuesPanel({ noBrandProducts, zeroPriceListings,
             >
               Activate Selected
             </Button>
-          ) : (
+          ) : selectMode === "zero-listings" ? null : (
             <Button
               type="button"
               variant="outline"
@@ -392,15 +503,27 @@ export default function ProductIssuesPanel({ noBrandProducts, zeroPriceListings,
               Deactivate Selected
             </Button>
           )}
-          <Button
-            type="button"
-            variant="destructive"
-            size="sm"
-            onClick={bulkDelete}
-            disabled={bulkActionLoading}
-          >
-            Delete Selected
-          </Button>
+          {selectMode === "zero-listings" ? (
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              onClick={bulkDeleteProducts}
+              disabled={bulkActionLoading}
+            >
+              {bulkActionLoading ? "Deleting..." : "Delete Selected"}
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              onClick={bulkDelete}
+              disabled={bulkActionLoading}
+            >
+              Delete Selected
+            </Button>
+          )}
         </div>
       ) : null}
 
@@ -707,6 +830,104 @@ export default function ProductIssuesPanel({ noBrandProducts, zeroPriceListings,
               {showAllInactive
                 ? `Show fewer (${visibleInactive.length})`
                 : `Show all (${filteredInactive.length})`}
+            </Button>
+          ) : null}
+        </div>
+      </details>
+
+      <details className="rounded-lg border bg-card p-4" open>
+        <summary className="cursor-pointer list-none">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Section 4</p>
+          <p className="mt-1 text-xl font-semibold">Products With No Listings</p>
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+            <span className="rounded-full bg-purple-100 px-2.5 py-1 text-xs font-semibold text-purple-800">
+              {zeroListingProducts.length} products
+            </span>
+            <Button type="button" variant="outline" size="sm" onClick={selectAllZeroListings}>
+              Select All
+            </Button>
+            <Button type="button" variant="outline" size="sm" onClick={() => setSelectedProductIds({})}>
+              Clear
+            </Button>
+          </div>
+        </summary>
+
+        <div className="mt-4 space-y-3">
+          {zeroListingProducts.length === 0 ? (
+            <div className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">
+              All products have at least one listing.
+            </div>
+          ) : (
+            visibleZeroListings.map((item) => (
+              <div
+                key={`zl-${item.productId}`}
+                className="rounded-lg border bg-card p-4"
+              >
+                <div className="flex flex-wrap items-start gap-3">
+                  <input
+                    type="checkbox"
+                    className="mt-1 size-4"
+                    checked={selectedProductIds[item.productId] ?? false}
+                    onChange={() => {
+                      setSelectMode("zero-listings")
+                      toggleSelectProduct(item.productId)
+                    }}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold">
+                      #{item.productId} - {item.name}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground line-clamp-2">
+                      {item.description || "No description"}
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                      <span className="rounded-full bg-purple-100 px-2 py-1 text-purple-800">No listings</span>
+                      {item.brand ? (
+                        <span className="rounded-full bg-muted px-2 py-1">Brand: {item.brand}</span>
+                      ) : (
+                        <span className="rounded-full bg-muted px-2 py-1">No brand</span>
+                      )}
+                      {item.imageUrl ? (
+                        <span className="rounded-full bg-muted px-2 py-1">Has image</span>
+                      ) : (
+                        <span className="rounded-full bg-muted px-2 py-1">No image</span>
+                      )}
+                      {item.categoryId && (
+                        <span className="rounded-full bg-muted px-2 py-1">Category #{item.categoryId}</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 gap-2">
+                    <Button asChild type="button" size="sm" variant="outline">
+                      <Link href={`/admin/products/${item.productId}`}>
+                        View Product
+                      </Link>
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => applyDeleteProduct(item.productId)}
+                      disabled={deletingProductId === item.productId}
+                    >
+                      {deletingProductId === item.productId ? "Deleting..." : "Delete"}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+
+          {filteredZeroListings.length > 10 ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowAllZeroListings(!showAllZeroListings)}
+            >
+              {showAllZeroListings
+                ? `Show fewer (${visibleZeroListings.length})`
+                : `Show all (${filteredZeroListings.length})`}
             </Button>
           ) : null}
         </div>

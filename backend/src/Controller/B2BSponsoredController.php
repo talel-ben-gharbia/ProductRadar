@@ -5,10 +5,10 @@ namespace App\Controller;
 use App\Entity\Admin;
 use App\Entity\B2BAdsCampaign;
 use App\Entity\B2BAdsRequest;
+use App\Entity\B2B;
 use App\Entity\B2BCompany;
 use App\Entity\B2BMarket;
 use App\Entity\B2BSponsoredArticle;
-use App\Entity\Product;
 use App\Entity\ProductListing;
 use App\Repository\UserRepository;
 use App\Security\AdminApiGuard;
@@ -51,9 +51,10 @@ final class B2BSponsoredController extends AbstractController
         }
 
         $qb = $entityManager->createQueryBuilder()
-            ->select('pl.id AS listing_id, p.id AS product_id, p.name AS product_name, p.brand AS product_brand, pl.ref')
+            ->select('pl.id AS listing_id, p.id AS product_id, p.name AS product_name, COALESCE(b.name, p.brand) AS product_brand, pl.ref')
             ->from(ProductListing::class, 'pl')
             ->join('pl.product', 'p')
+            ->leftJoin('p.brandEntity', 'b')
             ->where('pl.seller = :sellerId')
             ->andWhere('pl.is_active = true')
             ->setParameter('sellerId', $sellerId);
@@ -106,6 +107,23 @@ final class B2BSponsoredController extends AbstractController
             50
         );
 
+        // Auto-expire: mark any PUBLISHED articles past their ends_at as EXPIRED
+        $now = new \DateTimeImmutable();
+        $needsFlush = false;
+        foreach ($items as $item) {
+            if (
+                $item->getStatus() === 'PUBLISHED'
+                && $item->getEndsAt() !== null
+                && $item->getEndsAt() <= $now
+            ) {
+                $item->setStatus('EXPIRED');
+                $needsFlush = true;
+            }
+        }
+        if ($needsFlush) {
+            $entityManager->flush();
+        }
+
         $quotaUsage = $this->subscriptionResolver->checkQuota($user, 'sponsored_products', 0);
         $activeCount = $entityManager->getRepository(B2BSponsoredArticle::class)->count([
             'company' => $user,
@@ -134,43 +152,39 @@ final class B2BSponsoredController extends AbstractController
         }
 
         $body = json_decode((string) $request->getContent(), true);
-        if (!is_array($body) || empty($body['product_id'])) {
-            return $this->json(['error' => 'product_id is required.'], 422);
+        if (!is_array($body) || empty($body['listing_id'])) {
+            return $this->json(['error' => 'listing_id is required.'], 422);
         }
 
-        $productId = (int) $body['product_id'];
-        $product = $entityManager->find(Product::class, $productId);
-        if (!$product instanceof Product) {
-            return $this->json(['error' => 'Product not found.'], 404);
+        $listingId = (int) $body['listing_id'];
+        $listing = $entityManager->find(ProductListing::class, $listingId);
+        if (!$listing instanceof ProductListing) {
+            return $this->json(['error' => 'Listing not found.'], 404);
         }
 
-        // Check product belongs to vendor
+        // Check listing belongs to vendor
         $sellerId = $user->getSeller()?->getId();
         if ($sellerId === null) {
             return $this->json(['error' => 'No seller account linked.'], 403);
         }
 
-        $ownListing = $entityManager->getRepository(ProductListing::class)->findOneBy([
-            'product' => $product,
-            'seller' => $sellerId,
-        ]);
-        if (!$ownListing instanceof ProductListing) {
-            return $this->json(['error' => 'You can only sponsor your own products.'], 403);
+        if ($listing->getSeller()?->getId() !== $sellerId) {
+            return $this->json(['error' => 'You can only sponsor your own listings.'], 403);
         }
 
         // Check not already submitted (pending or published)
         $existing = $entityManager->getRepository(B2BSponsoredArticle::class)->createQueryBuilder('a')
             ->where('a.company = :company')
-            ->andWhere('a.product = :product')
+            ->andWhere('a.productListing = :listing')
             ->andWhere('a.status IN (:statuses)')
             ->setParameter('company', $user)
-            ->setParameter('product', $product)
+            ->setParameter('listing', $listing)
             ->setParameter('statuses', ['PENDING', 'PUBLISHED'])
             ->setMaxResults(1)
             ->getQuery()
             ->getOneOrNullResult();
         if ($existing instanceof B2BSponsoredArticle) {
-            return $this->json(['error' => 'This product already has an active or pending sponsorship request.'], 409);
+            return $this->json(['error' => 'This listing already has an active or pending sponsorship request.'], 409);
         }
 
         // Check max active count by plan
@@ -197,8 +211,8 @@ final class B2BSponsoredController extends AbstractController
 
         $article = new B2BSponsoredArticle();
         $article->setCompany($user);
-        $article->setProduct($product);
-        $article->setTitle($product->getName());
+        $article->setProductListing($listing);
+        $article->setTitle($listing->getProduct()?->getName() ?? 'Sponsored Listing');
         $article->setStatus('PENDING');
         $article->setCreatedAt(new \DateTimeImmutable());
 
@@ -259,6 +273,23 @@ final class B2BSponsoredController extends AbstractController
 
         $items = $repo->findBy($criteria, ['created_at' => 'DESC'], 100);
 
+        // Auto-expire: mark any PUBLISHED articles past their ends_at as EXPIRED
+        $now = new \DateTimeImmutable();
+        $expiredCount = 0;
+        foreach ($items as $item) {
+            if (
+                $item->getStatus() === 'PUBLISHED'
+                && $item->getEndsAt() !== null
+                && $item->getEndsAt() <= $now
+            ) {
+                $item->setStatus('EXPIRED');
+                $expiredCount++;
+            }
+        }
+        if ($expiredCount > 0) {
+            $entityManager->flush();
+        }
+
         return $this->json([
             'items' => array_map(fn (B2BSponsoredArticle $a) => $this->serializeAdmin($a), $items),
         ]);
@@ -288,6 +319,12 @@ final class B2BSponsoredController extends AbstractController
         $company = $article->getCompany();
         if (!$company instanceof B2BCompany) {
             return $this->json(['error' => 'Sponsorship has no associated company.'], 422);
+        }
+
+        // Check listing is in stock
+        $listing = $article->getProductListing();
+        if ($listing instanceof ProductListing && !$listing->getIsInStock()) {
+            return $this->json(['error' => 'Cannot approve — the listing is currently out of stock.'], 409);
         }
 
         // Check max active
@@ -379,22 +416,49 @@ final class B2BSponsoredController extends AbstractController
 
     #[Route('/b2c/sponsored-products', name: 'b2c_sponsored_products', methods: ['GET'])]
     public function publicSponsoredProducts(
+        Request $request,
         EntityManagerInterface $entityManager,
     ): JsonResponse {
         $now = new \DateTimeImmutable();
 
-        $items = $entityManager->createQueryBuilder()
-            ->select('a, p, c, s')
+        $qb = $entityManager->createQueryBuilder()
+            ->select('a, pl, p, c, s')
             ->from(B2BSponsoredArticle::class, 'a')
-            ->join('a.product', 'p')
+            ->join('a.productListing', 'pl')
+            ->join('pl.product', 'p')
             ->leftJoin('a.company', 'c')
-            ->leftJoin('c.seller', 's')
+            ->leftJoin('pl.seller', 's')
             ->where('a.status = :status')
             ->andWhere('a.ends_at IS NULL OR a.ends_at > :now')
             ->andWhere('c.id IS NOT NULL')
+            ->andWhere('pl.availability = true')
+            ->setParameter('status', 'PUBLISHED')
+            ->setParameter('now', $now);
+
+        // Auto-expire: mark any PUBLISHED articles past their ends_at as EXPIRED
+        $expiredArticles = $entityManager->getRepository(B2BSponsoredArticle::class)
+            ->createQueryBuilder('ea')
+            ->where('ea.status = :status')
+            ->andWhere('ea.ends_at IS NOT NULL')
+            ->andWhere('ea.ends_at <= :now')
             ->setParameter('status', 'PUBLISHED')
             ->setParameter('now', $now)
-            ->orderBy('a.published_at', 'DESC')
+            ->getQuery()
+            ->getResult();
+        if (!empty($expiredArticles)) {
+            foreach ($expiredArticles as $ea) {
+                $ea->setStatus('EXPIRED');
+            }
+            $entityManager->flush();
+        }
+
+        $productId = $request->query->getInt('product_id', 0);
+        if ($productId > 0) {
+            $qb->andWhere('p.id = :productId')
+               ->setParameter('productId', $productId);
+        }
+
+        $items = $qb->orderBy('a.published_at', 'DESC')
             ->getQuery()
             ->getResult();
 
@@ -402,17 +466,23 @@ final class B2BSponsoredController extends AbstractController
         foreach ($items as $article) {
             if (!$article instanceof B2BSponsoredArticle) continue;
 
-            $product = $article->getProduct();
+            $listing = $article->getProductListing();
+            $product = $listing?->getProduct();
             $company = $article->getCompany();
-            if (!$product || !$company) continue;
+            $seller = $listing?->getSeller();
+            if (!$product || !$company || !$listing) continue;
 
             $results[] = [
                 'id' => $article->getId(),
+                'listing_id' => $listing->getId(),
                 'product_id' => $product->getId(),
                 'product_name' => $product->getName(),
                 'product_image' => $product->getImageUrl(),
-                'product_brand' => $product->getBrand(),
-                'vendor_name' => $company->getCompanyName(),
+                'product_brand' => $product->getBrand() ?? $product->getBrandEntity()?->getName(),
+                'price' => $listing->getPrice(),
+                'seller_name' => $seller?->getName(),
+                'seller_id' => $seller?->getId(),
+                'in_stock' => $listing->getIsInStock(),
                 'published_at' => $article->getPublishedAt()?->format(\DateTimeInterface::ATOM),
                 'ends_at' => $article->getEndsAt()?->format(\DateTimeInterface::ATOM),
             ];
@@ -426,6 +496,23 @@ final class B2BSponsoredController extends AbstractController
         EntityManagerInterface $entityManager,
     ): JsonResponse {
         $now = new \DateTimeImmutable();
+
+        // Auto-expire: mark any ACTIVE campaigns past their ends_at as INACTIVE
+        $expiredCampaigns = $entityManager->createQueryBuilder()
+            ->update(B2BAdsCampaign::class, 'ec')
+            ->set('ec.active', ':false')
+            ->set('ec.status', ':inactive')
+            ->where('ec.active = :active')
+            ->andWhere('ec.status = :status')
+            ->andWhere('ec.ends_at IS NOT NULL')
+            ->andWhere('ec.ends_at <= :now')
+            ->setParameter('active', true)
+            ->setParameter('status', 'ACTIVE')
+            ->setParameter('inactive', 'INACTIVE')
+            ->setParameter('false', false)
+            ->setParameter('now', $now)
+            ->getQuery()
+            ->execute();
 
         $campaigns = $entityManager->createQueryBuilder()
             ->select('c, ar, comp')
@@ -457,7 +544,7 @@ final class B2BSponsoredController extends AbstractController
                 'height' => $campaign->getHeight(),
                 'starts_at' => $campaign->getStartsAt()?->format(\DateTimeInterface::ATOM),
                 'ends_at' => $campaign->getEndsAt()?->format(\DateTimeInterface::ATOM),
-                'company_name' => $adsRequest->getCompany()?->getCompanyName(),
+                'name' => $adsRequest->getCompany()?->getName(),
             ];
         }
 
@@ -468,7 +555,7 @@ final class B2BSponsoredController extends AbstractController
     //  Helpers
     // ─────────────────────────────────────────────
 
-    private function resolveUser(Request $request, UserRepository $userRepository): B2BCompany|B2BMarket|null
+    private function resolveUser(Request $request, UserRepository $userRepository): B2B|null
     {
         $firebaseUid = trim((string) $request->headers->get('X-Firebase-Uid', ''));
         if ($firebaseUid === '') return null;
@@ -477,7 +564,7 @@ final class B2BSponsoredController extends AbstractController
         return ($user instanceof B2BCompany || $user instanceof B2BMarket) ? $user : null;
     }
 
-    private function resolveWorkspaceUser(string $firebaseUid, UserRepository $userRepository): B2BCompany|B2BMarket|JsonResponse
+    private function resolveWorkspaceUser(string $firebaseUid, UserRepository $userRepository): B2B|JsonResponse
     {
         $user = $userRepository->findOneBy(['firebase_uid' => $firebaseUid]);
         if (!$user instanceof B2BCompany && !$user instanceof B2BMarket) {
@@ -491,12 +578,18 @@ final class B2BSponsoredController extends AbstractController
 
     private function serialize(B2BSponsoredArticle $a): array
     {
+        $listing = $a->getProductListing();
+        $product = $listing?->getProduct();
         return [
             'id' => $a->getId(),
-            'product_id' => $a->getProduct()?->getId(),
-            'product_name' => $a->getProduct()?->getName() ?? $a->getTitle(),
-            'product_brand' => $a->getProduct()?->getBrand(),
-            'product_image' => $a->getProduct()?->getImageUrl(),
+            'listing_id' => $listing?->getId(),
+            'product_id' => $product?->getId(),
+            'product_name' => $product?->getName() ?? $a->getTitle(),
+            'product_brand' => $product?->getBrand() ?? $product?->getBrandEntity()?->getName(),
+            'product_image' => $product?->getImageUrl(),
+            'price' => $listing?->getPrice(),
+            'seller_id' => $listing?->getSeller()?->getId(),
+            'seller_name' => $listing?->getSeller()?->getName(),
             'status' => $a->getStatus(),
             'published_at' => $a->getPublishedAt()?->format(\DateTimeInterface::ATOM),
             'ends_at' => $a->getEndsAt()?->format(\DateTimeInterface::ATOM),
@@ -509,7 +602,7 @@ final class B2BSponsoredController extends AbstractController
         $company = $a->getCompany();
         return $this->serialize($a) + [
             'company_id' => $company?->getId(),
-            'company_name' => $company?->getCompanyName(),
+            'name' => $company?->getName(),
             'seller_id' => $company?->getSeller()?->getId(),
             'ads_request_id' => $a->getAdsRequest()?->getId(),
         ];

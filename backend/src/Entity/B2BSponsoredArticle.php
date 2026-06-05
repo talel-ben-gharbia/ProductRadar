@@ -8,7 +8,7 @@ use Doctrine\ORM\Mapping as ORM;
 #[ORM\Entity(repositoryClass: B2BSponsoredArticleRepository::class)]
 #[ORM\Table(name: 'b2b_sponsored_article', indexes: [
     new ORM\Index(name: 'idx_b2b_sponsored_article_status', columns: ['status']),
-    new ORM\Index(name: 'idx_b2b_sponsored_article_product', columns: ['product_id']),
+    new ORM\Index(name: 'idx_b2b_sponsored_article_listing', columns: ['product_listing_id']),
     new ORM\Index(name: 'idx_b2b_sponsored_article_company', columns: ['company_id']),
 ])]
 class B2BSponsoredArticle
@@ -22,9 +22,9 @@ class B2BSponsoredArticle
     #[ORM\JoinColumn(name: 'ads_request_id', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
     private ?B2BAdsRequest $adsRequest = null;
 
-    #[ORM\ManyToOne(targetEntity: Product::class)]
-    #[ORM\JoinColumn(name: 'product_id', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
-    private ?Product $product = null;
+    #[ORM\ManyToOne(targetEntity: ProductListing::class)]
+    #[ORM\JoinColumn(name: 'product_listing_id', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
+    private ?ProductListing $productListing = null;
 
     #[ORM\ManyToOne(targetEntity: B2BCompany::class)]
     #[ORM\JoinColumn(name: 'company_id', referencedColumnName: 'id', nullable: true, onDelete: 'CASCADE')]
@@ -68,14 +68,14 @@ class B2BSponsoredArticle
         return $this;
     }
 
-    public function getProduct(): ?Product
+    public function getProductListing(): ?ProductListing
     {
-        return $this->product;
+        return $this->productListing;
     }
 
-    public function setProduct(?Product $product): static
+    public function setProductListing(?ProductListing $productListing): static
     {
-        $this->product = $product;
+        $this->productListing = $productListing;
 
         return $this;
     }

@@ -8,6 +8,7 @@ import { useB2B } from "@/components/B2B/b2b-context"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
+import { LanguageSelector } from "@/components/B2C/language-selector"
 
 const PAGE_TITLES: Record<string, string> = {
   "/B2B/dashboard": "Overview",
@@ -17,14 +18,16 @@ const PAGE_TITLES: Record<string, string> = {
   "/B2B/dashboard/alerts": "Alerts & Notifications",
   "/B2B/dashboard/reports": "Reports",
   "/B2B/dashboard/ads-requests": "Ads Requests",
-  "/B2B/dashboard/scraping-requests": "Scraping Requests",
   "/B2B/dashboard/settings": "Settings",
+  "/B2B/dashboard/brand-intelligence": "Brand Intelligence",
+  "/B2B/dashboard/product-compare": "Product Comparison",
   "/B2B/dashboard/share-of-shelf": "Share of Shelf",
   "/B2B/dashboard/price-dispersion": "Price Dispersion",
-  "/B2B/dashboard/competitors": "Competitor Ranking",
-  "/B2B/dashboard/stock-intelligence": "Stock Intelligence",
+  "/B2B/dashboard/price-competitiveness": "Price Competitiveness",
+  "/B2B/dashboard/distribution-coverage": "Distribution Coverage",
+  "/B2B/dashboard/watchlist": "Watchlist",
+
   "/B2B/dashboard/reviews-sentiment": "Reviews & Sentiment",
-  "/B2B/dashboard/demand-intelligence": "Demand Intelligence",
 }
 
 function B2BNavbar() {
@@ -36,7 +39,7 @@ function B2BNavbar() {
   }, [pathname])
 
   return (
-    <header className="flex h-16 items-center justify-between border-b bg-background/95 px-4 backdrop-blur sm:px-6 lg:px-8">
+    <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b bg-background/95 px-4 backdrop-blur sm:px-6 lg:px-8">
       <div className="flex items-center gap-3">
         <SidebarTrigger />
         <Separator orientation="vertical" className="hidden h-5! sm:block" />
@@ -49,13 +52,14 @@ function B2BNavbar() {
           <div>
             <p className="text-sm font-semibold tracking-tight">{pageTitle}</p>
             <p className="text-xs text-muted-foreground">
-              {mode === "market" ? "Market Intelligence" : "Seller Intelligence"} • {summary?.user?.company_name ?? "Workspace"}
+              {mode === "market" ? "Market Intelligence" : "Seller Intelligence"} • {summary?.user?.name ?? "Workspace"}
             </p>
           </div>
         </div>
       </div>
 
       <div className="flex items-center gap-3">
+        <LanguageSelector />
         {planType && (
           <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ${
             isGold

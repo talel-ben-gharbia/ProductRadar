@@ -126,3 +126,150 @@
     @apply font-sans;
     }
 }
+
+/* ================================================================== */
+/*  Google Translate — hide ALL default UI completely                  */
+/*  We use a custom language selector — Google's UI must be invisible  */
+/* ================================================================== */
+
+/* --- Catch ALL iframes from Google Translate --- */
+iframe[src*="translate.google"],
+iframe[src*="translate.googleapis"],
+.goog-te-banner-frame,
+iframe.goog-te-banner-frame,
+.goog-te-banner-frame.skiptranslate,
+div.goog-te-banner-frame,
+div[data-goog-te-banner] {
+  display: none !important;
+  visibility: hidden !important;
+  height: 0 !important;
+  width: 0 !important;
+  max-height: 0 !important;
+  overflow: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  position: absolute !important;
+  top: -9999px !important;
+  left: -9999px !important;
+  z-index: -1 !important;
+}
+
+/* --- Prevent body/html shift Google forces --- */
+body, html {
+  top: 0 !important;
+  position: static !important;
+}
+
+/* --- Our hidden container (position-based so JS select stays functional) --- */
+#google_translate_element {
+  position: absolute !important;
+  top: -9999px !important;
+  left: -9999px !important;
+  height: 0 !important;
+  width: 0 !important;
+  overflow: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+/* --- Google's gadget wrapper --- */
+.goog-te-gadget,
+.goog-te-gadget-simple,
+.goog-te-gadget-icon {
+  display: none !important;
+  visibility: hidden !important;
+  height: 0 !important;
+  overflow: hidden !important;
+}
+
+/* --- The skiptranslate wrapper Google puts around its UI --- */
+.skiptranslate,
+body > .skiptranslate,
+div.skiptranslate {
+  display: none !important;
+  visibility: hidden !important;
+  height: 0 !important;
+  max-height: 0 !important;
+  overflow: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  position: absolute !important;
+  top: -9999px !important;
+  left: -9999px !important;
+}
+
+/* --- Tooltip popup and translation details --- */
+#goog-gt-tt,
+.goog-te-balloon-frame,
+.goog-tooltip,
+.goog-tooltip:hover,
+#goog-gt-tt *,
+.jfk-bubble {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+/* --- Menu iframe and dropdown --- */
+iframe.goog-te-menu-frame,
+.goog-te-menu-value,
+.goog-te-menu2,
+.goog-te-menu2-item {
+  display: none !important;
+  visibility: hidden !important;
+  height: 0 !important;
+  overflow: hidden !important;
+  opacity: 0 !important;
+}
+
+/* --- Spinner / floating bar at top-left --- */
+.goog-te-spinner-pos,
+.goog-te-spinner-pos div {
+  display: none !important;
+  visibility: hidden !important;
+  height: 0 !important;
+  overflow: hidden !important;
+  position: absolute !important;
+  top: -9999px !important;
+  left: -9999px !important;
+}
+
+/* --- Combo select element (position-based hiding only, NOT display:none) --- */
+.goog-te-combo {
+  position: absolute !important;
+  top: -9999px !important;
+  left: -9999px !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  height: 0 !important;
+  width: 0 !important;
+}
+
+/* --- Any element with id starting with "goog" (except our container) --- */
+div[id^="goog"],
+span[id^="goog"] {
+  display: none !important;
+  visibility: hidden !important;
+  position: absolute !important;
+  top: -9999px !important;
+  left: -9999px !important;
+  pointer-events: none !important;
+  overflow: hidden !important;
+  height: 0 !important;
+  width: 0 !important;
+}
+
+/* --- Remove text highlighting on translated text --- */
+.goog-text-highlight {
+  background: none !important;
+  background-color: transparent !important;
+  box-shadow: none !important;
+  border: none !important;
+}
+
+/* --- Fix font styling Google sometimes injects --- */
+font[style],
+font > font {
+  vertical-align: unset !important;
+}

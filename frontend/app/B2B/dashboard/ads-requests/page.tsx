@@ -132,9 +132,17 @@ export default function AdsRequestsPage() {
     }
   }
 
+  const validateUrl = (url: string): boolean => {
+    return /^https?:\/\/.+/i.test(url.trim())
+  }
+
   const submitRequest = async () => {
     if (!linkUrl.trim()) {
       setError("Link URL is required")
+      return
+    }
+    if (!validateUrl(linkUrl)) {
+      setError("Link URL must start with http:// or https://")
       return
     }
 
@@ -201,6 +209,7 @@ export default function AdsRequestsPage() {
   const submitEdit = async () => {
     if (!editingRequest?.id) return
     if (!editLinkUrl.trim()) { setError("Link URL is required"); return }
+    if (!validateUrl(editLinkUrl)) { setError("Link URL must start with http:// or https://"); return }
 
     setEditSubmitting(true)
     setError(null)

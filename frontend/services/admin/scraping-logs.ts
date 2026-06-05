@@ -1,4 +1,4 @@
-export type ScrapingLogItem = {
+﻿export type ScrapingLogItem = {
   id: number
   source_name: string
   workflow_name: string
@@ -52,6 +52,7 @@ export type ScrapingWebhookPayload = {
 }
 
 import { cachedFetch } from "@/lib/fetch-with-cache"
+import { withCache } from "@/lib/server-cache"
 
 function buildQuery(params: Record<string, string | number | undefined>): string {
   const searchParams = new URLSearchParams()
@@ -68,25 +69,25 @@ async function parseJson(response: Response): Promise<unknown> {
   return response.json().catch(() => ({}))
 }
 
-export async function getScrapingLogs(limit = 50): Promise<ScrapingLogsResponse> {
+export const getScrapingLogs = withCache(async (limit = 50): Promise<ScrapingLogsResponse> => {
   const query = buildQuery({ limit })
-  return cachedFetch<ScrapingLogsResponse>(`/api/admin/scraping-logs${query}`, {
-    cacheKey: `scraping_logs:list:l${limit}`,
+  return cachedFetch<ScrapingLogsResponse>('/api/admin/scraping-logs', {
+    cacheKey: 'scraping_logs:list:l',
     cacheTtl: 300,
   })
-}
+})
 
-export async function getRecentScrapingLogs(limit = 5): Promise<ScrapingLogsResponse> {
+export const getRecentScrapingLogs = withCache(async (limit = 5): Promise<ScrapingLogsResponse> => {
   const query = buildQuery({ limit })
-  return cachedFetch<ScrapingLogsResponse>(`/api/admin/scraping-logs/recent${query}`, {
-    cacheKey: `scraping_logs:recent:l${limit}`,
+  return cachedFetch<ScrapingLogsResponse>('/api/admin/scraping-logs/recent', {
+    cacheKey: 'scraping_logs:recent:l',
     cacheTtl: 300,
   })
-}
+})
 
-export async function getFilteredScrapingLogs(
+export const getFilteredScrapingLogs = withCache(async (
   filters: ScrapingLogsFilters = {},
-): Promise<ScrapingLogsResponse> {
+): Promise<ScrapingLogsResponse> => {
   const query = buildQuery({
     limit: filters.limit,
     offset: filters.offset,
@@ -95,20 +96,21 @@ export async function getFilteredScrapingLogs(
     days: filters.days,
   })
 
-  const cacheKey = `scraping_logs:filtered:${JSON.stringify(filters)}`
+  const cacheKey = `scraping_logs:filtered:${query}`
 
-  return cachedFetch<ScrapingLogsResponse>(`/api/admin/scraping-logs/filtered${query}`, {
+  return cachedFetch<ScrapingLogsResponse>(`/api/admin/scraping-logs/filtered${query}`,
+  {
     cacheKey,
     cacheTtl: 300,
   })
-}
+})
 
-export async function getSourceHealth(sourceName: string): Promise<SourceHealth> {
+export const getSourceHealth = withCache(async (sourceName: string): Promise<SourceHealth> => {
   return cachedFetch<SourceHealth>(
-    `/api/admin/scraping-logs/source/${encodeURIComponent(sourceName)}/health`,
+    `/api/admin/scraping-logs/source/${sourceName}/health`,
     { cacheKey: `scraping_logs:health:${sourceName}`, cacheTtl: 300 },
   )
-}
+})
 
 export async function downloadScrapingLogsCsv(): Promise<void> {
   const response = await fetch('/api/admin/scraping-logs/export', { cache: 'no-store' })

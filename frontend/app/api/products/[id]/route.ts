@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { cookies } from "next/headers"
 
 import { verifySessionToken, COOKIE_NAME } from "@/lib/admin-session"
-import { cachedFetch } from "@/lib/fetch-with-cache"
+import { cachedFetch, invalidateCache } from "@/lib/fetch-with-cache"
 import { BACKEND_URL } from "@/utils/admin/constants"
 
 type Params = { params: Promise<{ id: string }> }
@@ -54,7 +54,10 @@ export async function PUT(request: NextRequest, { params }: Params) {
       )
     }
 
-    return NextResponse.json(await response.json())
+    const data = await response.json()
+    await invalidateCache("products:*")
+    await invalidateCache(`product:${id}`)
+    return NextResponse.json(data)
   } catch {
     return NextResponse.json({ error: "Unable to connect to the backend." }, { status: 502 })
   }
@@ -94,7 +97,10 @@ export async function DELETE(_request: NextRequest, { params }: Params) {
       )
     }
 
-    return NextResponse.json(await response.json())
+    const data = await response.json()
+    await invalidateCache("products:*")
+    await invalidateCache(`product:${id}`)
+    return NextResponse.json(data)
   } catch {
     return NextResponse.json({ error: "Unable to connect to the backend." }, { status: 502 })
   }

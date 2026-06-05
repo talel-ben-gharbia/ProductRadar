@@ -14,6 +14,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { auth } from "@/lib/firebase"
+import { useI18n } from "@/lib/i18n-context"
 
 type B2CProfile = {
   id: number
@@ -26,6 +27,7 @@ type B2CProfile = {
 
 export function ProfileInformationPage() {
   const router = useRouter()
+  const { t } = useI18n()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [profile, setProfile] = useState<B2CProfile | null>(null)
@@ -77,17 +79,17 @@ export function ProfileInformationPage() {
       const data = await response.json()
 
       if (!response.ok) {
-        throw new Error(data.error || "Failed to update profile.")
+        throw new Error(data.error || t("profile.info_update_failed"))
       }
 
       const customer = data.customer as B2CProfile
       setProfile(customer)
       setFullName(customer.full_name ?? "")
       setAddress(customer.address ?? "")
-      toast.success("Profile updated successfully.")
+      toast.success(t("profile.info_update_success"))
       router.refresh()
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unable to update profile."
+      const message = error instanceof Error ? error.message : t("profile.info_update_failed")
       toast.error(message)
     } finally {
       setSaving(false)
@@ -142,9 +144,9 @@ export function ProfileInformationPage() {
       setCurrentPassword("")
       setNewPassword("")
       setConfirmNewPassword("")
-      toast.success("Password changed successfully.")
+      toast.success(t("profile.info_password_changed"))
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unable to change password."
+      const message = error instanceof Error ? error.message : t("profile.info_password_failed")
       toast.error(message)
     } finally {
       setChangingPassword(false)
@@ -154,7 +156,7 @@ export function ProfileInformationPage() {
   if (loading) {
     return (
       <Card className="rounded-xl border bg-background shadow-sm">
-        <CardContent className="py-6 text-sm text-muted-foreground">Loading profile...</CardContent>
+        <CardContent className="py-6 text-sm text-muted-foreground">{t("profile.info_loading")}</CardContent>
       </Card>
     )
   }
@@ -163,11 +165,11 @@ export function ProfileInformationPage() {
     return (
       <Card className="rounded-xl border bg-background shadow-sm">
         <CardHeader>
-          <CardTitle>Profile</CardTitle>
-          <CardDescription>You need to login first.</CardDescription>
+          <CardTitle>{t("profile.info_title")}</CardTitle>
+          <CardDescription>{t("profile.info_login_first")}</CardDescription>
         </CardHeader>
         <CardContent>
-          <Button onClick={() => router.push("/")}>Back to home</Button>
+          <Button onClick={() => router.push("/")}>{t("profile.info_back_home")}</Button>
         </CardContent>
       </Card>
     )
@@ -176,91 +178,91 @@ export function ProfileInformationPage() {
   return (
     <Card className="rounded-xl border bg-background shadow-sm">
       <CardHeader>
-        <CardTitle>Informations</CardTitle>
-        <CardDescription>Update your customer information here. Email is read-only.</CardDescription>
+        <CardTitle>{t("profile.info_title")}</CardTitle>
+        <CardDescription>{t("profile.info_desc")}</CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-5">
           <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
+            <Label htmlFor="email">{t("profile.info_email")}</Label>
             <Input id="email" value={profile.email} readOnly disabled />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="fullName">Full name</Label>
+            <Label htmlFor="fullName">{t("profile.info_full_name")}</Label>
             <Input
               id="fullName"
               value={fullName}
               onChange={(event) => setFullName(event.target.value)}
-              placeholder="Your full name"
+              placeholder={t("profile.info_name_placeholder")}
             />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="address">Address</Label>
+            <Label htmlFor="address">{t("profile.info_address")}</Label>
             <Input
               id="address"
               value={address}
               onChange={(event) => setAddress(event.target.value)}
-              placeholder="Your address"
+              placeholder={t("profile.info_address_placeholder")}
             />
           </div>
 
           <div className="flex flex-wrap gap-3">
             <Button type="submit" disabled={saving}>
-              {saving ? "Saving..." : "Save changes"}
+              {saving ? t("profile.info_saving") : t("profile.info_save")}
             </Button>
             <Button type="button" variant="outline" onClick={() => router.push("/B2C/products")}>
-              Back
+              {t("profile.info_back")}
             </Button>
           </div>
         </form>
 
         <div className="mt-8 border-t pt-6">
-          <h3 className="text-base font-semibold">Change password</h3>
+          <h3 className="text-base font-semibold">{t("profile.info_change_password")}</h3>
           <p className="mt-1 text-sm text-muted-foreground">
-            Update your account password securely.
+            {t("profile.info_password_desc")}
           </p>
 
           <form onSubmit={handleChangePassword} className="mt-5 space-y-5">
             <div className="space-y-2">
-              <Label htmlFor="currentPassword">Current password</Label>
+              <Label htmlFor="currentPassword">{t("profile.info_current_password")}</Label>
               <Input
                 id="currentPassword"
                 type="password"
                 autoComplete="current-password"
                 value={currentPassword}
                 onChange={(event) => setCurrentPassword(event.target.value)}
-                placeholder="Your current password"
+                placeholder={t("profile.info_current_pw_placeholder")}
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="newPassword">New password</Label>
+              <Label htmlFor="newPassword">{t("profile.info_new_password")}</Label>
               <Input
                 id="newPassword"
                 type="password"
                 autoComplete="new-password"
                 value={newPassword}
                 onChange={(event) => setNewPassword(event.target.value)}
-                placeholder="At least 6 characters"
+                placeholder={t("profile.info_new_pw_placeholder")}
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="confirmNewPassword">Confirm new password</Label>
+              <Label htmlFor="confirmNewPassword">{t("profile.info_confirm_password")}</Label>
               <Input
                 id="confirmNewPassword"
                 type="password"
                 autoComplete="new-password"
                 value={confirmNewPassword}
                 onChange={(event) => setConfirmNewPassword(event.target.value)}
-                placeholder="Repeat new password"
+                placeholder={t("profile.info_confirm_pw_placeholder")}
               />
             </div>
 
             <Button type="submit" disabled={changingPassword}>
-              {changingPassword ? "Updating..." : "Change password"}
+              {changingPassword ? t("profile.info_updating") : t("profile.info_change_pw_btn")}
             </Button>
           </form>
         </div>

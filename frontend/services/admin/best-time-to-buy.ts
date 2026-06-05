@@ -1,5 +1,6 @@
-import { BACKEND_URL } from "@/utils/admin/constants"
+﻿import { BACKEND_URL } from "@/utils/admin/constants"
 import { cachedFetch } from "@/lib/fetch-with-cache"
+import { withCache } from "@/lib/server-cache"
 import type { BestTimeToBuyPrediction } from "@/utils/types"
 
 interface BestTimeToBuyResponse {
@@ -9,17 +10,23 @@ interface BestTimeToBuyResponse {
   friendly_message?: string
 }
 
-export async function getBestTimeToBuy(
+export const getBestTimeToBuy = withCache(async (
   productId: number,
   alerterId: number,
+<<<<<<< HEAD
 ): Promise<BestTimeToBuyResponse> {
+=======
+  locale?: string,
+): Promise<BestTimeToBuyResponse> => {
+>>>>>>> 22ec7a01fddf8580f93bdad12bc6d92e41d4420e
   const params = new URLSearchParams({
     productId: String(productId),
     alerterId: String(alerterId),
   })
+  if (locale) params.set("lang", locale)
 
   const endpoint = `${BACKEND_URL}/best-time-to-buy?${params.toString()}`
-  const cacheKey = `best-time-to-buy:p${productId}:a${alerterId}`
+  const cacheKey = `best-time-to-buy:p${productId}:a${alerterId}${locale ? `:${locale}` : ""}`
 
   const data = await cachedFetch<BestTimeToBuyResponse>(endpoint, {
     cacheKey,
@@ -31,4 +38,8 @@ export async function getBestTimeToBuy(
   }
 
   return data
+<<<<<<< HEAD
 }
+=======
+})
+>>>>>>> 22ec7a01fddf8580f93bdad12bc6d92e41d4420e

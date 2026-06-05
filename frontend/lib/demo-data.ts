@@ -2,8 +2,8 @@ export const DEMO_USER = {
   id: 1,
   email: "demo@example.com",
   full_name: "John Demo",
-  company_name: "Demo Retail Inc.",
-  company_market: "Electronics & Home Goods",
+  name: "Demo Retail Inc.",
+  sector: "Electronics & Home Goods",
   company_country: "US",
   company_website: "https://demoretail.example.com",
   b2b_status: "APPROVED",
@@ -11,8 +11,8 @@ export const DEMO_USER = {
   seller_id: 1,
   owner_user_id: 1,
   usage_json: {
-    "2026-05": { scraping_requests: 8, ads_requests: 3, reports: 2 },
-    "2026-04": { scraping_requests: 12, ads_requests: 5, reports: 4 },
+    "2026-05": { ads_requests: 3, reports: 2 },
+    "2026-04": { ads_requests: 5, reports: 4 },
   },
   type: "B2B_COMPANY",
 }
@@ -93,6 +93,19 @@ export const DEMO_METRICS = {
     { category: "Sports", category_id: 7, brand_products: 4, total_products: 30, share_of_shelf: 13.3 },
     { category: "Lighting", category_id: 8, brand_products: 3, total_products: 12, share_of_shelf: 25.0 },
   ],
+  shelf_trend: {
+    weeks: ["2026-04-06", "2026-04-13", "2026-04-20", "2026-04-27", "2026-05-04", "2026-05-11", "2026-05-18", "2026-05-25"],
+    series: [
+      { category: "Electronics", values: [22.0, 23.5, 24.1, 25.0, 25.8, 26.7, 27.2, 26.5] },
+      { category: "Security", values: [25.0, 25.5, 26.0, 26.8, 27.2, 27.8, 28.1, 27.5] },
+      { category: "Furniture", values: [14.0, 14.2, 14.8, 15.1, 15.4, 15.4, 15.0, 14.6] },
+      { category: "Storage", values: [26.0, 26.5, 26.8, 27.1, 27.3, 27.3, 27.0, 26.8] },
+      { category: "Groceries", values: [9.5, 9.8, 10.2, 10.5, 10.7, 10.7, 10.5, 10.3] },
+      { category: "Kitchen", values: [18.5, 19.0, 19.4, 19.7, 20.0, 20.0, 19.7, 19.3] },
+      { category: "Sports", values: [12.0, 12.3, 12.7, 13.0, 13.3, 13.3, 13.0, 12.5] },
+      { category: "Lighting", values: [24.0, 24.3, 24.6, 24.8, 25.0, 25.0, 24.8, 24.5] },
+    ],
+  },
   price_dispersion: [
     { product_id: 1, product_name: "Wireless Bluetooth Headphones Pro", min_price: 69.99, max_price: 89.99, price_range: 20.00, dispersion_pct: 25.0, sellers_count: 7, seller_with_min: "PriceBuster", seller_with_max: "AudioPro" },
     { product_id: 2, product_name: "Smart Home Security Camera 4K", min_price: 119.99, max_price: 149.99, price_range: 30.00, dispersion_pct: 22.2, sellers_count: 5, seller_with_min: "TechDeals", seller_with_max: "SecureHome" },
@@ -128,6 +141,14 @@ export const DEMO_METRICS = {
     { product_id: 5, product_name: "Organic Green Tea Matcha Powder", avg_rating: 4.7, review_count: 183, sentiment_score: 0.95, rating_gap_vs_competitors: 0.5, top_keywords: ["smooth taste", "authentic", "quality"] },
     { product_id: 8, product_name: "LED Desk Lamp with Wireless Charger", avg_rating: 4.2, review_count: 76, sentiment_score: 0.80, rating_gap_vs_competitors: 0.15, top_keywords: ["brightness", "charging", "modern"] },
   ],
+  oos_trend: [
+    { seller_id: 10, seller_name: "PriceBuster", daily_rates: [18, 20, 22, 19, 17, 15, 18, 20, 22, 25, 23, 20, 18, 16, 15, 14, 16, 18, 20, 22, 20, 18, 16, 18, 20, 21, 20, 19, 20, 20] },
+    { seller_id: 11, seller_name: "TechDeals", daily_rates: [10, 9, 8, 10, 12, 11, 10, 9, 8, 10, 12, 14, 13, 12, 11, 10, 9, 11, 12, 13, 12, 11, 10, 9, 10, 12, 11, 12, 11, 12] },
+    { seller_id: 12, seller_name: "OfficeMart", daily_rates: [30, 32, 35, 33, 30, 28, 30, 33, 35, 36, 34, 32, 30, 28, 30, 33, 35, 34, 33, 30, 28, 30, 32, 34, 33, 31, 30, 32, 33, 33] },
+    { seller_id: 13, seller_name: "DataWorld", daily_rates: [10, 12, 14, 13, 11, 10, 12, 14, 15, 14, 13, 12, 10, 9, 10, 12, 14, 15, 14, 13, 11, 10, 12, 13, 14, 13, 12, 11, 13, 13] },
+    { seller_id: 14, seller_name: "HomeBright", daily_rates: [8, 7, 6, 8, 10, 9, 8, 7, 6, 8, 10, 12, 11, 10, 9, 8, 7, 9, 10, 11, 10, 9, 8, 7, 8, 10, 9, 10, 10, 10] },
+    { seller_id: 15, seller_name: "FitZone", daily_rates: [45, 48, 50, 47, 45, 42, 45, 48, 50, 52, 50, 48, 45, 42, 40, 42, 45, 48, 50, 52, 50, 48, 45, 43, 45, 48, 50, 49, 50, 50] },
+  ],
   stock_by_seller: [
     { seller_name: "PriceBuster", seller_id: 10, total_listings: 35, out_of_stock: 7, out_of_stock_rate: 20.0 },
     { seller_name: "TechDeals", seller_id: 11, total_listings: 42, out_of_stock: 5, out_of_stock_rate: 11.9 },
@@ -141,7 +162,6 @@ export const DEMO_NOTIFICATIONS = [
   { id: 2, type: "STOCK_SHORTAGE", message: "Stock shortage detected for \"Ergonomic Office Chair Mesh\". Frequent stock-outs observed.", severity: "CRITICAL", is_read: false, created_at: "2026-05-06T09:15:00Z", product_listing_id: 103 },
   { id: 3, type: "TRUST_SCORE_CHANGE", message: "Your average trust score improved by 5 points this week. Great job!", severity: "SUCCESS", is_read: true, created_at: "2026-05-05T16:00:00Z" },
   { id: 4, type: "PRICE_DROP", message: "Price drop detected: \"Smart Home Security Camera 4K\" decreased by 12% this week.", severity: "INFO", is_read: false, created_at: "2026-05-04T11:45:00Z" },
-  { id: 5, type: "SCRAPING_REQUEST_COMPLETED", message: "Your data scraping request for competitor pricing has been completed. New data available in the dashboard.", severity: "SUCCESS", is_read: true, created_at: "2026-05-03T08:20:00Z" },
   { id: 6, type: "SUBSCRIPTION_APPROVED", message: "Your GOLD subscription has been approved. Welcome to ProductRadar!", severity: "SUCCESS", is_read: true, created_at: "2026-01-15T10:00:00Z" },
 ]
 
@@ -175,13 +195,6 @@ export const DEMO_WATCHLIST = [
   { id: 3, product_id: 12, product_name: "Apple AirPods Max", product_image: null, product_brand: "Apple", followed_at: "2026-03-15T14:00:00Z", cheapest_price: 479.99, highest_price: 549.99, total_sellers: 5 },
   { id: 4, product_id: 13, product_name: "Logitech MX Master 3S Mouse", product_image: null, product_brand: "Logitech", followed_at: "2026-04-01T09:00:00Z", cheapest_price: 89.99, highest_price: 109.99, total_sellers: 7 },
   { id: 5, product_id: 14, product_name: "Dell UltraSharp 27\" 4K Monitor", product_image: null, product_brand: "Dell", followed_at: "2026-04-05T11:00:00Z", cheapest_price: 549.99, highest_price: 649.99, total_sellers: 4 },
-]
-
-export const DEMO_SCRAPING_REQUESTS = [
-  { id: 1, owner_type: "company", target_type: "PRODUCT", target_url: "https://amazon.com/dp/B0ABCDEFGH", status: "DONE", notes: "Competitor pricing for headphones", is_duplicate: false, created_at: "2026-04-28T10:00:00Z" },
-  { id: 2, owner_type: "company", target_type: "CATEGORY", target_url: "https://amazon.com/s?k=wireless+headphones", status: "PENDING", notes: "Full category analysis", is_duplicate: false, created_at: "2026-05-02T14:30:00Z" },
-  { id: 3, owner_type: "company", target_type: "PRODUCT", target_url: "https://bestbuy.com/site/product123", status: "DONE", notes: "", is_duplicate: false, created_at: "2026-04-25T08:00:00Z" },
-  { id: 4, owner_type: "company", target_type: "PRODUCT", target_url: "https://walmart.com/ip/chair456", status: "REJECTED", notes: "Already tracked", is_duplicate: true, duplicate_reason: "This URL is already being tracked by your account.", created_at: "2026-05-01T09:15:00Z" },
 ]
 
 export const DEMO_ADS_REQUESTS = [

@@ -12,9 +12,8 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 
-const OPERATIONS: { key: string; label: string; planKey: "ads" | "scraping" | "reports" | "sponsored" }[] = [
+const OPERATIONS: { key: string; label: string; planKey: "ads" | "reports" | "sponsored" }[] = [
   { key: "ads_requests", label: "Ads Requests", planKey: "ads" },
-  { key: "scraping_requests", label: "Scraping Requests", planKey: "scraping" },
   { key: "reports", label: "Reports Generated", planKey: "reports" },
   { key: "sponsored_products", label: "Sponsored Products", planKey: "sponsored" },
 ]
@@ -88,10 +87,10 @@ export default function SettingsPage() {
   const [saveError, setSaveError] = useState<string | null>(null)
   const [form, setForm] = useState({
     fullName: (user?.full_name as string) ?? "",
-    companyName: (user?.company_name as string) ?? "",
+    companyName: (user?.name as string) ?? "",
     companyWebsite: (user?.company_website as string) ?? "",
     companyCountry: (user?.company_country as string) ?? "",
-    companyMarket: (user?.company_market as string) ?? "",
+    companyMarket: (user?.sector as string) ?? "",
   })
 
   const handleSave = useCallback(async () => {
@@ -119,20 +118,20 @@ export default function SettingsPage() {
     setSaveError(null)
     setForm({
       fullName: (user?.full_name as string) ?? "",
-      companyName: (user?.company_name as string) ?? "",
+      companyName: (user?.name as string) ?? "",
       companyWebsite: (user?.company_website as string) ?? "",
       companyCountry: (user?.company_country as string) ?? "",
-      companyMarket: (user?.company_market as string) ?? "",
+      companyMarket: (user?.sector as string) ?? "",
     })
   }, [user])
 
   const profileFields = [
-    { icon: Building2, label: "Company Name", value: user?.company_name, key: "companyName" as const },
+    { icon: Building2, label: "Company Name", value: user?.name, key: "companyName" as const },
     { icon: Mail, label: "Email", value: user?.email, key: null },
     { icon: User, label: "Full Name", value: user?.full_name, key: "fullName" as const },
     { icon: Globe, label: "Website", value: user?.company_website, key: "companyWebsite" as const },
     { icon: MapPin, label: "Country", value: user?.company_country, key: "companyCountry" as const },
-    { icon: Star, label: "Market / Sector", value: user?.company_market, key: "companyMarket" as const },
+    { icon: Star, label: "Market / Sector", value: user?.sector, key: "companyMarket" as const },
   ]
 
   return (

@@ -23,7 +23,7 @@ export default async function AdminDashboard() {
   }
 
   return (
-    <div className="w-full space-y-6">
+    <div className="w-full space-y-6" suppressHydrationWarning>
       <h1 className="text-2xl font-bold">Admin Dashboard</h1>
 
       <DashboardStatsCards />

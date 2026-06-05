@@ -99,7 +99,6 @@ final class PriceHistoryController extends AbstractController
 
                 if (isset($predictionResponse['prediction']) && is_array($predictionResponse['prediction'])) {
                     $predictionResponse['friendly_message'] = $this->buildFriendlyPredictionMessage($predictionResponse['prediction'], $predictionResponse['model_version'] ?? null);
-                    $predictionResponse['ml_running'] = true;
                     return $predictionResponse;
                 }
 

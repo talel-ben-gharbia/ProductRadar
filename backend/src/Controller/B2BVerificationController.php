@@ -3,16 +3,20 @@
 namespace App\Controller;
 
 use App\Entity\Activity;
+use App\Entity\B2B;
 use App\Entity\B2BCompany;
 use App\Entity\B2BMarket;
+use App\Entity\Brand;
 use App\Entity\PartnerRequest;
 use App\Entity\Subscription;
 use App\Entity\User;
 use App\Repository\AdminRepository;
+use App\Repository\BrandRepository;
 use App\Repository\PartnerRequestRepository;
 use App\Repository\SellerRepository;
 use App\Repository\UserRepository;
 use App\Security\AdminApiGuard;
+use App\Service\BrandDiscoveryService;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Mailer\MailerInterface;
@@ -35,6 +39,8 @@ final class B2BVerificationController extends AbstractController
     public function __construct(
         #[Autowire(service: 'general.cache')]
         private readonly CacheItemPoolInterface $cache,
+        private readonly BrandDiscoveryService $brandDiscoveryService,
+        private readonly BrandRepository $brandRepository,
     ) {
     }
 
@@ -184,6 +190,7 @@ final class B2BVerificationController extends AbstractController
             $isMarketRequest = strtoupper((string) $partnerRequest->getAccountType()) === 'B2B_MARKET';
             $sellerId = $payload['seller_id'] ?? null;
             $seller = null;
+            $brandName = $isMarketRequest ? trim((string) ($payload['brand_name'] ?? '')) : '';
 
             // Seller integration applies to both B2B companies and B2B markets.
             if ($sellerId) {
@@ -206,7 +213,7 @@ final class B2BVerificationController extends AbstractController
 
             try {
                 $entityManager->wrapInTransaction(function (EntityManagerInterface $em) use (
-                    $existingUser, $partnerRequest, $seller, $payload, $plainPassword, $logger,
+                    $existingUser, $partnerRequest, $seller, $payload, $plainPassword, $logger, $brandName,
                     &$approvedUser, &$subscription, &$firebaseUid
                 ) {
                     if ($existingUser === null) {
@@ -222,6 +229,14 @@ final class B2BVerificationController extends AbstractController
 
                     if (($approvedUser instanceof B2BCompany || $approvedUser instanceof B2BMarket) && $seller !== null) {
                         $approvedUser->setSeller($seller);
+                    }
+
+                    if ($approvedUser instanceof B2BMarket && $brandName !== '') {
+                        $approvedUser->setBrandName($brandName);
+                        $brand = $this->brandRepository->findOneBy(['name' => $brandName]);
+                        if ($brand !== null) {
+                            $approvedUser->setBrandEntity($brand);
+                        }
                     }
 
                     // Persist user first so getId() returns a real ID for the subscription
@@ -256,6 +271,23 @@ final class B2BVerificationController extends AbstractController
                 }
 
                 return $this->json(['error' => 'Internal server error during B2B approval.'], 500);
+            }
+
+            // Trigger brand discovery for B2B Market accounts
+            if ($approvedUser instanceof B2BMarket && $brandName !== '') {
+                try {
+                    $this->brandDiscoveryService->discover($approvedUser);
+                    $logger->info('Brand discovery completed for B2B Market', [
+                        'market_id' => $approvedUser->getId(),
+                        'brand_name' => $brandName,
+                    ]);
+                } catch (\Throwable $e) {
+                    $logger->error('Brand discovery failed after approval', [
+                        'market_id' => $approvedUser->getId(),
+                        'brand_name' => $brandName,
+                        'exception' => $e->getMessage(),
+                    ]);
+                }
             }
         }
 
@@ -292,7 +324,7 @@ final class B2BVerificationController extends AbstractController
             $responsePayload = $this->serializeApprovedUser($approvedUser);
             $responsePayload['reviewer_note'] = $reviewerNote;
 
-            $this->sendApprovalConfirmationEmail((string) $approvedUser->getEmail(), (string) $approvedUser->getCompanyName(), $logger, $mailer);
+            $this->sendApprovalConfirmationEmail((string) $approvedUser->getEmail(), (string) $approvedUser->getName(), $logger, $mailer);
         }
 
         $logger->info('B2B moderation decision completed', [
@@ -340,7 +372,7 @@ final class B2BVerificationController extends AbstractController
         return $trimmed === '' ? null : $trimmed;
     }
 
-    private function createVerifiedB2bUser(PartnerRequest $partnerRequest, EntityManagerInterface $entityManager): B2BCompany|B2BMarket
+    private function createVerifiedB2bUser(PartnerRequest $partnerRequest, EntityManagerInterface $entityManager): B2B
     {
         $email = (string) $partnerRequest->getEmail();
         $userRepo = $entityManager->getRepository(User::class);
@@ -363,8 +395,8 @@ final class B2BVerificationController extends AbstractController
         $user->setIsActive(true);
         $user->setAccountStatus('ACTIVE');
 
-        $user->setCompanyName((string) $partnerRequest->getCompanyName());
-        $user->setCompanyMarket((string) $partnerRequest->getCompanyMarket());
+        $user->setName((string) $partnerRequest->getCompanyName());
+        $user->setSector((string) $partnerRequest->getCompanyMarket());
         $user->setCompanyCountry((string) $partnerRequest->getCompanyCountry());
         $user->setCompanyWebsite((string) $partnerRequest->getCompanyWebsite());
         $user->setB2bStatus('APPROVED');
@@ -375,7 +407,7 @@ final class B2BVerificationController extends AbstractController
         return $user;
     }
 
-    private function attachB2bSubscription(B2BCompany|B2BMarket $user, string $planType, int $durationMonths): Subscription
+    private function attachB2bSubscription(B2B $user, string $planType, int $durationMonths): Subscription
     {
         $startDate = new \DateTimeImmutable();
         $endDate = $startDate->modify('+' . $durationMonths . ' months');
@@ -572,7 +604,7 @@ final class B2BVerificationController extends AbstractController
         return is_string($secret) && trim($secret) !== '' ? $secret : null;
     }
 
-    private function serializeApprovedUser(B2BCompany|B2BMarket $user): array
+    private function serializeApprovedUser(B2B $user): array
     {
         return [
             'id' => $user->getId(),
@@ -581,8 +613,8 @@ final class B2BVerificationController extends AbstractController
             'account_type' => $user instanceof B2BMarket ? 'B2B_MARKET' : 'B2B_COMPANY',
             'b2b_status' => $user->getB2bStatus(),
             'account_status' => $user->getAccountStatus(),
-            'company_name' => $user->getCompanyName(),
-            'company_market' => $user->getCompanyMarket(),
+            'name' => $user->getName(),
+            'sector' => $user->getSector(),
             'company_country' => $user->getCompanyCountry(),
             'company_website' => $user->getCompanyWebsite(),
         ];

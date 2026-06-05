@@ -4,8 +4,8 @@ import { useState, type ReactNode, createContext, useContext } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
-  AlertTriangle, BarChart3, Bell, Building2, ChevronsUpDown, Eye, FileText, Globe, Home, Layers, LineChart,
-  LogOut, Megaphone, MessageSquare, Package, Search, Settings, Shield, Star, TrendingUp, User, Zap,
+  AlertTriangle, BarChart3, Bell, Building2, ChevronsUpDown, Eye, FileText, Globe, Grid3x3, Home, Layers, LineChart,
+  LogOut, Megaphone, MessageSquare, Package, Search, Settings, Shield, ShoppingBag, Star, TrendingUp, User, Zap,
 } from "lucide-react"
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -14,6 +14,7 @@ import {
   SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarSeparator, SidebarProvider, SidebarTrigger,
 } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
+import { LanguageSelector } from "@/components/B2C/language-selector"
 import { DEMO_SUMMARY } from "@/lib/demo-data"
 
 type DemoContextValue = {
@@ -56,21 +57,20 @@ const VENDOR_NAV: NavItem[] = [
   { href: "/B2B/demo/alerts", name: "Alerts", icon: Bell },
   { href: "/B2B/demo/reports", name: "Reports", icon: FileText },
   { href: "/B2B/demo/ads-requests", name: "Ads Requests", icon: Megaphone },
-  { href: "/B2B/demo/scraping-requests", name: "Scraping Requests", icon: Search },
   { href: "/B2B/demo/settings", name: "Settings", icon: Settings },
 ]
 
 const MARKET_NAV: NavItem[] = [
   { href: "/B2B/demo", name: "Overview", icon: Home },
-  { href: "/B2B/demo/share-of-shelf", name: "Share of Shelf", icon: BarChart3 },
-  { href: "/B2B/demo/price-dispersion", name: "Price Dispersion", icon: LineChart },
-  { href: "/B2B/demo/competitors", name: "Competitors", icon: Layers },
-  { href: "/B2B/demo/stock-intelligence", name: "Stock Intelligence", icon: AlertTriangle, gold: true },
+  { href: "/B2B/demo/brand-intelligence", name: "Brand Intelligence", icon: Shield, gold: true },
+  { href: "/B2B/demo/product-compare", name: "Product Comparison", icon: ShoppingBag, gold: true },
+  { href: "/B2B/demo/share-of-shelf", name: "Share of Shelf", icon: BarChart3, gold: true },
+  { href: "/B2B/demo/price-dispersion", name: "Price Dispersion", icon: LineChart, gold: true },
+  { href: "/B2B/demo/distribution-coverage", name: "Distribution", icon: Grid3x3 },
+  { href: "/B2B/demo/watchlist", name: "Watchlist", icon: Star },
   { href: "/B2B/demo/reviews-sentiment", name: "Reviews & Sentiment", icon: MessageSquare, gold: true },
-  { href: "/B2B/demo/demand-intelligence", name: "Demand Intelligence", icon: Zap, gold: true },
   { href: "/B2B/demo/alerts", name: "Alerts", icon: Bell },
   { href: "/B2B/demo/reports", name: "Reports", icon: FileText },
-  { href: "/B2B/demo/scraping-requests", name: "Scraping Requests", icon: Search },
   { href: "/B2B/demo/settings", name: "Settings", icon: Settings },
 ]
 
@@ -87,20 +87,18 @@ function DemoNavbar() {
     "/B2B/demo/alerts": "Alerts & Notifications",
     "/B2B/demo/reports": "Reports",
     "/B2B/demo/ads-requests": "Ads Requests",
-    "/B2B/demo/scraping-requests": "Scraping Requests",
     "/B2B/demo/settings": "Settings",
     "/B2B/demo/share-of-shelf": "Share of Shelf",
     "/B2B/demo/price-dispersion": "Price Dispersion",
-    "/B2B/demo/competitors": "Competitor Ranking",
-    "/B2B/demo/stock-intelligence": "Stock Intelligence",
+
+
     "/B2B/demo/reviews-sentiment": "Reviews & Sentiment",
-    "/B2B/demo/demand-intelligence": "Demand Intelligence",
   }
 
   const pageTitle = PAGE_TITLES[pathname] ?? pathname.split("/").filter(Boolean).at(-1)?.replace(/-/g, " ").replace(/\b\w/g, (l) => l.toUpperCase()) ?? "Demo"
 
   return (
-    <header className="flex h-16 items-center justify-between border-b bg-background/95 px-4 backdrop-blur sm:px-6 lg:px-8">
+    <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b bg-background/95 px-4 backdrop-blur sm:px-6 lg:px-8">
       <div className="flex items-center gap-3">
         <SidebarTrigger />
         <Separator orientation="vertical" className="hidden h-5! sm:block" />
@@ -119,6 +117,7 @@ function DemoNavbar() {
         </div>
       </div>
       <div className="flex items-center gap-3">
+        <LanguageSelector />
         <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-amber-800 dark:bg-amber-900/30 dark:text-amber-400">
           <Star className="size-2.5" />
           {planType} plan
@@ -241,7 +240,7 @@ function DemoSidebar() {
 
 export default function B2BDemoLayoutClient({ children }: { children: ReactNode }) {
   const [mode, setMode] = useState<"vendor" | "market">("vendor")
-  const companyName = DEMO_SUMMARY.user?.company_name ?? "Demo Retail Inc."
+  const companyName = DEMO_SUMMARY.user?.name ?? "Demo Retail Inc."
   const email = DEMO_SUMMARY.user?.email ?? "demo@example.com"
   const planType = "Gold"
   const isGold = true
@@ -251,15 +250,11 @@ export default function B2BDemoLayoutClient({ children }: { children: ReactNode 
   return (
     <DemoContext.Provider value={{ companyName, email, planType, isGold, mode, summary: DEMO_SUMMARY }}>
       <SidebarProvider>
-        <div className="flex min-h-svh w-full bg-[#f4f7f9] dark:bg-[#020617] text-slate-900 dark:text-slate-100 selection:bg-indigo-500/30">
+        <div className="flex min-h-svh w-full bg-white text-slate-900 selection:bg-blue-500/20">
           <DemoSidebar />
-          <div className="min-w-0 flex-1 flex flex-col relative z-0 overflow-hidden shadow-[-10px_0_30px_rgba(0,0,0,0.05)] dark:shadow-[-10px_0_30px_rgba(0,0,0,0.5)]">
+          <div className="min-w-0 flex-1 flex flex-col relative z-0 overflow-x-hidden shadow-[-10px_0_30px_rgba(0,0,0,0.03)]">
             <DemoNavbar />
-            <main className="relative flex-1 w-full overflow-y-auto overflow-x-hidden bg-transparent">
-              <div className="pointer-events-none fixed inset-0 z-[-1] bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.03] dark:opacity-[0.06] mix-blend-overlay" />
-              <div className="pointer-events-none fixed -top-[20%] -right-[10%] h-[800px] w-[800px] rounded-full bg-indigo-500/10 blur-[150px] dark:bg-indigo-500/15 animate-pulse-slow" />
-              <div className="pointer-events-none fixed top-[40%] -left-[10%] h-[600px] w-[600px] rounded-full bg-violet-500/10 blur-[150px] dark:bg-violet-600/15" />
-              <div className="pointer-events-none fixed -bottom-[20%] right-[20%] h-[700px] w-[700px] rounded-full bg-blue-500/5 blur-[150px] dark:bg-blue-500/10" />
+            <main className="relative flex-1 w-full overflow-y-auto overflow-x-hidden bg-slate-50/40">
               <div className="relative z-10 mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-10">
                 <div className="mb-4 flex items-center justify-end gap-2">
                   <button
@@ -269,7 +264,7 @@ export default function B2BDemoLayoutClient({ children }: { children: ReactNode 
                   >
                     <Building2 className="size-3" />
                     {mode === "vendor" ? "Vendor Mode" : "Market Mode"}
-                    <span className="ml-1 rounded-full bg-indigo-100 px-1.5 py-0.5 text-[9px] text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-400">toggle</span>
+                    <span className="ml-1 rounded-full bg-blue-100 px-1.5 py-0.5 text-[9px] text-blue-700 dark:bg-blue-900/40 dark:text-blue-400">toggle</span>
                   </button>
                 </div>
                 {children}

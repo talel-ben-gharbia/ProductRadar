@@ -1,11 +1,12 @@
 "use client"
 
+import Link from "next/link"
 import { useCallback, useEffect, useState } from "react"
-import { CheckCircle2, Loader2, Package, XCircle } from "lucide-react"
+import { CheckCircle2, ExternalLink, Loader2, Package, Eye, XCircle } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import {
   Select,
   SelectContent,
@@ -18,6 +19,7 @@ import B2BErrorState from "@/components/B2B/b2b-error-state"
 type SponsoredItem = {
   id: number
   product_id: number | null
+  listing_id: number | null
   product_name: string | null
   product_brand: string | null
   product_image: string | null
@@ -26,7 +28,7 @@ type SponsoredItem = {
   ends_at: string | null
   created_at: string | null
   company_id: number | null
-  company_name: string | null
+  name: string | null
   seller_id: number | null
   ads_request_id: number | null
 }
@@ -42,14 +44,14 @@ export default function AdminSponsoredProductsPage() {
   const [items, setItems] = useState<SponsoredItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [statusFilter, setStatusFilter] = useState<string>("")
+  const [statusFilter, setStatusFilter] = useState<string>("ALL")
   const [actionLoading, setActionLoading] = useState<number | null>(null)
 
   const fetchData = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      const params = statusFilter ? `?status=${statusFilter}` : ""
+      const params = statusFilter && statusFilter !== "ALL" ? `?status=${statusFilter}` : ""
       const res = await fetch(`/api/b2b/admin/sponsored${params}`)
       const body = await res.json()
       if (res.ok) {
@@ -98,7 +100,7 @@ export default function AdminSponsoredProductsPage() {
               <SelectValue placeholder="All statuses" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value=" ">All</SelectItem>
+              <SelectItem value="ALL">All</SelectItem>
               <SelectItem value="PENDING">Pending</SelectItem>
               <SelectItem value="PUBLISHED">Published</SelectItem>
               <SelectItem value="REJECTED">Rejected</SelectItem>
@@ -139,12 +141,26 @@ export default function AdminSponsoredProductsPage() {
                     {items.map((item) => (
                       <tr key={item.id} className="hover:bg-muted/20">
                         <td className="px-4 py-3">
-                          <p className="font-medium">{item.product_name ?? "Unknown"}</p>
+                          {item.product_id ? (
+                            <Link
+                              href={`/B2C/products/${item.product_id}`}
+                              target="_blank"
+                              className="group inline-flex items-center gap-1 font-medium text-foreground hover:text-primary hover:underline"
+                            >
+                              {item.product_name ?? "Unknown"}
+                              <ExternalLink className="size-3 opacity-0 transition-opacity group-hover:opacity-100" />
+                            </Link>
+                          ) : (
+                            <p className="font-medium">{item.product_name ?? "Unknown"}</p>
+                          )}
                           {item.product_brand && (
                             <p className="text-xs text-muted-foreground">{item.product_brand}</p>
                           )}
+                          {item.seller_id && (
+                            <p className="text-xs text-muted-foreground">Seller #{item.seller_id}</p>
+                          )}
                         </td>
-                        <td className="px-4 py-3 text-muted-foreground">{item.company_name ?? "-"}</td>
+                        <td className="px-4 py-3 text-muted-foreground">{item.name ?? "-"}</td>
                         <td className="px-4 py-3">
                           <Badge className={`text-xs ${STATUS_BADGES[item.status] ?? ""}`}>
                             {item.status}
@@ -159,42 +175,57 @@ export default function AdminSponsoredProductsPage() {
                         <td className="px-4 py-3 text-right">
                           {actionLoading === item.id ? (
                             <Loader2 className="ml-auto size-4 animate-spin" />
-                          ) : item.status === "PENDING" ? (
-                            <div className="flex justify-end gap-1">
-                              <Button
-                                size="sm"
-                                variant="default"
-                                onClick={() => handleAction(item.id, "approve")}
-                              >
-                                <CheckCircle2 className="mr-1 size-3" />
-                                Approve
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleAction(item.id, "reject")}
-                              >
-                                <XCircle className="mr-1 size-3" />
-                                Reject
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="text-red-600"
-                                onClick={() => handleAction(item.id, "delete")}
-                              >
-                                Delete
-                              </Button>
-                            </div>
                           ) : (
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="text-red-600"
-                              onClick={() => handleAction(item.id, "delete")}
-                            >
-                              Delete
-                            </Button>
+                            <div className="flex justify-end gap-1">
+                              <Link
+                                href={item.product_id ? `/admin/b2b/sponsored-products/${item.product_id}` : "#"}
+                                className={`inline-flex items-center gap-1 rounded-md border border-border bg-background px-2.5 py-1 text-xs font-medium transition-colors ${
+                                  item.product_id
+                                    ? "text-foreground hover:bg-muted"
+                                    : "text-muted-foreground opacity-50 cursor-not-allowed pointer-events-none"
+                                }`}
+                              >
+                                <Eye className="size-3" />
+                                View
+                              </Link>
+                              {item.status === "PENDING" ? (
+                                <>
+                                  <Button
+                                    size="sm"
+                                    variant="default"
+                                    onClick={() => handleAction(item.id, "approve")}
+                                  >
+                                    <CheckCircle2 className="mr-1 size-3" />
+                                    Approve
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleAction(item.id, "reject")}
+                                  >
+                                    <XCircle className="mr-1 size-3" />
+                                    Reject
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="text-red-600"
+                                    onClick={() => handleAction(item.id, "delete")}
+                                  >
+                                    Delete
+                                  </Button>
+                                </>
+                              ) : (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="text-red-600"
+                                  onClick={() => handleAction(item.id, "delete")}
+                                >
+                                  Delete
+                                </Button>
+                              )}
+                            </div>
                           )}
                         </td>
                       </tr>

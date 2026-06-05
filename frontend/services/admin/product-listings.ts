@@ -1,5 +1,6 @@
-import { BACKEND_URL } from "@/utils/admin/constants"
+﻿import { BACKEND_URL } from "@/utils/admin/constants"
 import { cachedFetch } from "@/lib/fetch-with-cache"
+import { withCache } from "@/lib/server-cache"
 import type { ProductListing } from "@/utils/types"
 
 async function parseJson(response: Response): Promise<unknown> {
@@ -10,7 +11,12 @@ async function fetchProductListingsFromApi(
   productId?: number,
   sellerId?: number,
   page?: number,
+<<<<<<< HEAD
   limit?: number
+=======
+  limit?: number,
+  locale?: string
+>>>>>>> 22ec7a01fddf8580f93bdad12bc6d92e41d4420e
 ): Promise<ProductListing[]> {
   try {
     const params = new URLSearchParams()
@@ -26,6 +32,10 @@ async function fetchProductListingsFromApi(
     if (limit !== undefined) {
       params.set("limit", String(limit))
     }
+<<<<<<< HEAD
+=======
+    if (locale) params.set("lang", locale)
+>>>>>>> 22ec7a01fddf8580f93bdad12bc6d92e41d4420e
 
     const query = params.toString()
     const endpoint =
@@ -37,7 +47,11 @@ async function fetchProductListingsFromApi(
           ? `/api/product-listings?${query}`
           : "/api/product-listings"
 
+<<<<<<< HEAD
     const cacheKey = `listings:p${productId ?? 0}:s${sellerId ?? 0}:p${page ?? 1}` + (limit !== undefined && limit > 0 ? `:l${limit}` : '')
+=======
+    const cacheKey = `listings:p${productId || "all"}:s${sellerId || "all"}:p${page || "1"}${limit !== undefined && limit > 0 ? `:l${limit}` : ''}${locale ? `:${locale}` : ''}`
+>>>>>>> 22ec7a01fddf8580f93bdad12bc6d92e41d4420e
 
     const productListings = await cachedFetch<ProductListing[]>(endpoint, {
       cacheKey,
@@ -49,18 +63,26 @@ async function fetchProductListingsFromApi(
       error instanceof Error
         ? error.message
         : "Unknown product listings fetch error"
-    throw new Error(`Unable to load product listings from backend. ${message}`)
+    throw new Error("Unable to load product listings from backend.")
   }
 }
 
-export async function getProductListings(
+export const getProductListings = withCache(async (
   productId?: number,
   sellerId?: number,
   page?: number,
+<<<<<<< HEAD
   limit?: number
 ): Promise<ProductListing[]> {
   try {
     const productListings = await fetchProductListingsFromApi(productId, sellerId, page, limit)
+=======
+  limit?: number,
+  locale?: string
+): Promise<ProductListing[]> => {
+  try {
+    const productListings = await fetchProductListingsFromApi(productId, sellerId, page, limit, locale)
+>>>>>>> 22ec7a01fddf8580f93bdad12bc6d92e41d4420e
     return productListings
   } catch (error) {
     if (error instanceof Error) {
@@ -73,7 +95,7 @@ export async function getProductListings(
       }
 
       throw new Error(
-        `Unable to load product listings from backend. ${error.message}`
+        "Unable to load product listings from backend."
       )
     }
 
@@ -81,7 +103,7 @@ export async function getProductListings(
       "Unable to load product listings from backend. Unknown product listings service error"
     )
   }
-}
+})
 
 export async function updateProductListing(
   id: number,
@@ -96,7 +118,7 @@ export async function updateProductListing(
     sellerId?: number
   }
 ): Promise<{ id?: number }> {
-  const response = await fetch(`/api/product-listings/${id}`, {
+  const response = await fetch("/api/product-listings/", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -114,7 +136,7 @@ export async function setProductListingActive(
   id: number,
   isActive: boolean,
 ): Promise<{ id?: number; is_active?: boolean }> {
-  const response = await fetch(`/api/product-listings/${id}`, {
+  const response = await fetch("/api/product-listings/", {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ is_active: isActive }),
@@ -129,7 +151,7 @@ export async function setProductListingActive(
 }
 
 export async function deleteProductListing(id: number): Promise<{ success?: boolean }> {
-  const response = await fetch(`/api/product-listings/${id}`, {
+  const response = await fetch("/api/product-listings/", {
     method: "DELETE",
   })
 
