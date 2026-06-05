@@ -99,11 +99,14 @@ final class PriceHistoryController extends AbstractController
 
                 if (isset($predictionResponse['prediction']) && is_array($predictionResponse['prediction'])) {
                     $predictionResponse['friendly_message'] = $this->buildFriendlyPredictionMessage($predictionResponse['prediction'], $predictionResponse['model_version'] ?? null);
+                    $predictionResponse['ml_running'] = true;
                     return $predictionResponse;
                 }
 
                 return [
                     'prediction' => $predictionResponse,
+                    'friendly_message' => $this->buildFriendlyPredictionMessage(is_array($predictionResponse) ? $predictionResponse : [], $predictionResponse['model_version'] ?? null),
+                    'ml_running' => true,
                     'message' => 'Prediction generated successfully.',
                 ];
             } catch (\Throwable $throwable) {
@@ -111,6 +114,7 @@ final class PriceHistoryController extends AbstractController
                 return [
                     'prediction' => $fallback,
                     'friendly_message' => $this->buildFriendlyPredictionMessage($fallback, null, true),
+                    'ml_running' => false,
                     'message' => 'Fallback prediction used because the ML API was unavailable.',
                     'error' => $throwable->getMessage(),
                 ];
@@ -190,7 +194,7 @@ final class PriceHistoryController extends AbstractController
         return [
             'action' => $action,
             'current_price' => round($currentPrice, 2),
-            'confidence' => round(min(1.0, max(0.25, (($trustScore ?? 50.0) / 100.0) * 0.7 + min(1.0, $count / 10) * 0.3)), 4),
+            'confidence' => round(min(1.0, max(0.0, ((($trustScore ?? 50.0) / 100.0) * 0.8 + min(1.0, $count / 10) * 0.2))), 4),
         ];
     }
 

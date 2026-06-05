@@ -220,15 +220,15 @@ def predict(req: PredictRequest) -> PredictResponse:
     should_wait = wait_probability >= THRESHOLD and predicted_best_price < current_price
     action = "WAIT" if should_wait else "BUY_NOW"
 
-    # 7. Confidence: blend wait_probability (70%) and data volume (30%)
+    # 7. Confidence: simplified blend (80% model probability, 20% data volume)
     confidence = round(
-        wait_probability * 0.7 + min(1.0, n / 10) * 0.3,
+        wait_probability * 0.8 + min(1.0, n / 10) * 0.2,
         4,
     )
 
-    # 8. Trust score boost
-    if req.trust_score is not None and req.trust_score > 0:
-        confidence = min(1.0, confidence + (req.trust_score / 100.0) * 0.1)
+    # Note: trust_score is not applied as an automatic numeric boost here
+    # to keep the confidence computation simple and reproducible. Trust
+    # can be returned separately or used in downstream business logic.
 
     return PredictResponse(
         prediction=PredictionPayload(
