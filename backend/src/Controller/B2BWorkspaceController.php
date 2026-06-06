@@ -2901,15 +2901,37 @@ final class B2BWorkspaceController extends AbstractController
 
     private function buildVendorCompetitorPricing(array $rows, EntityManagerInterface $entityManager, ?int $vendorSellerId, int $maxResults = 20, array $trackedProductIds = []): array
     {
-        $allProductIds = array_values(array_unique(array_filter(array_map(static fn (array $row): ?int => isset($row['productId']) ? (int) $row['productId'] : null, $rows))));
-        if ($allProductIds === [] || $vendorSellerId === null) {
+        if ($vendorSellerId === null) {
             return [];
         }
 
-        // If vendor has explicitly tracked products, only show those; otherwise show all
-        $productIds = !empty($trackedProductIds)
-            ? array_values(array_intersect($allProductIds, $trackedProductIds))
-            : $allProductIds;
+        // When the vendor has tracked products, query the DB directly to find
+        // which tracked products this vendor sells. This avoids a bug where
+        // tracked products with older listing IDs are missing from the limited
+        // $rows array (fetched with a 2000-row limit).
+        if (!empty($trackedProductIds)) {
+            $conn = $entityManager->getConnection();
+            $vendorProductIds = $conn->fetchFirstColumn(
+                'SELECT DISTINCT pl.product_id FROM product_listing pl
+                 WHERE pl.product_id IN (:productIds)
+                 AND pl.seller_id = :sellerId
+                 AND pl.is_active = true',
+                ['productIds' => $trackedProductIds, 'sellerId' => $vendorSellerId],
+                ['productIds' => ArrayParameterType::INTEGER]
+            );
+            $vendorProductIds = array_map('intval', $vendorProductIds);
+
+            if ($vendorProductIds === []) {
+                return [];
+            }
+            $productIds = $vendorProductIds;
+        } else {
+            $allProductIds = array_values(array_unique(array_filter(array_map(static fn (array $row): ?int => isset($row['productId']) ? (int) $row['productId'] : null, $rows))));
+            if ($allProductIds === []) {
+                return [];
+            }
+            $productIds = $allProductIds;
+        }
 
         if ($productIds === []) {
             return [];

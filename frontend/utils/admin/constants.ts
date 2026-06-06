@@ -129,6 +129,9 @@ const SIDEBAR_CONSTANTS: SidebarItem[] = [
     name: "B2B Workflows",
     icon: Briefcase,
     items: [
+      {          title: "Overview",
+          url: "/admin/b2b-workflows",
+      },
       {
         title: "Sponsored Products",
         url: "/admin/b2b/sponsored-products",
@@ -233,10 +236,14 @@ const SUPER_ADMIN_SIDEBAR_CONSTANTS: SidebarItem[] = [
     ],
   },
   {
-    id: "/admin/system",
-    name: "System",
+    id: "/admin/administration",
+    name: "Administration",
     icon: Activity,
     items: [
+      {
+        title: "Overview",
+        url: "/admin/administration",
+      },
       {
         title: "All Admins",
         url: "/admin/admins",

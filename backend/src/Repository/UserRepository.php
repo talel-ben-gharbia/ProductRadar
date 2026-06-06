@@ -66,7 +66,7 @@ class UserRepository extends ServiceEntityRepository
 
         $search = trim((string) ($filters['search'] ?? ''));
         if ($search !== '') {
-            $where[] = "(LOWER(u.email) LIKE :search OR LOWER(COALESCE(c.full_name, bc.full_name, bm.full_name, '')) LIKE :search OR LOWER(COALESCE(bc.name, bm.name, '')) LIKE :search OR LOWER(COALESCE(bc.sector, bm.sector, '')) LIKE :search OR LOWER(COALESCE(bc.company_website, bm.company_website, '')) LIKE :search)";
+            $where[] = "(LOWER(u.email) LIKE :search OR LOWER(COALESCE(c.full_name, b.full_name, '')) LIKE :search OR LOWER(COALESCE(b.name, '')) LIKE :search OR LOWER(COALESCE(b.sector, '')) LIKE :search OR LOWER(COALESCE(b.company_website, '')) LIKE :search)";
             $params['search'] = '%' . mb_strtolower($search) . '%';
         }
 
@@ -91,11 +91,11 @@ class UserRepository extends ServiceEntityRepository
 
         $b2bStatus = strtoupper(trim((string) ($filters['b2bStatus'] ?? '')));
         if ($b2bStatus !== '') {
-            $where[] = "((u.type = 'b2b_company' AND bc.b2b_status = :b2bStatus) OR (u.type = 'b2b_market' AND bm.b2b_status = :b2bStatus))";
+            $where[] = "u.type IN ('b2b_company', 'b2b_market') AND b.b2b_status = :b2bStatus";
             $params['b2bStatus'] = $b2bStatus;
         }
 
-        $baseFrom = ' FROM "user" u LEFT JOIN customer c ON c.id = u.id LEFT JOIN b2b_company bc ON bc.id = u.id LEFT JOIN b2b_market bm ON bm.id = u.id ';
+        $baseFrom = ' FROM "user" u LEFT JOIN customer c ON c.id = u.id LEFT JOIN b2b b ON b.id = u.id ';
         $whereSql = count($where) > 0 ? ' WHERE ' . implode(' AND ', $where) : '';
 
         $totalSql = 'SELECT COUNT(u.id)' . $baseFrom . $whereSql;
@@ -105,7 +105,7 @@ class UserRepository extends ServiceEntityRepository
             return ['items' => [], 'total' => 0];
         }
 
-        $idsSql = 'SELECT u.id' . $baseFrom . $whereSql . ' ORDER BY COALESCE(c.joined_at, bc.joined_at, bm.joined_at) DESC NULLS LAST, u.id DESC LIMIT :limit OFFSET :offset';
+        $idsSql = 'SELECT u.id' . $baseFrom . $whereSql . ' ORDER BY COALESCE(c.joined_at, b.joined_at) DESC NULLS LAST, u.id DESC LIMIT :limit OFFSET :offset';
         $ids = array_map(
             static fn (mixed $id): int => (int) $id,
             $connection->fetchFirstColumn($idsSql, array_merge($params, ['limit' => $limit, 'offset' => $offset]))

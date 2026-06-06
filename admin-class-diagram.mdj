@@ -1506,6 +1506,379 @@
 					}
 				},
 				{
+					"_type": "UMLClass",
+					"_id": "CD_productlisting_001",
+					"_parent": {
+						"$ref": "CD_13152e80f92647738cee"
+					},
+					"name": "ProductListing",
+					"attributes": [
+						{
+							"_type": "UMLAttribute",
+							"_id": "CD_pl_attr_id",
+							"_parent": {
+								"$ref": "CD_productlisting_001"
+							},
+							"name": "id",
+							"visibility": "private",
+							"type": "int",
+							"isID": true
+						},
+						{
+							"_type": "UMLAttribute",
+							"_id": "CD_pl_attr_price",
+							"_parent": {
+								"$ref": "CD_productlisting_001"
+							},
+							"name": "price",
+							"visibility": "private",
+							"type": "float"
+						},
+						{
+							"_type": "UMLAttribute",
+							"_id": "CD_pl_attr_old_price",
+							"_parent": {
+								"$ref": "CD_productlisting_001"
+							},
+							"name": "old_price",
+							"visibility": "private",
+							"type": "float"
+						},
+						{
+							"_type": "UMLAttribute",
+							"_id": "CD_pl_attr_product_url",
+							"_parent": {
+								"$ref": "CD_productlisting_001"
+							},
+							"name": "product_url",
+							"visibility": "private",
+							"type": "string"
+						},
+						{
+							"_type": "UMLAttribute",
+							"_id": "CD_pl_attr_availability",
+							"_parent": {
+								"$ref": "CD_productlisting_001"
+							},
+							"name": "availability",
+							"visibility": "private",
+							"type": "bool"
+						},
+						{
+							"_type": "UMLAttribute",
+							"_id": "CD_pl_attr_created_at",
+							"_parent": {
+								"$ref": "CD_productlisting_001"
+							},
+							"name": "created_at",
+							"visibility": "private",
+							"type": "DateTime"
+						},
+						{
+							"_type": "UMLAttribute",
+							"_id": "CD_pl_attr_updated_at",
+							"_parent": {
+								"$ref": "CD_productlisting_001"
+							},
+							"name": "updated_at",
+							"visibility": "private",
+							"type": "DateTime"
+						},
+						{
+							"_type": "UMLAttribute",
+							"_id": "CD_pl_attr_is_active",
+							"_parent": {
+								"$ref": "CD_productlisting_001"
+							},
+							"name": "is_active",
+							"visibility": "private",
+							"type": "bool"
+						},
+						{
+							"_type": "UMLAttribute",
+							"_id": "CD_pl_attr_ref",
+							"_parent": {
+								"$ref": "CD_productlisting_001"
+							},
+							"name": "ref",
+							"visibility": "private",
+							"type": "string"
+						}
+					],
+					"operations": [
+						{
+							"_type": "UMLOperation",
+							"_id": "CD_pl_op_getId",
+							"_parent": {
+								"$ref": "CD_productlisting_001"
+							},
+							"name": "getId",
+							"visibility": "private"
+						},
+						{
+							"_type": "UMLOperation",
+							"_id": "CD_pl_op_getPrice",
+							"_parent": {
+								"$ref": "CD_productlisting_001"
+							},
+							"name": "getPrice",
+							"visibility": "private"
+						},
+						{
+							"_type": "UMLOperation",
+							"_id": "CD_pl_op_setPrice",
+							"_parent": {
+								"$ref": "CD_productlisting_001"
+							},
+							"name": "setPrice",
+							"visibility": "private",
+							"parameters": [
+								{
+									"_type": "UMLParameter",
+									"_id": "CD_pl_param_setPrice_price",
+									"_parent": {
+										"$ref": "CD_pl_op_setPrice"
+									},
+									"name": "price",
+									"type": "float"
+								}
+							]
+						},
+						{
+							"_type": "UMLOperation",
+							"_id": "CD_pl_op_getOldPrice",
+							"_parent": {
+								"$ref": "CD_productlisting_001"
+							},
+							"name": "getOldPrice",
+							"visibility": "private"
+						},
+						{
+							"_type": "UMLOperation",
+							"_id": "CD_pl_op_setOldPrice",
+							"_parent": {
+								"$ref": "CD_productlisting_001"
+							},
+							"name": "setOldPrice",
+							"visibility": "private",
+							"parameters": [
+								{
+									"_type": "UMLParameter",
+									"_id": "CD_pl_param_setOldPrice_oldPrice",
+									"_parent": {
+										"$ref": "CD_pl_op_setOldPrice"
+									},
+									"name": "old_price",
+									"type": "float"
+								}
+							]
+						},
+						{
+							"_type": "UMLOperation",
+							"_id": "CD_pl_op_getProductUrl",
+							"_parent": {
+								"$ref": "CD_productlisting_001"
+							},
+							"name": "getProductUrl",
+							"visibility": "private"
+						},
+						{
+							"_type": "UMLOperation",
+							"_id": "CD_pl_op_setProductUrl",
+							"_parent": {
+								"$ref": "CD_productlisting_001"
+							},
+							"name": "setProductUrl",
+							"visibility": "private",
+							"parameters": [
+								{
+									"_type": "UMLParameter",
+									"_id": "CD_pl_param_setProductUrl_url",
+									"_parent": {
+										"$ref": "CD_pl_op_setProductUrl"
+									},
+									"name": "product_url",
+									"type": "string"
+								}
+							]
+						},
+						{
+							"_type": "UMLOperation",
+							"_id": "CD_pl_op_isAvailability",
+							"_parent": {
+								"$ref": "CD_productlisting_001"
+							},
+							"name": "isAvailability",
+							"visibility": "private"
+						},
+						{
+							"_type": "UMLOperation",
+							"_id": "CD_pl_op_setAvailability",
+							"_parent": {
+								"$ref": "CD_productlisting_001"
+							},
+							"name": "setAvailability",
+							"visibility": "private",
+							"parameters": [
+								{
+									"_type": "UMLParameter",
+									"_id": "CD_pl_param_setAvailability_avail",
+									"_parent": {
+										"$ref": "CD_pl_op_setAvailability"
+									},
+									"name": "availability",
+									"type": "bool"
+								}
+							]
+						},
+						{
+							"_type": "UMLOperation",
+							"_id": "CD_pl_op_getCreatedAt",
+							"_parent": {
+								"$ref": "CD_productlisting_001"
+							},
+							"name": "getCreatedAt",
+							"visibility": "private"
+						},
+						{
+							"_type": "UMLOperation",
+							"_id": "CD_pl_op_setCreatedAt",
+							"_parent": {
+								"$ref": "CD_productlisting_001"
+							},
+							"name": "setCreatedAt",
+							"visibility": "private",
+							"parameters": [
+								{
+									"_type": "UMLParameter",
+									"_id": "CD_pl_param_setCreatedAt_date",
+									"_parent": {
+										"$ref": "CD_pl_op_setCreatedAt"
+									},
+									"name": "created_at",
+									"type": "DateTime"
+								}
+							]
+						},
+						{
+							"_type": "UMLOperation",
+							"_id": "CD_pl_op_getUpdatedAt",
+							"_parent": {
+								"$ref": "CD_productlisting_001"
+							},
+							"name": "getUpdatedAt",
+							"visibility": "private"
+						},
+						{
+							"_type": "UMLOperation",
+							"_id": "CD_pl_op_setUpdatedAt",
+							"_parent": {
+								"$ref": "CD_productlisting_001"
+							},
+							"name": "setUpdatedAt",
+							"visibility": "private",
+							"parameters": [
+								{
+									"_type": "UMLParameter",
+									"_id": "CD_pl_param_setUpdatedAt_date",
+									"_parent": {
+										"$ref": "CD_pl_op_setUpdatedAt"
+									},
+									"name": "updated_at",
+									"type": "DateTime"
+								}
+							]
+						},
+						{
+							"_type": "UMLOperation",
+							"_id": "CD_pl_op_isActive",
+							"_parent": {
+								"$ref": "CD_productlisting_001"
+							},
+							"name": "isActive",
+							"visibility": "private"
+						},
+						{
+							"_type": "UMLOperation",
+							"_id": "CD_pl_op_setIsActive",
+							"_parent": {
+								"$ref": "CD_productlisting_001"
+							},
+							"name": "setIsActive",
+							"visibility": "private",
+							"parameters": [
+								{
+									"_type": "UMLParameter",
+									"_id": "CD_pl_param_setIsActive_active",
+									"_parent": {
+										"$ref": "CD_pl_op_setIsActive"
+									},
+									"name": "is_active",
+									"type": "bool"
+								}
+							]
+						},
+						{
+							"_type": "UMLOperation",
+							"_id": "CD_pl_op_getRef",
+							"_parent": {
+								"$ref": "CD_productlisting_001"
+							},
+							"name": "getRef",
+							"visibility": "private"
+						},
+						{
+							"_type": "UMLOperation",
+							"_id": "CD_pl_op_setRef",
+							"_parent": {
+								"$ref": "CD_productlisting_001"
+							},
+							"name": "setRef",
+							"visibility": "private",
+							"parameters": [
+								{
+									"_type": "UMLParameter",
+									"_id": "CD_pl_param_setRef_ref",
+									"_parent": {
+										"$ref": "CD_pl_op_setRef"
+									},
+									"name": "ref",
+									"type": "string"
+								}
+							]
+						}
+					]
+				},
+				{
+					"_type": "UMLAssociation",
+					"_id": "CD_rel_pl_tshistory",
+					"_parent": {
+						"$ref": "CD_13152e80f92647738cee"
+					},
+					"end1": {
+						"_type": "UMLAssociationEnd",
+						"_id": "CD_rel_pl_tshistory_end1",
+						"_parent": {
+							"$ref": "CD_rel_pl_tshistory"
+						},
+						"reference": {
+							"$ref": "CD_productlisting_001"
+						},
+						"multiplicity": "1"
+					},
+					"end2": {
+						"_type": "UMLAssociationEnd",
+						"_id": "CD_rel_pl_tshistory_end2",
+						"_parent": {
+							"$ref": "CD_rel_pl_tshistory"
+						},
+						"reference": {
+							"$ref": "CD_tshistory_001"
+						},
+						"multiplicity": "0..*"
+					}
+				},
+				{
 					"_type": "UMLClassDiagram",
 					"_id": "CD_diagram_001",
 					"_parent": {
@@ -8014,6 +8387,907 @@
 							},
 							"headQualifiersCompartment": {
 								"$ref": "CD_view_rel_activity_sl_q2"
+							}
+						},
+						{
+							"_type": "UMLClassView",
+							"_id": "CD_view_pl_001",
+							"_parent": {
+								"$ref": "CD_diagram_001"
+							},
+							"model": {
+								"$ref": "CD_productlisting_001"
+							},
+							"subViews": [],
+							"font": "Arial;13;0",
+							"parentStyle": false,
+							"left": 760,
+							"top": 328,
+							"width": 185,
+							"height": 481,
+							"nameCompartment": {
+								"_type": "UMLNameCompartmentView",
+								"_id": "CD_view_pl_name",
+								"_parent": {
+									"$ref": "CD_view_pl_001"
+								},
+								"model": {
+									"$ref": "CD_productlisting_001"
+								},
+								"subViews": [
+									{
+										"_type": "LabelView",
+										"_id": "CD_view_pl_st_lbl",
+										"_parent": {
+											"$ref": "CD_view_pl_name"
+										},
+										"visible": false,
+										"font": "Arial;13;0",
+										"parentStyle": true,
+										"left": 760,
+										"top": 328,
+										"height": 13
+									},
+									{
+										"_type": "LabelView",
+										"_id": "CD_view_pl_name_lbl",
+										"_parent": {
+											"$ref": "CD_view_pl_name"
+										},
+										"font": "Arial;13;1",
+										"parentStyle": true,
+										"left": 765,
+										"top": 333,
+										"width": 175,
+										"height": 13,
+										"text": "ProductListing"
+									},
+									{
+										"_type": "LabelView",
+										"_id": "CD_view_pl_ns_lbl",
+										"_parent": {
+											"$ref": "CD_view_pl_name"
+										},
+										"visible": false,
+										"font": "Arial;13;0",
+										"parentStyle": true,
+										"left": 760,
+										"top": 328,
+										"width": 121,
+										"height": 13,
+										"text": "(from Admin Module)"
+									},
+									{
+										"_type": "LabelView",
+										"_id": "CD_view_pl_prop_lbl",
+										"_parent": {
+											"$ref": "CD_view_pl_name"
+										},
+										"visible": false,
+										"font": "Arial;13;0",
+										"parentStyle": true,
+										"left": 760,
+										"top": 328,
+										"height": 13
+									}
+								],
+								"font": "Arial;13;0",
+								"parentStyle": true,
+								"left": 760,
+								"top": 328,
+								"width": 185,
+								"height": 25,
+								"stereotypeLabel": {
+									"$ref": "CD_view_pl_st_lbl"
+								},
+								"nameLabel": {
+									"$ref": "CD_view_pl_name_lbl"
+								},
+								"namespaceLabel": {
+									"$ref": "CD_view_pl_ns_lbl"
+								},
+								"propertyLabel": {
+									"$ref": "CD_view_pl_prop_lbl"
+								}
+							},
+							"attributeCompartment": {
+								"_type": "UMLAttributeCompartmentView",
+								"_id": "CD_view_pl_attr",
+								"_parent": {
+									"$ref": "CD_view_pl_001"
+								},
+								"model": {
+									"$ref": "CD_productlisting_001"
+								},
+								"subViews": [
+									{
+										"_type": "UMLAttributeView",
+										"_id": "CD_view_pl_attr_v1",
+										"_parent": {
+											"$ref": "CD_view_pl_attr"
+										},
+										"model": {
+											"$ref": "CD_pl_attr_id"
+										},
+										"font": "Arial;13;0",
+										"parentStyle": true,
+										"left": 765,
+										"top": 358,
+										"width": 175,
+										"height": 13,
+										"text": "-id: int {id}"
+									},
+									{
+										"_type": "UMLAttributeView",
+										"_id": "CD_view_pl_attr_v2",
+										"_parent": {
+											"$ref": "CD_view_pl_attr"
+										},
+										"model": {
+											"$ref": "CD_pl_attr_price"
+										},
+										"font": "Arial;13;0",
+										"parentStyle": true,
+										"left": 765,
+										"top": 373,
+										"width": 175,
+										"height": 13,
+										"text": "-price: float"
+									},
+									{
+										"_type": "UMLAttributeView",
+										"_id": "CD_view_pl_attr_v3",
+										"_parent": {
+											"$ref": "CD_view_pl_attr"
+										},
+										"model": {
+											"$ref": "CD_pl_attr_old_price"
+										},
+										"font": "Arial;13;0",
+										"parentStyle": true,
+										"left": 765,
+										"top": 388,
+										"width": 175,
+										"height": 13,
+										"text": "-old_price: float"
+									},
+									{
+										"_type": "UMLAttributeView",
+										"_id": "CD_view_pl_attr_v4",
+										"_parent": {
+											"$ref": "CD_view_pl_attr"
+										},
+										"model": {
+											"$ref": "CD_pl_attr_product_url"
+										},
+										"font": "Arial;13;0",
+										"parentStyle": true,
+										"left": 765,
+										"top": 403,
+										"width": 175,
+										"height": 13,
+										"text": "-product_url: string"
+									},
+									{
+										"_type": "UMLAttributeView",
+										"_id": "CD_view_pl_attr_v5",
+										"_parent": {
+											"$ref": "CD_view_pl_attr"
+										},
+										"model": {
+											"$ref": "CD_pl_attr_availability"
+										},
+										"font": "Arial;13;0",
+										"parentStyle": true,
+										"left": 765,
+										"top": 418,
+										"width": 175,
+										"height": 13,
+										"text": "-availability: bool"
+									},
+									{
+										"_type": "UMLAttributeView",
+										"_id": "CD_view_pl_attr_v6",
+										"_parent": {
+											"$ref": "CD_view_pl_attr"
+										},
+										"model": {
+											"$ref": "CD_pl_attr_created_at"
+										},
+										"font": "Arial;13;0",
+										"parentStyle": true,
+										"left": 765,
+										"top": 433,
+										"width": 175,
+										"height": 13,
+										"text": "-created_at: DateTime"
+									},
+									{
+										"_type": "UMLAttributeView",
+										"_id": "CD_view_pl_attr_v7",
+										"_parent": {
+											"$ref": "CD_view_pl_attr"
+										},
+										"model": {
+											"$ref": "CD_pl_attr_updated_at"
+										},
+										"font": "Arial;13;0",
+										"parentStyle": true,
+										"left": 765,
+										"top": 448,
+										"width": 175,
+										"height": 13,
+										"text": "-updated_at: DateTime"
+									},
+									{
+										"_type": "UMLAttributeView",
+										"_id": "CD_view_pl_attr_v8",
+										"_parent": {
+											"$ref": "CD_view_pl_attr"
+										},
+										"model": {
+											"$ref": "CD_pl_attr_is_active"
+										},
+										"font": "Arial;13;0",
+										"parentStyle": true,
+										"left": 765,
+										"top": 463,
+										"width": 175,
+										"height": 13,
+										"text": "-is_active: bool"
+									},
+									{
+										"_type": "UMLAttributeView",
+										"_id": "CD_view_pl_attr_v9",
+										"_parent": {
+											"$ref": "CD_view_pl_attr"
+										},
+										"model": {
+											"$ref": "CD_pl_attr_ref"
+										},
+										"font": "Arial;13;0",
+										"parentStyle": true,
+										"left": 765,
+										"top": 478,
+										"width": 175,
+										"height": 13,
+										"text": "-ref: string"
+									}
+								],
+								"font": "Arial;13;0",
+								"parentStyle": true,
+								"left": 760,
+								"top": 353,
+								"width": 185,
+								"height": 143
+							},
+							"operationCompartment": {
+								"_type": "UMLOperationCompartmentView",
+								"_id": "CD_view_pl_op",
+								"_parent": {
+									"$ref": "CD_view_pl_001"
+								},
+								"model": {
+									"$ref": "CD_productlisting_001"
+								},
+								"subViews": [
+									{
+										"_type": "UMLOperationView",
+										"_id": "CD_view_pl_op_v1",
+										"_parent": {
+											"$ref": "CD_view_pl_op"
+										},
+										"model": {
+											"$ref": "CD_pl_op_getId"
+										},
+										"font": "Arial;13;0",
+										"parentStyle": true,
+										"left": 765,
+										"top": 501,
+										"width": 175,
+										"height": 13,
+										"text": "-getId()"
+									},
+									{
+										"_type": "UMLOperationView",
+										"_id": "CD_view_pl_op_v2",
+										"_parent": {
+											"$ref": "CD_view_pl_op"
+										},
+										"model": {
+											"$ref": "CD_pl_op_getPrice"
+										},
+										"font": "Arial;13;0",
+										"parentStyle": true,
+										"left": 765,
+										"top": 516,
+										"width": 175,
+										"height": 13,
+										"text": "-getPrice()"
+									},
+									{
+										"_type": "UMLOperationView",
+										"_id": "CD_view_pl_op_v3",
+										"_parent": {
+											"$ref": "CD_view_pl_op"
+										},
+										"model": {
+											"$ref": "CD_pl_op_setPrice"
+										},
+										"font": "Arial;13;0",
+										"parentStyle": true,
+										"left": 765,
+										"top": 531,
+										"width": 175,
+										"height": 13,
+										"text": "-setPrice(price: float)"
+									},
+									{
+										"_type": "UMLOperationView",
+										"_id": "CD_view_pl_op_v4",
+										"_parent": {
+											"$ref": "CD_view_pl_op"
+										},
+										"model": {
+											"$ref": "CD_pl_op_getOldPrice"
+										},
+										"font": "Arial;13;0",
+										"parentStyle": true,
+										"left": 765,
+										"top": 546,
+										"width": 175,
+										"height": 13,
+										"text": "-getOldPrice()"
+									},
+									{
+										"_type": "UMLOperationView",
+										"_id": "CD_view_pl_op_v5",
+										"_parent": {
+											"$ref": "CD_view_pl_op"
+										},
+										"model": {
+											"$ref": "CD_pl_op_setOldPrice"
+										},
+										"font": "Arial;13;0",
+										"parentStyle": true,
+										"left": 765,
+										"top": 561,
+										"width": 175,
+										"height": 13,
+										"text": "-setOldPrice(old_price: float)"
+									},
+									{
+										"_type": "UMLOperationView",
+										"_id": "CD_view_pl_op_v6",
+										"_parent": {
+											"$ref": "CD_view_pl_op"
+										},
+										"model": {
+											"$ref": "CD_pl_op_getProductUrl"
+										},
+										"font": "Arial;13;0",
+										"parentStyle": true,
+										"left": 765,
+										"top": 576,
+										"width": 175,
+										"height": 13,
+										"text": "-getProductUrl()"
+									},
+									{
+										"_type": "UMLOperationView",
+										"_id": "CD_view_pl_op_v7",
+										"_parent": {
+											"$ref": "CD_view_pl_op"
+										},
+										"model": {
+											"$ref": "CD_pl_op_setProductUrl"
+										},
+										"font": "Arial;13;0",
+										"parentStyle": true,
+										"left": 765,
+										"top": 591,
+										"width": 175,
+										"height": 13,
+										"text": "-setProductUrl(product_url: string)"
+									},
+									{
+										"_type": "UMLOperationView",
+										"_id": "CD_view_pl_op_v8",
+										"_parent": {
+											"$ref": "CD_view_pl_op"
+										},
+										"model": {
+											"$ref": "CD_pl_op_isAvailability"
+										},
+										"font": "Arial;13;0",
+										"parentStyle": true,
+										"left": 765,
+										"top": 606,
+										"width": 175,
+										"height": 13,
+										"text": "-isAvailability()"
+									},
+									{
+										"_type": "UMLOperationView",
+										"_id": "CD_view_pl_op_v9",
+										"_parent": {
+											"$ref": "CD_view_pl_op"
+										},
+										"model": {
+											"$ref": "CD_pl_op_setAvailability"
+										},
+										"font": "Arial;13;0",
+										"parentStyle": true,
+										"left": 765,
+										"top": 621,
+										"width": 175,
+										"height": 13,
+										"text": "-setAvailability(availability: bool)"
+									},
+									{
+										"_type": "UMLOperationView",
+										"_id": "CD_view_pl_op_v10",
+										"_parent": {
+											"$ref": "CD_view_pl_op"
+										},
+										"model": {
+											"$ref": "CD_pl_op_getCreatedAt"
+										},
+										"font": "Arial;13;0",
+										"parentStyle": true,
+										"left": 765,
+										"top": 636,
+										"width": 175,
+										"height": 13,
+										"text": "-getCreatedAt()"
+									},
+									{
+										"_type": "UMLOperationView",
+										"_id": "CD_view_pl_op_v11",
+										"_parent": {
+											"$ref": "CD_view_pl_op"
+										},
+										"model": {
+											"$ref": "CD_pl_op_setCreatedAt"
+										},
+										"font": "Arial;13;0",
+										"parentStyle": true,
+										"left": 765,
+										"top": 651,
+										"width": 175,
+										"height": 13,
+										"text": "-setCreatedAt(created_at: DateTime)"
+									},
+									{
+										"_type": "UMLOperationView",
+										"_id": "CD_view_pl_op_v12",
+										"_parent": {
+											"$ref": "CD_view_pl_op"
+										},
+										"model": {
+											"$ref": "CD_pl_op_getUpdatedAt"
+										},
+										"font": "Arial;13;0",
+										"parentStyle": true,
+										"left": 765,
+										"top": 666,
+										"width": 175,
+										"height": 13,
+										"text": "-getUpdatedAt()"
+									},
+									{
+										"_type": "UMLOperationView",
+										"_id": "CD_view_pl_op_v13",
+										"_parent": {
+											"$ref": "CD_view_pl_op"
+										},
+										"model": {
+											"$ref": "CD_pl_op_setUpdatedAt"
+										},
+										"font": "Arial;13;0",
+										"parentStyle": true,
+										"left": 765,
+										"top": 681,
+										"width": 175,
+										"height": 13,
+										"text": "-setUpdatedAt(updated_at: DateTime)"
+									},
+									{
+										"_type": "UMLOperationView",
+										"_id": "CD_view_pl_op_v14",
+										"_parent": {
+											"$ref": "CD_view_pl_op"
+										},
+										"model": {
+											"$ref": "CD_pl_op_isActive"
+										},
+										"font": "Arial;13;0",
+										"parentStyle": true,
+										"left": 765,
+										"top": 696,
+										"width": 175,
+										"height": 13,
+										"text": "-isActive()"
+									},
+									{
+										"_type": "UMLOperationView",
+										"_id": "CD_view_pl_op_v15",
+										"_parent": {
+											"$ref": "CD_view_pl_op"
+										},
+										"model": {
+											"$ref": "CD_pl_op_setIsActive"
+										},
+										"font": "Arial;13;0",
+										"parentStyle": true,
+										"left": 765,
+										"top": 711,
+										"width": 175,
+										"height": 13,
+										"text": "-setIsActive(is_active: bool)"
+									},
+									{
+										"_type": "UMLOperationView",
+										"_id": "CD_view_pl_op_v16",
+										"_parent": {
+											"$ref": "CD_view_pl_op"
+										},
+										"model": {
+											"$ref": "CD_pl_op_getRef"
+										},
+										"font": "Arial;13;0",
+										"parentStyle": true,
+										"left": 765,
+										"top": 726,
+										"width": 175,
+										"height": 13,
+										"text": "-getRef()"
+									},
+									{
+										"_type": "UMLOperationView",
+										"_id": "CD_view_pl_op_v17",
+										"_parent": {
+											"$ref": "CD_view_pl_op"
+										},
+										"model": {
+											"$ref": "CD_pl_op_setRef"
+										},
+										"font": "Arial;13;0",
+										"parentStyle": true,
+										"left": 765,
+										"top": 741,
+										"width": 175,
+										"height": 13,
+										"text": "-setRef(ref: string)"
+									}
+								],
+								"font": "Arial;13;0",
+								"parentStyle": true,
+								"left": 760,
+								"top": 496,
+								"width": 185,
+								"height": 258
+							},
+							"receptionCompartment": {
+								"_type": "UMLReceptionCompartmentView",
+								"_id": "CD_view_pl_rec",
+								"_parent": {
+									"$ref": "CD_view_pl_001"
+								},
+								"model": {
+									"$ref": "CD_productlisting_001"
+								},
+								"visible": false,
+								"font": "Arial;13;0",
+								"parentStyle": true,
+								"left": 760,
+								"top": 133,
+								"width": 10,
+								"height": 10
+							},
+							"templateParameterCompartment": {
+								"_type": "UMLTemplateParameterCompartmentView",
+								"_id": "CD_view_pl_tp",
+								"_parent": {
+									"$ref": "CD_view_pl_001"
+								},
+								"model": {
+									"$ref": "CD_productlisting_001"
+								},
+								"visible": false,
+								"font": "Arial;13;0",
+								"parentStyle": true,
+								"left": 760,
+								"top": 133,
+								"width": 10,
+								"height": 10
+							}
+						},
+						{
+							"_type": "UMLAssociationView",
+							"_id": "CD_view_rel_pl_tshistory",
+							"_parent": {
+								"$ref": "CD_diagram_001"
+							},
+							"model": {
+								"$ref": "CD_rel_pl_tshistory"
+							},
+							"subViews": [
+								{
+									"_type": "EdgeLabelView",
+									"_id": "CD_view_rel_pl_tshistory_l1",
+									"_parent": {
+										"$ref": "CD_view_rel_pl_tshistory"
+									},
+									"model": {
+										"$ref": "CD_rel_pl_tshistory_end1"
+									},
+									"visible": false,
+									"font": "Arial;13;0",
+									"parentStyle": false,
+									"left": 945,
+									"top": 360,
+									"height": 13,
+									"alpha": 0,
+									"distance": 0,
+									"hostEdge": {
+										"$ref": "CD_view_rel_pl_tshistory"
+									},
+									"edgePosition": 2
+								},
+								{
+									"_type": "EdgeLabelView",
+									"_id": "CD_view_rel_pl_tshistory_l2",
+									"_parent": {
+										"$ref": "CD_view_rel_pl_tshistory"
+									},
+									"model": {
+										"$ref": "CD_rel_pl_tshistory_end1"
+									},
+									"visible": false,
+									"font": "Arial;13;0",
+									"parentStyle": false,
+									"left": 945,
+									"top": 360,
+									"height": 13,
+									"alpha": 0,
+									"distance": 0,
+									"hostEdge": {
+										"$ref": "CD_view_rel_pl_tshistory"
+									},
+									"edgePosition": 2
+								},
+								{
+									"_type": "EdgeLabelView",
+									"_id": "CD_view_rel_pl_tshistory_l3",
+									"_parent": {
+										"$ref": "CD_view_rel_pl_tshistory"
+									},
+									"model": {
+										"$ref": "CD_rel_pl_tshistory_end1"
+									},
+									"font": "Arial;13;0",
+									"parentStyle": false,
+									"left": 948,
+									"top": 360,
+									"width": 7.22998046875,
+									"height": 13,
+									"alpha": 0.5236,
+									"distance": 25,
+									"hostEdge": {
+										"$ref": "CD_view_rel_pl_tshistory"
+									},
+									"edgePosition": 2,
+									"text": "1"
+								},
+								{
+									"_type": "EdgeLabelView",
+									"_id": "CD_view_rel_pl_tshistory_l4",
+									"_parent": {
+										"$ref": "CD_view_rel_pl_tshistory"
+									},
+									"model": {
+										"$ref": "CD_rel_pl_tshistory_end2"
+									},
+									"visible": false,
+									"font": "Arial;13;0",
+									"parentStyle": false,
+									"left": 1045,
+									"top": 370,
+									"height": 13,
+									"alpha": 0,
+									"distance": 0,
+									"hostEdge": {
+										"$ref": "CD_view_rel_pl_tshistory"
+									}
+								},
+								{
+									"_type": "EdgeLabelView",
+									"_id": "CD_view_rel_pl_tshistory_l5",
+									"_parent": {
+										"$ref": "CD_view_rel_pl_tshistory"
+									},
+									"model": {
+										"$ref": "CD_rel_pl_tshistory_end2"
+									},
+									"visible": false,
+									"font": "Arial;13;0",
+									"parentStyle": false,
+									"left": 1045,
+									"top": 370,
+									"height": 13,
+									"alpha": 0,
+									"distance": 0,
+									"hostEdge": {
+										"$ref": "CD_view_rel_pl_tshistory"
+									}
+								},
+								{
+									"_type": "EdgeLabelView",
+									"_id": "CD_view_rel_pl_tshistory_l6",
+									"_parent": {
+										"$ref": "CD_view_rel_pl_tshistory"
+									},
+									"model": {
+										"$ref": "CD_rel_pl_tshistory_end2"
+									},
+									"font": "Arial;13;0",
+									"parentStyle": false,
+									"left": 1045,
+									"top": 370,
+									"width": 28.8,
+									"height": 13,
+									"alpha": 0.5236,
+									"distance": 25,
+									"hostEdge": {
+										"$ref": "CD_view_rel_pl_tshistory"
+									},
+									"text": "0..*"
+								},
+								{
+									"_type": "EdgeLabelView",
+									"_id": "CD_view_rel_pl_tshistory_ename",
+									"_parent": {
+										"$ref": "CD_view_rel_pl_tshistory"
+									},
+									"model": {
+										"$ref": "CD_rel_pl_tshistory"
+									},
+									"visible": false,
+									"font": "Arial;13;0",
+									"parentStyle": false,
+									"left": 945,
+									"top": 365,
+									"height": 13,
+									"alpha": 0,
+									"distance": 0,
+									"hostEdge": {
+										"$ref": "CD_view_rel_pl_tshistory"
+									},
+									"edgePosition": 1
+								},
+								{
+									"_type": "EdgeLabelView",
+									"_id": "CD_view_rel_pl_tshistory_estereo",
+									"_parent": {
+										"$ref": "CD_view_rel_pl_tshistory"
+									},
+									"model": {
+										"$ref": "CD_rel_pl_tshistory"
+									},
+									"visible": null,
+									"font": "Arial;13;0",
+									"parentStyle": false,
+									"left": 945,
+									"top": 365,
+									"height": 13,
+									"alpha": 0,
+									"distance": 0,
+									"hostEdge": {
+										"$ref": "CD_view_rel_pl_tshistory"
+									},
+									"edgePosition": 1
+								},
+								{
+									"_type": "EdgeLabelView",
+									"_id": "CD_view_rel_pl_tshistory_eprop",
+									"_parent": {
+										"$ref": "CD_view_rel_pl_tshistory"
+									},
+									"model": {
+										"$ref": "CD_rel_pl_tshistory"
+									},
+									"visible": false,
+									"font": "Arial;13;0",
+									"parentStyle": false,
+									"left": 945,
+									"top": 365,
+									"height": 13,
+									"alpha": 0,
+									"distance": 0,
+									"hostEdge": {
+										"$ref": "CD_view_rel_pl_tshistory"
+									},
+									"edgePosition": 1
+								},
+								{
+									"_type": "UMLQualifierCompartmentView",
+									"_id": "CD_view_rel_pl_tshistory_q1",
+									"_parent": {
+										"$ref": "CD_view_rel_pl_tshistory"
+									},
+									"model": {
+										"$ref": "CD_rel_pl_tshistory_end1"
+									},
+									"visible": false,
+									"font": "Arial;13;0",
+									"parentStyle": true,
+									"left": 384,
+									"top": 144,
+									"width": 10,
+									"height": 10
+								},
+								{
+									"_type": "UMLQualifierCompartmentView",
+									"_id": "CD_view_rel_pl_tshistory_q2",
+									"_parent": {
+										"$ref": "CD_view_rel_pl_tshistory"
+									},
+									"model": {
+										"$ref": "CD_rel_pl_tshistory_end2"
+									},
+									"visible": false,
+									"font": "Arial;13;0",
+									"parentStyle": true,
+									"left": 384,
+									"top": 144,
+									"width": 10,
+									"height": 10
+								}
+							],
+							"font": "Arial;13;0",
+							"parentStyle": false,
+							"head": {
+								"$ref": "CD_view_pl_001"
+							},
+							"tail": {
+								"$ref": "CD_view_tshistory_001"
+							},
+							"lineStyle": 1,
+							"points": "945:370;975:370",
+							"nameLabel": {
+								"$ref": "CD_view_rel_pl_tshistory_ename"
+							},
+							"stereotypeLabel": {
+								"$ref": "CD_view_rel_pl_tshistory_estereo"
+							},
+							"propertyLabel": {
+								"$ref": "CD_view_rel_pl_tshistory_eprop"
+							},
+							"showEndOrder": "hide",
+							"tailRoleNameLabel": {
+								"$ref": "CD_view_rel_pl_tshistory_l1"
+							},
+							"tailPropertyLabel": {
+								"$ref": "CD_view_rel_pl_tshistory_l2"
+							},
+							"tailMultiplicityLabel": {
+								"$ref": "CD_view_rel_pl_tshistory_l3"
+							},
+							"headRoleNameLabel": {
+								"$ref": "CD_view_rel_pl_tshistory_l4"
+							},
+							"headPropertyLabel": {
+								"$ref": "CD_view_rel_pl_tshistory_l5"
+							},
+							"headMultiplicityLabel": {
+								"$ref": "CD_view_rel_pl_tshistory_l6"
+							},
+							"tailQualifiersCompartment": {
+								"$ref": "CD_view_rel_pl_tshistory_q1"
+							},
+							"headQualifiersCompartment": {
+								"$ref": "CD_view_rel_pl_tshistory_q2"
 							}
 						}
 					]
