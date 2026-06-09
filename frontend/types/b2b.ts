@@ -70,7 +70,7 @@ export type B2BWatchlistItem = {
   price_delta: number | null
 }
 
-export type B2BAdsRequest = {
+export type B2BRequest = {
   id?: number
   owner_type?: string
   request_type?: string

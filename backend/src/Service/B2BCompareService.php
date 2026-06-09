@@ -11,7 +11,7 @@ use Symfony\Component\DependencyInjection\Attribute\Autowire;
 class B2BCompareService
 {
     private const CACHE_PREFIX = 'compare_v3_';
-    private const CACHE_TTL = 21600; // 6 hours
+    private const CACHE_TTL = 7200; // 2 hours
 
     private const FRENCH_COLORS = [
         'noir', 'blanc', 'rouge', 'bleu', 'vert', 'jaune', 'violet', 'pourpre',
@@ -109,7 +109,7 @@ class B2BCompareService
     }
 
     /**
-     * @return array<int, array{id: int, matchType: string, reason: string}>
+     * @return array{winners: array<int, array{id: int, matchType: string, reason: string}>, warning: string|null}
      */
     public function findCompetitors(int $productId, bool $refresh = false): array
     {
@@ -190,14 +190,14 @@ class B2BCompareService
         $response = $this->callN8n(json_encode($payload));
 
         // 9. Parse response
-        $winners = $this->parseResponse($response);
+        $result = $this->parseResponse($response);
 
         // Cache
-        $cacheItem->set($winners);
+        $cacheItem->set($result);
         $cacheItem->expiresAfter(self::CACHE_TTL);
         $this->cache->save($cacheItem);
 
-        return $winners;
+        return $result;
     }
 
     private function getTargetData(int $productId): array
@@ -352,7 +352,7 @@ SQL;
         }
 
         if (preg_match('/(\d+)\s*To\s*(SSD|NVMe)?/i', $value, $m)) {
-            return ((int)$m[1] * 1000) . ' Go SSD';
+            return ((int)$m[1] * 1024) . ' Go SSD';
         }
 
         if (preg_match('/(\d+)\s*Go/i', $value, $m)) {
@@ -360,7 +360,7 @@ SQL;
         }
 
         if (preg_match('/(\d+)\s*To/i', $value, $m)) {
-            return ((int)$m[1] * 1000) . ' Go';
+            return ((int)$m[1] * 1024) . ' Go';
         }
 
         return trim($value);
@@ -549,7 +549,7 @@ SQL;
                 'header' => "Content-Type: application/json\r\nAccept: application/json",
                 'content' => $payload,
                 'ignore_errors' => true,
-                'timeout' => 30,
+                'timeout' => 60,
             ],
         ]);
 
@@ -571,7 +571,7 @@ SQL;
     private function parseResponse(?array $response): array
     {
         if (!$response) {
-            return [];
+            return ['winners' => [], 'warning' => null];
         }
 
         // Handle nested array structures if they occur
@@ -579,8 +579,10 @@ SQL;
             $response = $response[0];
         }
 
+        $warning = $response['warning'] ?? null;
+
         if (!isset($response['winners']) || !is_array($response['winners'])) {
-            return [];
+            return ['winners' => [], 'warning' => $warning];
         }
 
         $winners = [];
@@ -599,6 +601,6 @@ SQL;
             ];
         }
 
-        return $winners;
+        return ['winners' => $winners, 'warning' => $warning];
     }
 }

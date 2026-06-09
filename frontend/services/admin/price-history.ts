@@ -3,6 +3,8 @@ import { cachedFetch } from "@/lib/fetch-with-cache"
 import { withCache } from "@/lib/server-cache"
 import type { PriceHistoryEntry } from "@/utils/types"
 
+const ADMIN_API_KEY = process.env.ADMIN_API_KEY ?? "dev-admin-api-key-change-me"
+
 async function fetchPriceHistoryFromApi(
   productId?: number,
   listingId?: number,
@@ -19,17 +21,28 @@ async function fetchPriceHistoryFromApi(
     if (locale) params.set("lang", locale)
 
     const query = params.toString()
-    const endpoint =
-      typeof window === "undefined"
-        ? `${BACKEND_URL}/price-history${query ? "?" + query : ""}`
-        : `/api/price-history${query ? "?" + query : ""}`
+
+    const isServer = typeof window === "undefined"
+
+    const endpoint = isServer
+      ? `${BACKEND_URL}/price-history${query ? "?" + query : ""}`
+      : `/api/price-history${query ? "?" + query : ""}`
 
     const cacheKey = `price-history:p${productId ?? 0}:l${listingId ?? 0}${locale ? `:${locale}` : ""}`
 
-    return await cachedFetch<PriceHistoryEntry[]>(endpoint, {
+    const fetchOptions: RequestInit & { cacheKey?: string; cacheTtl?: number } = {
       cacheKey,
       cacheTtl: 300,
-    })
+    }
+
+    if (isServer) {
+      fetchOptions.headers = {
+        "X-Admin-Api-Key": ADMIN_API_KEY,
+        "X-Admin-Role": "ROLE_SUPER_ADMIN",
+      }
+    }
+
+    return await cachedFetch<PriceHistoryEntry[]>(endpoint, fetchOptions)
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Unknown price history fetch error"

@@ -3,7 +3,6 @@
 namespace App\Service;
 
 use App\Entity\B2B;
-use App\Entity\B2BAdsRequest;
 use App\Entity\B2BCompany;
 use App\Entity\B2BMarket;
 use Doctrine\ORM\EntityManagerInterface;

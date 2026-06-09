@@ -3,7 +3,7 @@
 namespace App\Controller;
 
 use App\Entity\Admin;
-use App\Entity\B2BAdsRequest;
+use App\Entity\B2BRequest;
 use App\Entity\B2BAdsCampaign;
 use App\Entity\B2BCompany;
 use App\Entity\B2BMarket;
@@ -123,8 +123,8 @@ final class B2BAdminController extends AbstractController
             return $errorResponse;
         }
 
-        $adsRequest = $entityManager->find(B2BAdsRequest::class, $requestId);
-        if (!$adsRequest instanceof B2BAdsRequest) {
+        $adsRequest = $entityManager->find(B2BRequest::class, $requestId);
+        if (!$adsRequest instanceof B2BRequest) {
             return $this->json(['error' => 'Ads request not found.'], 404);
         }
 
@@ -191,8 +191,8 @@ final class B2BAdminController extends AbstractController
             return $errorResponse;
         }
 
-        $adsRequest = $entityManager->find(B2BAdsRequest::class, $requestId);
-        if (!$adsRequest instanceof B2BAdsRequest) {
+        $adsRequest = $entityManager->find(B2BRequest::class, $requestId);
+        if (!$adsRequest instanceof B2BRequest) {
             return $this->json(['error' => 'Ads request not found.'], 404);
         }
 
@@ -467,7 +467,7 @@ final class B2BAdminController extends AbstractController
         return $this->cachedGet($this->cache, $cacheKey, static function () use ($entityManager, $limit, $offset, $status): array {
             $qb = $entityManager->createQueryBuilder()
                 ->select('ar')
-                ->from(B2BAdsRequest::class, 'ar')
+                ->from(B2BRequest::class, 'ar')
                 ->orderBy('ar.created_at', 'DESC')
                 ->setMaxResults($limit)
                 ->setFirstResult($offset);
@@ -480,12 +480,27 @@ final class B2BAdminController extends AbstractController
             $items = $qb->getQuery()->getResult();
             $total = $entityManager->createQueryBuilder()
                 ->select('COUNT(ar.id)')
-                ->from(B2BAdsRequest::class, 'ar')
+                ->from(B2BRequest::class, 'ar')
                 ->getQuery()
                 ->getSingleScalarResult();
 
+            $companyIds = array_filter(array_map(fn (B2BRequest $ar) => $ar->getCompanyId(), $items));
+            $companies = [];
+            if (!empty($companyIds)) {
+                $companyRows = $entityManager->createQueryBuilder()
+                    ->select('c.id, c.name')
+                    ->from(B2BCompany::class, 'c')
+                    ->where('c.id IN (:ids)')
+                    ->setParameter('ids', $companyIds)
+                    ->getQuery()
+                    ->getScalarResult();
+                foreach ($companyRows as $row) {
+                    $companies[(int) $row['id']] = $row['name'];
+                }
+            }
+
             return [
-                'items' => array_map(fn (B2BAdsRequest $ar) => [
+                'items' => array_map(fn (B2BRequest $ar) => [
                     'id' => $ar->getId(),
                     'owner_type' => $ar->getOwnerType(),
                     'request_type' => $ar->getRequestType(),
@@ -493,8 +508,8 @@ final class B2BAdminController extends AbstractController
                     'link_url' => $ar->getLinkUrl(),
                     'image_mime_type' => $ar->getImageMimeType(),
                     'status' => $ar->getStatus(),
-                    'company_id' => $ar->getCompany()?->getId(),
-                    'name' => $ar->getCompany()?->getName(),
+                    'company_id' => $ar->getCompanyId(),
+                    'name' => $companies[$ar->getCompanyId()] ?? null,
                     'created_at' => $ar->getCreatedAt()?->format(\DateTimeInterface::ATOM),
                     'updated_at' => $ar->getUpdatedAt()?->format(\DateTimeInterface::ATOM),
                 ], $items),

@@ -4,7 +4,7 @@ namespace App\Controller;
 
 use App\Entity\B2B;
 use App\Entity\B2BAdsCampaign;
-use App\Entity\B2BAdsRequest;
+use App\Entity\B2BRequest;
 use App\Entity\B2BCompany;
 use App\Entity\B2BMarket;
 use App\Entity\B2BReport;
@@ -635,7 +635,10 @@ final class B2BWorkspaceController extends AbstractController
                 $pid = reset($productIds);
 
                 try {
-                    $winners = $this->compareService->findCompetitors($pid, $refresh);
+                    $result = $this->compareService->findCompetitors($pid, $refresh);
+                    $winners = $result['winners'] ?? [];
+                    $n8nWarning = $result['warning'] ?? null;
+
                     $winnerIds = array_map(fn(array $w) => $w['id'], $winners);
 
                     foreach ($winners as $w) {
@@ -649,7 +652,7 @@ final class B2BWorkspaceController extends AbstractController
                         $productIds = array_merge([$pid], $winnerIds);
                     } else {
                         $productIds = [$pid];
-                        $n8nWarning = 'AI could not find competitors';
+                        $n8nWarning = $n8nWarning ?: 'AI could not find competitors';
                     }
                 } catch (\RuntimeException $e) {
                     return $this->json(['error' => $e->getMessage()], 400);
@@ -1055,8 +1058,8 @@ final class B2BWorkspaceController extends AbstractController
 
         if ($request->isMethod('GET')) {
             return $this->cachedGet($this->cache, $this->buildUserCacheKey($this->cacheVersionManager, $firebaseUid, self::CACHE_KEY_ADS_PREFIX), function () use ($user, $entityManager, $quotaService): array {
-                $items = $entityManager->getRepository(B2BAdsRequest::class)->findBy(
-                    $user instanceof B2BCompany ? ['company' => $user] : ['market' => $user],
+                $items = $entityManager->getRepository(B2BRequest::class)->findBy(
+                    $user instanceof B2BCompany ? ['company_id' => $user->getId()] : ['market' => $user],
                     ['created_at' => 'DESC', 'id' => 'DESC'],
                     100,
                 );
@@ -1066,7 +1069,7 @@ final class B2BWorkspaceController extends AbstractController
                 $campaignRepo = $entityManager->getRepository(B2BAdsCampaign::class);
 
                 return [
-                    'items' => array_map(function (B2BAdsRequest $item) use ($campaignRepo) {
+                    'items' => array_map(function (B2BRequest $item) use ($campaignRepo) {
                         $data = $this->serializeAdsRequest($item);
 
                         // Attach campaign details for approved requests
@@ -1124,7 +1127,7 @@ final class B2BWorkspaceController extends AbstractController
 
         // Check if imageUrl references a prior upload stored as DRAFT
         if (preg_match('#^/banner/image/(\d+)$#', $imageUrl, $m)) {
-            $adsRequest = $entityManager->find(B2BAdsRequest::class, (int) $m[1]);
+            $adsRequest = $entityManager->find(B2BRequest::class, (int) $m[1]);
             if (!$adsRequest || strtoupper((string) $adsRequest->getStatus()) !== 'DRAFT') {
                 return $this->json(['error' => 'Invalid or expired banner upload.'], 400);
             }
@@ -1133,10 +1136,10 @@ final class B2BWorkspaceController extends AbstractController
             $adsRequest->setStatus('PENDING');
             $adsRequest->setUpdatedAt(new \DateTimeImmutable());
         } else {
-            $adsRequest = new B2BAdsRequest();
+            $adsRequest = new B2BRequest();
             $adsRequest->setOwnerType($user instanceof B2BMarket ? 'B2B_MARKET' : 'B2B_COMPANY');
             if ($user instanceof B2BCompany) {
-                $adsRequest->setCompany($user);
+                $adsRequest->setCompanyId($user->getId());
             } elseif ($user instanceof B2BMarket) {
                 $adsRequest->setMarket($user);
             }
@@ -1170,8 +1173,8 @@ final class B2BWorkspaceController extends AbstractController
             return $user;
         }
 
-        $adsRequest = $entityManager->getRepository(B2BAdsRequest::class)->find($id);
-        if (!$adsRequest instanceof B2BAdsRequest) {
+        $adsRequest = $entityManager->getRepository(B2BRequest::class)->find($id);
+        if (!$adsRequest instanceof B2BRequest) {
             return $this->json(['error' => 'Ads request not found.'], 404);
         }
 
@@ -1214,8 +1217,8 @@ final class B2BWorkspaceController extends AbstractController
             return $user;
         }
 
-        $adsRequest = $entityManager->getRepository(B2BAdsRequest::class)->find($id);
-        if (!$adsRequest instanceof B2BAdsRequest) {
+        $adsRequest = $entityManager->getRepository(B2BRequest::class)->find($id);
+        if (!$adsRequest instanceof B2BRequest) {
             return $this->json(['error' => 'Ads request not found.'], 404);
         }
 
@@ -1245,7 +1248,7 @@ final class B2BWorkspaceController extends AbstractController
 
         // If it's a new upload (DRAFT reference), update the reference
         if (preg_match('#^/banner/image/(\d+)$#', $imageUrl, $m)) {
-            $upload = $entityManager->find(B2BAdsRequest::class, (int) $m[1]);
+            $upload = $entityManager->find(B2BRequest::class, (int) $m[1]);
             if ($upload && strtoupper((string) $upload->getStatus()) === 'DRAFT') {
                 $adsRequest->setImageData($upload->getImageData());
                 $adsRequest->setImageMimeType($upload->getImageMimeType());
@@ -1277,8 +1280,8 @@ final class B2BWorkspaceController extends AbstractController
             return $user;
         }
 
-        $adsRequest = $entityManager->getRepository(B2BAdsRequest::class)->find($id);
-        if (!$adsRequest instanceof B2BAdsRequest) {
+        $adsRequest = $entityManager->getRepository(B2BRequest::class)->find($id);
+        if (!$adsRequest instanceof B2BRequest) {
             return $this->json(['error' => 'Ads request not found.'], 404);
         }
 
@@ -1308,10 +1311,10 @@ final class B2BWorkspaceController extends AbstractController
         return $this->json(['status' => 'DELETED']);
     }
 
-    private function isOwner(B2BAdsRequest $adsRequest, B2B $user): bool
+    private function isOwner(B2BRequest $adsRequest, B2B $user): bool
     {
         if ($user instanceof B2BCompany) {
-            return $adsRequest->getCompany()?->getId() === $user->getId();
+            return $adsRequest->getCompanyId() === $user->getId();
         }
         return $adsRequest->getMarket()?->getId() === $user->getId();
     }
@@ -1353,10 +1356,10 @@ final class B2BWorkspaceController extends AbstractController
             return $this->json(['error' => 'Failed to process image.'], 500);
         }
 
-        $adsRequest = new B2BAdsRequest();
+        $adsRequest = new B2BRequest();
         $adsRequest->setOwnerType($user instanceof B2BMarket ? 'B2B_MARKET' : 'B2B_COMPANY');
         if ($user instanceof B2BCompany) {
-            $adsRequest->setCompany($user);
+            $adsRequest->setCompanyId($user->getId());
         } elseif ($user instanceof B2BMarket) {
             $adsRequest->setMarket($user);
         }
@@ -4094,7 +4097,7 @@ final class B2BWorkspaceController extends AbstractController
         return $subscription;
     }
 
-    private function serializeAdsRequest(B2BAdsRequest $request): array
+    private function serializeAdsRequest(B2BRequest $request): array
     {
         return [
             'id' => $request->getId(),

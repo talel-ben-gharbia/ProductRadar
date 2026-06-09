@@ -3,7 +3,7 @@
 namespace App\Service;
 
 use App\Entity\Admin;
-use App\Entity\B2BAdsRequest;
+use App\Entity\B2BRequest;
 use App\Entity\B2B;
 use App\Entity\B2BCompany;
 use App\Entity\B2BMarket;
@@ -200,7 +200,10 @@ final class B2BNotificationService
 
     public function notifySponsorshipApproved(B2BSponsoredArticle $article, Admin $admin): void
     {
-        $company = $article->getCompany();
+        $companyId = $article->getCompanyId();
+        if ($companyId === null) return;
+
+        $company = $this->entityManager->find(B2BCompany::class, $companyId);
         if (!$company) return;
 
         $productName = $article->getProductListing()?->getProduct()?->getName() ?? $article->getTitle() ?? 'Unknown';
@@ -222,7 +225,10 @@ final class B2BNotificationService
 
     public function notifySponsorshipRejected(B2BSponsoredArticle $article): void
     {
-        $company = $article->getCompany();
+        $companyId = $article->getCompanyId();
+        if ($companyId === null) return;
+
+        $company = $this->entityManager->find(B2BCompany::class, $companyId);
         if (!$company) return;
 
         $productName = $article->getProductListing()?->getProduct()?->getName() ?? $article->getTitle() ?? 'Unknown';
@@ -242,7 +248,10 @@ final class B2BNotificationService
 
     public function notifySponsorshipExpired(B2BSponsoredArticle $article): void
     {
-        $company = $article->getCompany();
+        $companyId = $article->getCompanyId();
+        if ($companyId === null) return;
+
+        $company = $this->entityManager->find(B2BCompany::class, $companyId);
         if (!$company) return;
 
         $productName = $article->getProductListing()?->getProduct()?->getName() ?? $article->getTitle() ?? 'Unknown';
@@ -306,11 +315,14 @@ final class B2BNotificationService
         );
     }
 
-    public function notifyAdsRequestApproved(B2BAdsRequest $adsRequest, Admin $admin, array $campaignDetails): void
+    public function notifyAdsRequestApproved(B2BRequest $adsRequest, Admin $admin, array $campaignDetails): void
     {
-        $company = $adsRequest->getCompany();
+        $companyId = $adsRequest->getCompanyId();
         $market = $adsRequest->getMarket();
-        $owner = $company ?? $market;
+        $owner = $market;
+        if ($companyId !== null && !$owner) {
+            $owner = $this->entityManager->find(B2BCompany::class, $companyId);
+        }
         if (!$owner) return;
 
         $linkUrl = $adsRequest->getLinkUrl() ?? 'N/A';
@@ -336,11 +348,14 @@ final class B2BNotificationService
         );
     }
 
-    public function notifyAdsRequestRejected(B2BAdsRequest $adsRequest): void
+    public function notifyAdsRequestRejected(B2BRequest $adsRequest): void
     {
-        $company = $adsRequest->getCompany();
+        $companyId = $adsRequest->getCompanyId();
         $market = $adsRequest->getMarket();
-        $owner = $company ?? $market;
+        $owner = $market;
+        if ($companyId !== null && !$owner) {
+            $owner = $this->entityManager->find(B2BCompany::class, $companyId);
+        }
         if (!$owner) return;
 
         $message = sprintf('Your ads request #%d has been declined.', $adsRequest->getId());

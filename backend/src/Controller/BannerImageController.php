@@ -2,7 +2,7 @@
 
 namespace App\Controller;
 
-use App\Entity\B2BAdsRequest;
+use App\Entity\B2BRequest;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Response;
@@ -14,8 +14,8 @@ final class BannerImageController extends AbstractController
     #[Route('/{id}', name: 'banner_image_serve', methods: ['GET'])]
     public function serve(int $id, EntityManagerInterface $entityManager): Response
     {
-        $request = $entityManager->find(B2BAdsRequest::class, $id);
-        if (!$request instanceof B2BAdsRequest) {
+        $request = $entityManager->find(B2BRequest::class, $id);
+        if (!$request instanceof B2BRequest) {
             return $this->redirect('/');
         }
 

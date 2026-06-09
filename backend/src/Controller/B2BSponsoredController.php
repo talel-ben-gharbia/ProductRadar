@@ -4,7 +4,7 @@ namespace App\Controller;
 
 use App\Entity\Admin;
 use App\Entity\B2BAdsCampaign;
-use App\Entity\B2BAdsRequest;
+use App\Entity\B2BRequest;
 use App\Entity\B2B;
 use App\Entity\B2BCompany;
 use App\Entity\B2BMarket;
@@ -102,7 +102,7 @@ final class B2BSponsoredController extends AbstractController
         }
 
         $items = $entityManager->getRepository(B2BSponsoredArticle::class)->findBy(
-            ['company' => $user],
+            ['company_id' => $user->getId()],
             ['created_at' => 'DESC'],
             50
         );
@@ -126,7 +126,7 @@ final class B2BSponsoredController extends AbstractController
 
         $quotaUsage = $this->subscriptionResolver->checkQuota($user, 'sponsored_products', 0);
         $activeCount = $entityManager->getRepository(B2BSponsoredArticle::class)->count([
-            'company' => $user,
+            'company_id' => $user->getId(),
             'status' => 'PUBLISHED',
         ]);
 
@@ -174,10 +174,10 @@ final class B2BSponsoredController extends AbstractController
 
         // Check not already submitted (pending or published)
         $existing = $entityManager->getRepository(B2BSponsoredArticle::class)->createQueryBuilder('a')
-            ->where('a.company = :company')
+            ->where('a.company_id = :companyId')
             ->andWhere('a.productListing = :listing')
             ->andWhere('a.status IN (:statuses)')
-            ->setParameter('company', $user)
+            ->setParameter('companyId', $user->getId())
             ->setParameter('listing', $listing)
             ->setParameter('statuses', ['PENDING', 'PUBLISHED'])
             ->setMaxResults(1)
@@ -191,7 +191,7 @@ final class B2BSponsoredController extends AbstractController
         $isGold = $this->gatingService->isGoldPlan($user);
         $maxActive = $isGold ? 3 : 1;
         $activeCount = $entityManager->getRepository(B2BSponsoredArticle::class)->count([
-            'company' => $user,
+            'company_id' => $user->getId(),
             'status' => 'PUBLISHED',
         ]);
         if ($activeCount >= $maxActive) {
@@ -210,7 +210,7 @@ final class B2BSponsoredController extends AbstractController
         }
 
         $article = new B2BSponsoredArticle();
-        $article->setCompany($user);
+        $article->setCompanyId($user->getId());
         $article->setProductListing($listing);
         $article->setTitle($listing->getProduct()?->getName() ?? 'Sponsored Listing');
         $article->setStatus('PENDING');
@@ -235,7 +235,7 @@ final class B2BSponsoredController extends AbstractController
         if ($user instanceof JsonResponse) return $user;
 
         $article = $entityManager->find(B2BSponsoredArticle::class, $id);
-        if (!$article instanceof B2BSponsoredArticle || $article->getCompany()?->getId() !== $user->getId()) {
+        if (!$article instanceof B2BSponsoredArticle || $article->getCompanyId() !== $user->getId()) {
             return $this->json(['error' => 'Sponsorship not found.'], 404);
         }
 
@@ -316,10 +316,12 @@ final class B2BSponsoredController extends AbstractController
             return $this->json(['error' => 'Only pending requests can be approved.'], 409);
         }
 
-        $company = $article->getCompany();
-        if (!$company instanceof B2BCompany) {
+        $companyId = $article->getCompanyId();
+        if ($companyId === null) {
             return $this->json(['error' => 'Sponsorship has no associated company.'], 422);
         }
+
+        $company = $entityManager->find(B2BCompany::class, $companyId);
 
         // Check listing is in stock
         $listing = $article->getProductListing();
@@ -328,10 +330,10 @@ final class B2BSponsoredController extends AbstractController
         }
 
         // Check max active
-        $isGold = $this->gatingService->isGoldPlan($company);
+        $isGold = $company ? $this->gatingService->isGoldPlan($company) : false;
         $maxActive = $isGold ? 3 : 1;
         $activeCount = $entityManager->getRepository(B2BSponsoredArticle::class)->count([
-            'company' => $company,
+            'company_id' => $companyId,
             'status' => 'PUBLISHED',
         ]);
         if ($activeCount >= $maxActive) {
@@ -422,15 +424,14 @@ final class B2BSponsoredController extends AbstractController
         $now = new \DateTimeImmutable();
 
         $qb = $entityManager->createQueryBuilder()
-            ->select('a, pl, p, c, s')
+            ->select('a, pl, p, s')
             ->from(B2BSponsoredArticle::class, 'a')
             ->join('a.productListing', 'pl')
             ->join('pl.product', 'p')
-            ->leftJoin('a.company', 'c')
             ->leftJoin('pl.seller', 's')
             ->where('a.status = :status')
             ->andWhere('a.ends_at IS NULL OR a.ends_at > :now')
-            ->andWhere('c.id IS NOT NULL')
+            ->andWhere('a.company_id IS NOT NULL')
             ->andWhere('pl.availability = true')
             ->setParameter('status', 'PUBLISHED')
             ->setParameter('now', $now);
@@ -468,9 +469,8 @@ final class B2BSponsoredController extends AbstractController
 
             $listing = $article->getProductListing();
             $product = $listing?->getProduct();
-            $company = $article->getCompany();
             $seller = $listing?->getSeller();
-            if (!$product || !$company || !$listing) continue;
+            if (!$product || !$listing) continue;
 
             $results[] = [
                 'id' => $article->getId(),
@@ -515,10 +515,9 @@ final class B2BSponsoredController extends AbstractController
             ->execute();
 
         $campaigns = $entityManager->createQueryBuilder()
-            ->select('c, ar, comp')
+            ->select('c, ar')
             ->from(B2BAdsCampaign::class, 'c')
             ->join('c.adsRequest', 'ar')
-            ->leftJoin('ar.company', 'comp')
             ->where('c.active = :active')
             ->andWhere('c.status = :status')
             ->andWhere('c.ends_at IS NOT NULL AND c.ends_at > :now')
@@ -530,11 +529,18 @@ final class B2BSponsoredController extends AbstractController
             ->getResult();
 
         $items = [];
+        $companyNames = [];
         foreach ($campaigns as $campaign) {
             if (!$campaign instanceof B2BAdsCampaign) continue;
 
             $adsRequest = $campaign->getAdsRequest();
             if (!$adsRequest) continue;
+
+            $companyId = $adsRequest->getCompanyId();
+            if ($companyId !== null && !isset($companyNames[$companyId])) {
+                $company = $entityManager->find(B2BCompany::class, $companyId);
+                $companyNames[$companyId] = $company?->getName();
+            }
 
             $items[] = [
                 'id' => $campaign->getId(),
@@ -544,7 +550,7 @@ final class B2BSponsoredController extends AbstractController
                 'height' => $campaign->getHeight(),
                 'starts_at' => $campaign->getStartsAt()?->format(\DateTimeInterface::ATOM),
                 'ends_at' => $campaign->getEndsAt()?->format(\DateTimeInterface::ATOM),
-                'name' => $adsRequest->getCompany()?->getName(),
+                'name' => $companyNames[$companyId] ?? null,
             ];
         }
 
@@ -599,11 +605,8 @@ final class B2BSponsoredController extends AbstractController
 
     private function serializeAdmin(B2BSponsoredArticle $a): array
     {
-        $company = $a->getCompany();
         return $this->serialize($a) + [
-            'company_id' => $company?->getId(),
-            'name' => $company?->getName(),
-            'seller_id' => $company?->getSeller()?->getId(),
+            'company_id' => $a->getCompanyId(),
             'ads_request_id' => $a->getAdsRequest()?->getId(),
         ];
     }

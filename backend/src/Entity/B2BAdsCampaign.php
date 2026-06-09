@@ -16,9 +16,9 @@ class B2BAdsCampaign
     #[ORM\Column]
     private ?int $id = null;
 
-    #[ORM\ManyToOne(targetEntity: B2BAdsRequest::class)]
+    #[ORM\ManyToOne(targetEntity: B2BRequest::class)]
     #[ORM\JoinColumn(name: 'ads_request_id', referencedColumnName: 'id', nullable: false, onDelete: 'CASCADE')]
-    private ?B2BAdsRequest $adsRequest = null;
+    private ?B2BRequest $adsRequest = null;
 
     #[ORM\Column(length: 20)]
     private ?string $status = null;
@@ -49,12 +49,12 @@ class B2BAdsCampaign
         return $this->id;
     }
 
-    public function getAdsRequest(): ?B2BAdsRequest
+    public function getAdsRequest(): ?B2BRequest
     {
         return $this->adsRequest;
     }
 
-    public function setAdsRequest(?B2BAdsRequest $adsRequest): static
+    public function setAdsRequest(?B2BRequest $adsRequest): static
     {
         $this->adsRequest = $adsRequest;
 

@@ -2,17 +2,17 @@
 
 namespace App\Repository;
 
-use App\Entity\B2BAdsRequest;
+use App\Entity\B2BRequest;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
 
 /**
- * @extends ServiceEntityRepository<B2BAdsRequest>
+ * @extends ServiceEntityRepository<B2BRequest>
  */
-class B2BAdsRequestRepository extends ServiceEntityRepository
+class B2BRequestRepository extends ServiceEntityRepository
 {
     public function __construct(ManagerRegistry $registry)
     {
-        parent::__construct($registry, B2BAdsRequest::class);
+        parent::__construct($registry, B2BRequest::class);
     }
 }

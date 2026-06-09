@@ -2,16 +2,16 @@
 
 namespace App\Entity;
 
-use App\Repository\B2BAdsRequestRepository;
+use App\Repository\B2BRequestRepository;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 
-#[ORM\Entity(repositoryClass: B2BAdsRequestRepository::class)]
+#[ORM\Entity(repositoryClass: B2BRequestRepository::class)]
 #[ORM\Table(name: 'b2b_ads_request', indexes: [
     new ORM\Index(name: 'idx_b2b_ads_request_owner_type', columns: ['owner_type']),
     new ORM\Index(name: 'idx_b2b_ads_request_status', columns: ['status']),
 ])]
-class B2BAdsRequest
+class B2BRequest
 {
     #[ORM\Id]
     #[ORM\GeneratedValue]
@@ -21,9 +21,8 @@ class B2BAdsRequest
     #[ORM\Column(length: 20)]
     private ?string $owner_type = null;
 
-    #[ORM\ManyToOne(targetEntity: B2BCompany::class)]
-    #[ORM\JoinColumn(name: 'company_id', referencedColumnName: 'id', nullable: true, onDelete: 'CASCADE')]
-    private ?B2BCompany $company = null;
+    #[ORM\Column(type: Types::INTEGER, nullable: true)]
+    private ?int $company_id = null;
 
     #[ORM\ManyToOne(targetEntity: B2BMarket::class)]
     #[ORM\JoinColumn(name: 'market_id', referencedColumnName: 'id', nullable: true, onDelete: 'CASCADE')]
@@ -70,14 +69,14 @@ class B2BAdsRequest
         return $this;
     }
 
-    public function getCompany(): ?B2BCompany
+    public function getCompanyId(): ?int
     {
-        return $this->company;
+        return $this->company_id;
     }
 
-    public function setCompany(?B2BCompany $company): static
+    public function setCompanyId(?int $companyId): static
     {
-        $this->company = $company;
+        $this->company_id = $companyId;
 
         return $this;
     }

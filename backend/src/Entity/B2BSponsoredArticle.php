@@ -3,6 +3,7 @@
 namespace App\Entity;
 
 use App\Repository\B2BSponsoredArticleRepository;
+use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 
 #[ORM\Entity(repositoryClass: B2BSponsoredArticleRepository::class)]
@@ -18,17 +19,16 @@ class B2BSponsoredArticle
     #[ORM\Column]
     private ?int $id = null;
 
-    #[ORM\ManyToOne(targetEntity: B2BAdsRequest::class)]
+    #[ORM\ManyToOne(targetEntity: B2BRequest::class)]
     #[ORM\JoinColumn(name: 'ads_request_id', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
-    private ?B2BAdsRequest $adsRequest = null;
+    private ?B2BRequest $adsRequest = null;
 
     #[ORM\ManyToOne(targetEntity: ProductListing::class)]
     #[ORM\JoinColumn(name: 'product_listing_id', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
     private ?ProductListing $productListing = null;
 
-    #[ORM\ManyToOne(targetEntity: B2BCompany::class)]
-    #[ORM\JoinColumn(name: 'company_id', referencedColumnName: 'id', nullable: true, onDelete: 'CASCADE')]
-    private ?B2BCompany $company = null;
+    #[ORM\Column(type: Types::INTEGER, nullable: true)]
+    private ?int $company_id = null;
 
     #[ORM\Column(length: 255)]
     private ?string $title = null;
@@ -56,12 +56,12 @@ class B2BSponsoredArticle
         return $this->id;
     }
 
-    public function getAdsRequest(): ?B2BAdsRequest
+    public function getAdsRequest(): ?B2BRequest
     {
         return $this->adsRequest;
     }
 
-    public function setAdsRequest(?B2BAdsRequest $adsRequest): static
+    public function setAdsRequest(?B2BRequest $adsRequest): static
     {
         $this->adsRequest = $adsRequest;
 
@@ -80,14 +80,14 @@ class B2BSponsoredArticle
         return $this;
     }
 
-    public function getCompany(): ?B2BCompany
+    public function getCompanyId(): ?int
     {
-        return $this->company;
+        return $this->company_id;
     }
 
-    public function setCompany(?B2BCompany $company): static
+    public function setCompanyId(?int $companyId): static
     {
-        $this->company = $company;
+        $this->company_id = $companyId;
 
         return $this;
     }

@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import B2BErrorState from "@/components/B2B/b2b-error-state"
 
-import type { B2BAdsRequest } from "@/types/b2b"
+import type { B2BRequest } from "@/types/b2b"
 import { BACKEND_URL } from "@/utils/admin/constants"
 
 type ProductItem = {
@@ -69,7 +69,7 @@ export default function SponsoredProductsPage() {
   const [submitting, setSubmitting] = useState(false)
 
   // Ads tab
-  const [ads, setAds] = useState<B2BAdsRequest[]>([])
+  const [ads, setAds] = useState<B2BRequest[]>([])
   const [adsLoading, setAdsLoading] = useState(false)
   const [adsError, setAdsError] = useState<string | null>(null)
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)

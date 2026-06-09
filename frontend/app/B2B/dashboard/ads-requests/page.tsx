@@ -38,7 +38,7 @@ import { Label } from "@/components/ui/label"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { BACKEND_URL } from "@/utils/admin/constants"
 
-import type { B2BAdsRequest as AdsRequest } from "@/types/b2b"
+import type { B2BRequest as AdsRequest } from "@/types/b2b"
 
 function timeAgo(dateStr?: string): string {
   if (!dateStr) return ""
