@@ -3,8 +3,6 @@ import { cachedFetch } from "@/lib/fetch-with-cache"
 import { withCache } from "@/lib/server-cache"
 import type { PriceHistoryEntry } from "@/utils/types"
 
-const ADMIN_API_KEY = process.env.ADMIN_API_KEY ?? "dev-admin-api-key-change-me"
-
 async function fetchPriceHistoryFromApi(
   productId?: number,
   listingId?: number,
@@ -33,13 +31,6 @@ async function fetchPriceHistoryFromApi(
     const fetchOptions: RequestInit & { cacheKey?: string; cacheTtl?: number } = {
       cacheKey,
       cacheTtl: 300,
-    }
-
-    if (isServer) {
-      fetchOptions.headers = {
-        "X-Admin-Api-Key": ADMIN_API_KEY,
-        "X-Admin-Role": "ROLE_SUPER_ADMIN",
-      }
     }
 
     return await cachedFetch<PriceHistoryEntry[]>(endpoint, fetchOptions)

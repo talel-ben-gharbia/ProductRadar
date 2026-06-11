@@ -7,8 +7,7 @@ export default function DataManagementPage() {
     <section className="w-full max-w-none space-y-4">
       <h1 className="text-2xl font-bold">Data Management</h1>
       <p className="text-sm text-muted-foreground">
-        <strong className="text-foreground">Scraping Logs</strong> shows execution history/failures,
-        and <strong className="text-foreground">Manual Scraping</strong> lets you trigger immediate collection.
+        Monitor data ingestion across sellers. Review scraping execution logs and trigger manual collection when needed.
       </p>
 
       <Card>
@@ -24,11 +23,7 @@ export default function DataManagementPage() {
             <strong className="text-foreground">Mode 2 - Scraped Site:</strong> if no API exists, register the seller as a scraping source.
             Scheduled scraping and manual triggers then collect listing and pricing data.
           </p>
-          <p>
-            <strong className="text-foreground">Data Sources</strong> stores source type and endpoint details (API vs scraping),
-            <strong className="text-foreground"> Scraping Logs</strong> shows execution history/failures,
-            and <strong className="text-foreground">Manual Scraping</strong> lets you trigger immediate collection.
-          </p>
+
           <p>
             <strong className="text-foreground">Operational rule:</strong> every source must be tagged with exactly one ingestion mode,
             tested regularly, and validated by checking that new rows are arriving in ProductRadar tables.

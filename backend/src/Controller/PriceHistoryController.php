@@ -3,11 +3,7 @@
 namespace App\Controller;
 
 use App\Entity\Subscription;
-use App\Entity\User;
 use App\Repository\PriceHistoryRepository;
-use App\Repository\ProductListingRepository;
-use App\Repository\UserRepository;
-use App\Security\AdminApiGuard;
 use App\Service\BestTimeToBuyApiClient;
 use Psr\Cache\CacheItemPoolInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -30,21 +26,8 @@ final class PriceHistoryController extends AbstractController
     }
 
     #[Route('/price-history', name: 'get_price_history', methods: ['GET'])]
-    public function getPriceHistory(Request $request, PriceHistoryRepository $priceHistoryRepository, UserRepository $userRepository, AdminApiGuard $adminApiGuard): JsonResponse
+    public function getPriceHistory(Request $request, PriceHistoryRepository $priceHistoryRepository): JsonResponse
     {
-        $firebaseUid = trim((string) $request->headers->get('X-Firebase-Uid', ''));
-        if ($firebaseUid === '') {
-            $adminAuth = $adminApiGuard->assertAuthorized($request);
-            if ($adminAuth !== null) {
-                return $this->json(['error' => 'Authentication required.'], 401);
-            }
-        } else {
-            $user = $userRepository->findOneBy(['firebase_uid' => $firebaseUid]);
-            if (!$user instanceof User) {
-                return $this->json(['error' => 'User not found.'], 401);
-            }
-        }
-
         $productId = $request->query->getInt('productId', 0);
         $listingId = $request->query->getInt('listingId', 0);
 

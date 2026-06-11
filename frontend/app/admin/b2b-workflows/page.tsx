@@ -1,16 +1,41 @@
 "use client"
 
+import { useCallback, useEffect, useState } from "react"
 import Link from "next/link"
 import {
   ArrowUpRight,
   BadgeCheck,
+  Building2,
+  Clock,
   FileText,
+  Globe,
   ImagePlay,
   Megaphone,
   RefreshCw,
   RotateCcw,
   Store,
+  Users,
 } from "lucide-react"
+
+import { Badge } from "@/components/ui/badge"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { BACKEND_URL } from "@/utils/admin/constants"
+
+type OverviewData = {
+  company_count: number
+  market_count: number
+  pending_verifications: number
+  pending_renewals: number
+  pending_ads: number
+  active_subscriptions: number
+  recent_partner_requests: Array<{
+    id: number
+    email: string
+    company_name: string
+    account_type: string
+    created_at: string
+  }>
+}
 
 const WORKFLOWS = [
   {
@@ -85,7 +110,36 @@ const WORKFLOWS = [
   },
 ]
 
+const STAT_CARDS = [
+  { label: "Companies", key: "company_count" as const, icon: Building2, color: "text-blue-600" },
+  { label: "Markets", key: "market_count" as const, icon: Globe, color: "text-teal-600" },
+  { label: "Active Subscriptions", key: "active_subscriptions" as const, icon: Store, color: "text-emerald-600" },
+  { label: "Pending Verifications", key: "pending_verifications" as const, icon: Clock, color: "text-amber-600" },
+  { label: "Pending Renewals", key: "pending_renewals" as const, icon: RefreshCw, color: "text-violet-600" },
+  { label: "Pending Ads", key: "pending_ads" as const, icon: ImagePlay, color: "text-rose-600" },
+]
+
 export default function B2BWorkflowsHubPage() {
+  const [overview, setOverview] = useState<OverviewData | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  const fetchOverview = useCallback(async () => {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/b2b/admin/overview`, { credentials: "include" })
+      if (res.ok) {
+        setOverview(await res.json())
+      }
+    } catch {
+      // ignore network errors
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchOverview()
+  }, [fetchOverview])
+
   return (
     <section className="w-full max-w-none space-y-8">
       {/* Header */}
@@ -97,42 +151,111 @@ export default function B2BWorkflowsHubPage() {
         </p>
       </div>
 
-      {/* Workflow cards grid */}
-      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-        {WORKFLOWS.map((wf) => {
-          const Icon = wf.icon
+      {/* Stat cards */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+        {STAT_CARDS.map((stat) => {
+          const Icon = stat.icon
+          const value = loading ? "…" : (overview?.[stat.key] ?? 0)
 
           return (
-            <Link
-              key={wf.href}
-              href={wf.href}
-              className="group relative flex flex-col rounded-2xl border border-border/60 bg-card p-5 shadow-xs transition-all duration-200 hover:shadow-md hover:border-border/100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-            >
-              {/* Icon */}
-              <div
-                className={`mb-4 flex size-11 items-center justify-center rounded-xl ${wf.bg} ring-1 ${wf.ring} ring-inset`}
-              >
-                <Icon className={`size-5 ${wf.color}`} />
-              </div>
-
-              {/* Title */}
-              <h3 className="text-base font-semibold text-foreground group-hover:text-primary transition-colors">
-                {wf.title}
-              </h3>
-
-              {/* Description */}
-              <p className="mt-1.5 flex-1 text-sm leading-relaxed text-muted-foreground">
-                {wf.description}
-              </p>
-
-              {/* Arrow indicator */}
-              <div className="mt-4 flex items-center gap-1 text-xs font-medium text-muted-foreground/70 transition-colors group-hover:text-primary">
-                <span>Open</span>
-                <ArrowUpRight className="size-3 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
-              </div>
-            </Link>
+            <Card key={stat.key}>
+              <CardContent className="flex items-center gap-3 p-4">
+                <div className={`flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted ${stat.color}`}>
+                  <Icon className="size-5" />
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-xs font-medium text-muted-foreground">{stat.label}</p>
+                  <p className="text-xl font-bold tabular-nums">{value}</p>
+                </div>
+              </CardContent>
+            </Card>
           )
         })}
+      </div>
+
+      {/* Recent partner requests */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Users className="size-4" />
+            Recent Partner Requests
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <p className="text-sm text-muted-foreground">Loading…</p>
+          ) : !overview?.recent_partner_requests?.length ? (
+            <p className="text-sm text-muted-foreground">No recent partner requests.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-left text-xs font-medium text-muted-foreground">
+                    <th className="pb-2 pr-4">Company</th>
+                    <th className="pb-2 pr-4">Email</th>
+                    <th className="pb-2 pr-4">Type</th>
+                    <th className="pb-2">Submitted</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {overview.recent_partner_requests.map((pr) => (
+                    <tr key={pr.id} className="border-b last:border-0">
+                      <td className="py-2 pr-4 font-medium">{pr.company_name}</td>
+                      <td className="py-2 pr-4 text-muted-foreground">{pr.email}</td>
+                      <td className="py-2 pr-4">
+                        <Badge variant="outline">{pr.account_type}</Badge>
+                      </td>
+                      <td className="py-2 text-muted-foreground">
+                        {pr.created_at ? new Date(pr.created_at).toLocaleDateString() : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Workflow cards grid */}
+      <div>
+        <h2 className="mb-4 text-lg font-semibold">Workflows</h2>
+        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {WORKFLOWS.map((wf) => {
+            const Icon = wf.icon
+
+            return (
+              <Link
+                key={wf.href}
+                href={wf.href}
+                className="group relative flex flex-col rounded-2xl border border-border/60 bg-card p-5 shadow-xs transition-all duration-200 hover:shadow-md hover:border-border/100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              >
+                {/* Icon */}
+                <div
+                  className={`mb-4 flex size-11 items-center justify-center rounded-xl ${wf.bg} ring-1 ${wf.ring} ring-inset`}
+                >
+                  <Icon className={`size-5 ${wf.color}`} />
+                </div>
+
+                {/* Title */}
+                <h3 className="text-base font-semibold text-foreground group-hover:text-primary transition-colors">
+                  {wf.title}
+                </h3>
+
+                {/* Description */}
+                <p className="mt-1.5 flex-1 text-sm leading-relaxed text-muted-foreground">
+                  {wf.description}
+                </p>
+
+                {/* Arrow indicator */}
+                <div className="mt-4 flex items-center gap-1 text-xs font-medium text-muted-foreground/70 transition-colors group-hover:text-primary">
+                  <span>Open</span>
+                  <ArrowUpRight className="size-3 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+                </div>
+              </Link>
+            )
+          })}
+        </div>
       </div>
     </section>
   )

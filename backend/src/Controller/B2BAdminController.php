@@ -3,11 +3,13 @@
 namespace App\Controller;
 
 use App\Entity\Admin;
+use App\Entity\B2B;
 use App\Entity\B2BRequest;
 use App\Entity\B2BAdsCampaign;
 use App\Entity\B2BCompany;
 use App\Entity\B2BMarket;
 use App\Entity\B2BReport;
+use App\Entity\PartnerRequest;
 use App\Entity\Subscription;
 use App\Entity\TrustScoreWeight;
 use App\Service\B2BNotificationService;
@@ -41,6 +43,87 @@ final class B2BAdminController extends AbstractController
         private readonly EntityManagerInterface $entityManager,
     ) {
     }
+
+    #[Route('/overview', name: 'b2b_admin_overview', methods: ['GET'])]
+    public function overview(
+        Request $request,
+        AdminApiGuard $adminApiGuard,
+        EntityManagerInterface $entityManager,
+    ): JsonResponse {
+        if ($errorResponse = $adminApiGuard->assertAuthorized($request)) {
+            return $errorResponse;
+        }
+
+        $cacheKey = self::CACHE_KEY_ADS . '.overview';
+
+        return $this->cachedGet($this->cache, $cacheKey, static function () use ($entityManager): array {
+            $companyCount = $entityManager->createQueryBuilder()
+                ->select('COUNT(c.id)')
+                ->from(B2BCompany::class, 'c')
+                ->getQuery()
+                ->getSingleScalarResult();
+
+            $marketCount = $entityManager->createQueryBuilder()
+                ->select('COUNT(m.id)')
+                ->from(B2BMarket::class, 'm')
+                ->getQuery()
+                ->getSingleScalarResult();
+
+            $pendingVerifications = $entityManager->createQueryBuilder()
+                ->select('COUNT(pr.id)')
+                ->from(PartnerRequest::class, 'pr')
+                ->getQuery()
+                ->getSingleScalarResult();
+
+            $pendingRenewals = $entityManager->createQueryBuilder()
+                ->select('COUNT(s.id)')
+                ->from(Subscription::class, 's')
+                ->where('s.active = false')
+                ->getQuery()
+                ->getSingleScalarResult();
+
+            $pendingAds = $entityManager->createQueryBuilder()
+                ->select('COUNT(ar.id)')
+                ->from(B2BRequest::class, 'ar')
+                ->where('ar.status = :status')
+                ->setParameter('status', 'PENDING')
+                ->getQuery()
+                ->getSingleScalarResult();
+
+            $activeSubscriptions = $entityManager->createQueryBuilder()
+                ->select('COUNT(s.id)')
+                ->from(Subscription::class, 's')
+                ->where('s.status = :status')
+                ->setParameter('status', 'ACTIVE')
+                ->getQuery()
+                ->getSingleScalarResult();
+
+            $recentPartnerRequests = $entityManager->createQueryBuilder()
+                ->select('pr')
+                ->from(PartnerRequest::class, 'pr')
+                ->orderBy('pr.created_at', 'DESC')
+                ->setMaxResults(5)
+                ->getQuery()
+                ->getResult();
+
+            return [
+                'company_count' => (int) $companyCount,
+                'market_count' => (int) $marketCount,
+                'pending_verifications' => (int) $pendingVerifications,
+                'pending_renewals' => (int) $pendingRenewals,
+                'pending_ads' => (int) $pendingAds,
+                'active_subscriptions' => (int) $activeSubscriptions,
+                'recent_partner_requests' => array_map(fn (PartnerRequest $pr) => [
+                    'id' => $pr->getId(),
+                    'email' => $pr->getEmail(),
+                    'company_name' => $pr->getCompanyName(),
+                    'account_type' => $pr->getAccountType(),
+                    'created_at' => $pr->getCreatedAt()?->format(\DateTimeInterface::ATOM),
+                ], $recentPartnerRequests),
+            ];
+        });
+    }
+
     #[Route('/subscriptions/{subscriptionId}/approve', name: 'b2b_admin_approve_subscription', methods: ['POST'])]
     public function approveSubscription(
         int $subscriptionId,

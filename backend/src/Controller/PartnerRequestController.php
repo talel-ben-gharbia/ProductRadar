@@ -8,7 +8,9 @@ use App\Entity\B2BCompany;
 use App\Entity\B2BMarket;
 use App\Repository\PartnerRequestRepository;
 use App\Repository\UserRepository;
+use Doctrine\DBAL\Exception\ForeignKeyConstraintViolationException;
 use Doctrine\ORM\EntityManagerInterface;
+use Psr\Log\LoggerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -22,6 +24,7 @@ final class PartnerRequestController extends AbstractController
         PartnerRequestRepository $partnerRequestRepository,
         UserRepository $userRepository,
         EntityManagerInterface $entityManager,
+        LoggerInterface $logger,
     ): JsonResponse {
         $payload = json_decode((string) $request->getContent(), true);
 
@@ -109,9 +112,33 @@ final class PartnerRequestController extends AbstractController
         $b2bUser->setUpdatedAt(null);
         $b2bUser->setIsVerified(false);
 
-        $entityManager->persist($partnerRequest);
-        $entityManager->persist($b2bUser);
-        $entityManager->flush();
+        $entityManager->getConnection()->beginTransaction();
+        try {
+            $entityManager->persist($partnerRequest);
+            $entityManager->persist($b2bUser);
+            $entityManager->flush();
+            $entityManager->getConnection()->commit();
+        } catch (ForeignKeyConstraintViolationException $e) {
+            $entityManager->getConnection()->rollBack();
+            $logger->error('Partner request FK violation: ' . $e->getMessage(), [
+                'email' => $email,
+                'accountType' => $accountType,
+            ]);
+
+            return $this->json([
+                'error' => 'Unable to create account due to a database constraint. Please try again.',
+            ], 500);
+        } catch (\Throwable $e) {
+            $entityManager->getConnection()->rollBack();
+            $logger->error('Partner request creation failed: ' . $e->getMessage(), [
+                'email' => $email,
+                'accountType' => $accountType,
+            ]);
+
+            return $this->json([
+                'error' => 'An unexpected error occurred. Please try again.',
+            ], 500);
+        }
 
         return $this->json([
             'id' => $partnerRequest->getId(),

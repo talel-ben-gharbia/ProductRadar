@@ -108,7 +108,7 @@ export default async function ProductInfoPage({ params }: ProductInfoPageProps) 
     const [allProducts, productListings, allPriceHistory, allCategories] = await Promise.all([
       getProducts(),
       getProductListings(productId),
-      getPriceHistory(productId),
+      getPriceHistory(productId).catch(() => [] as PriceHistoryEntry[]),
       getCategoriesWithParents(),
     ])
 
