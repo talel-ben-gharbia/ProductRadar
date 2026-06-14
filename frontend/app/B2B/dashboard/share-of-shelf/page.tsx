@@ -37,6 +37,11 @@ export default function ShareOfShelfPage() {
   const [fetchError, setFetchError] = useState(false)
   const [productPage, setProductPage] = useState<Record<string, number>>({})
   const fetchedRef = useRef(false)
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   const data = raw.map((item) => ({
     ...item,
@@ -134,6 +139,10 @@ export default function ShareOfShelfPage() {
         </div>
       </div>
     )
+  }
+
+  if (!mounted) {
+    return null
   }
 
   if (!isGold) return <B2BPlanGate featureName="Share of Shelf" />

@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 
 import { toast } from "sonner"
 
@@ -24,10 +24,9 @@ import {
 } from "@/components/ui/table"
 import {
   deleteProductListing,
-  getProductListings,
   setProductListingActive,
-} from "@/services/admin/product-listings"
-import { deleteProduct, getProducts, updateProduct } from "@/services/admin/products"
+} from "@/services/product-listings"
+import { deleteProduct, updateProduct } from "@/services/products"
 import type { Product, ProductListing } from "@/utils/types"
 
 type NoBrandItem = {
@@ -69,18 +68,46 @@ type ZeroListingItem = {
   categoryId: number | null
 }
 
+type MissingImageItem = {
+  productId: number
+  name: string
+  brand: string | null
+  description: string
+  categoryId: number | null
+}
+
+type WithImageItem = {
+  productId: number
+  name: string
+  brand: string | null
+  description: string
+  imageUrl: string
+  categoryId: number | null
+}
+
+type ProductListingRef = {
+  id: number
+  ref: string | null
+  price: number | null
+  product_url: string | null
+  sellerName: string | null
+}
+
 type ProductIssuesPanelProps = {
   noBrandProducts: NoBrandItem[]
   zeroPriceListings: ZeroPriceItem[]
   inactiveListings: InactiveItem[]
   zeroListingProducts: ZeroListingItem[]
+  missingImageProducts: MissingImageItem[]
+  productsWithImage: WithImageItem[]
+  productListingsMap: Record<number, ProductListingRef[]>
 }
 
 type ProductDetails = Product & {
   listings: ProductListing[]
 }
 
-type ActiveTab = "set-brand" | "listing-detail"
+type ActiveTab = "set-brand" | "listing-detail" | "edit-image"
 
 function toMoney(value: number | null): string {
   if (value === null) return "-"
@@ -94,6 +121,62 @@ function toMoney(value: number | null): string {
 
 function normalizeText(value: string | number | null | undefined): string {
   return String(value ?? "").trim().toLowerCase()
+}
+
+function ChevronIcon({ open }: { open: boolean }) {
+  return (
+    <svg
+      className={`h-5 w-5 shrink-0 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`}
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+    >
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+    </svg>
+  )
+}
+
+function ImagePreview({ url, alt }: { url: string | null; alt: string }) {
+  const [status, setStatus] = useState<"loading" | "ok" | "broken">("loading")
+
+  useEffect(() => {
+    if (!url) { setStatus("broken"); return }
+    let cancelled = false
+    setStatus("loading")
+    const img = new Image()
+    img.onload = () => { if (!cancelled) setStatus("ok") }
+    img.onerror = () => { if (!cancelled) setStatus("broken") }
+    img.src = url
+    return () => { cancelled = true }
+  }, [url])
+
+  if (!url) {
+    return <div className="flex h-48 items-center justify-center text-sm text-muted-foreground">No image</div>
+  }
+
+  if (status === "loading") {
+    return <div className="flex h-48 items-center justify-center text-sm text-muted-foreground">Loading...</div>
+  }
+
+  if (status === "broken") {
+    return (
+      <div className="flex h-48 flex-col items-center justify-center gap-1 text-sm text-red-500">
+        <svg className="h-8 w-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        <span>Broken image</span>
+      </div>
+    )
+  }
+
+  return (
+    <img
+      src={url}
+      alt={alt}
+      className="h-48 w-full object-contain"
+      onError={(e) => { (e.target as HTMLImageElement).style.display = "none" }}
+    />
+  )
 }
 
 async function fetchProductDetails(id: number): Promise<ProductDetails> {
@@ -111,7 +194,34 @@ async function fetchProductDetails(id: number): Promise<ProductDetails> {
   }
 }
 
-export default function ProductIssuesPanel({ noBrandProducts: initialNoBrandProducts, zeroPriceListings: initialZeroPriceListings, inactiveListings: initialInactiveListings, zeroListingProducts: initialZeroListingProducts }: ProductIssuesPanelProps) {
+/** Batch check images via server-side HEAD requests */
+async function batchCheckImages(items: { id: number; url: string }[]): Promise<Map<number, boolean>> {
+  const results = new Map<number, boolean>()
+  try {
+    const res = await fetch("/api/admin/check-image", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ items }),
+    })
+    if (res.ok) {
+      const data = await res.json() as { results: { id: number; ok: boolean }[] }
+      for (const r of data.results) {
+        results.set(r.id, r.ok)
+      }
+    }
+  } catch {
+    // If batch fails, mark all as broken
+    for (const item of items) {
+      results.set(item.id, false)
+    }
+  }
+  return results
+}
+
+const SCAN_CACHE_KEY = "product-issues-image-scan-v2"
+const SCAN_CACHE_TTL = 24 * 60 * 60 * 1000 // 24 hours
+
+export default function ProductIssuesPanel({ noBrandProducts: initialNoBrandProducts, zeroPriceListings: initialZeroPriceListings, inactiveListings: initialInactiveListings, zeroListingProducts: initialZeroListingProducts, missingImageProducts: initialMissingImageProducts, productsWithImage: initialProductsWithImage, productListingsMap }: ProductIssuesPanelProps) {
   const router = useRouter()
 
   const [dialogTab, setDialogTab] = useState<ActiveTab | null>(null)
@@ -120,6 +230,7 @@ export default function ProductIssuesPanel({ noBrandProducts: initialNoBrandProd
   const [productDetails, setProductDetails] = useState<ProductDetails | null>(null)
   const [loadingDetails, setLoadingDetails] = useState(false)
   const [brandInput, setBrandInput] = useState("")
+  const [newImageUrl, setNewImageUrl] = useState("")
   const [submitting, setSubmitting] = useState(false)
 
   const [selectedListingIds, setSelectedListingIds] = useState<Record<number, boolean>>({})
@@ -131,7 +242,15 @@ export default function ProductIssuesPanel({ noBrandProducts: initialNoBrandProd
   const [showAllZeroPrice, setShowAllZeroPrice] = useState(false)
   const [showAllInactive, setShowAllInactive] = useState(false)
   const [showAllZeroListings, setShowAllZeroListings] = useState(false)
+  const [showAllMissingImages, setShowAllMissingImages] = useState(false)
+  const [showAllBrokenImages, setShowAllBrokenImages] = useState(false)
   const [selectMode, setSelectMode] = useState<"zero-price" | "inactive" | "zero-listings">("zero-price")
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
+    s1: true, s2: true, s3: true, s4: true, s5: true, s6: true,
+  })
+  function toggleSection(key: string) {
+    setCollapsedSections((prev) => ({ ...prev, [key]: !prev[key] }))
+  }
 
   const [query, setQuery] = useState("")
 
@@ -139,6 +258,109 @@ export default function ProductIssuesPanel({ noBrandProducts: initialNoBrandProd
   const [zeroPriceListings, setZeroPriceListings] = useState(initialZeroPriceListings)
   const [inactiveListings, setInactiveListings] = useState(initialInactiveListings)
   const [zeroListingProducts, setZeroListingProducts] = useState(initialZeroListingProducts)
+  const [missingImageProducts, setMissingImageProducts] = useState(initialMissingImageProducts)
+  const [productsWithImage] = useState(initialProductsWithImage)
+
+  // --- Fast image scan state ---
+  const [brokenIds, setBrokenIds] = useState<Set<number>>(new Set())
+  const [checkedIds, setCheckedIds] = useState<Set<number>>(new Set())
+  const [isScanning, setIsScanning] = useState(false)
+  const [scanProgress, setScanProgress] = useState(0)
+  const scanCancelledRef = useRef(false)
+  // Manual overrides: admin marks an image as good/broken despite HEAD result
+  const [manualOverrides, setManualOverrides] = useState<Record<number, boolean>>({})
+  // Enlarge image preview
+  const [enlargeImageUrl, setEnlargeImageUrl] = useState<string | null>(null)
+  const [enlargeImageName, setEnlargeImageName] = useState<string>("")
+  const [enlargeImageError, setEnlargeImageError] = useState(false)
+
+  /* Load cached scan results on mount */
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(SCAN_CACHE_KEY)
+      if (raw) {
+        const cached: { broken: number[]; checked: number[]; ts: number } = JSON.parse(raw)
+        if (Date.now() - cached.ts < SCAN_CACHE_TTL) {
+          setBrokenIds(new Set(cached.broken))
+          setCheckedIds(new Set(cached.checked))
+        } else {
+          localStorage.removeItem(SCAN_CACHE_KEY)
+        }
+      }
+    } catch {}
+  }, [])
+
+  /* Save to cache on change */
+  useEffect(() => {
+    if (checkedIds.size === 0) return
+    try {
+      localStorage.setItem(SCAN_CACHE_KEY, JSON.stringify({
+        broken: Array.from(brokenIds),
+        checked: Array.from(checkedIds),
+        ts: Date.now(),
+      }))
+    } catch {}
+  }, [brokenIds, checkedIds])
+
+  /* Cleanup on unmount */
+  useEffect(() => {
+    return () => { scanCancelledRef.current = true }
+  }, [])
+
+  async function startScan() {
+    if (isScanning) return
+    setIsScanning(true)
+    scanCancelledRef.current = false
+
+    const queue = productsWithImage.filter((item) => !checkedIds.has(item.productId))
+    const BATCH_SIZE = 30 // 30 per API call — server does parallel HEAD requests
+    let processed = 0
+
+    try {
+      for (let i = 0; i < queue.length; i += BATCH_SIZE) {
+        if (scanCancelledRef.current) break
+
+        const batch = queue.slice(i, i + BATCH_SIZE)
+        const items = batch.map((item) => ({ id: item.productId, url: item.imageUrl }))
+        const results = await batchCheckImages(items)
+
+        const newBroken = new Set<number>()
+        const newChecked = new Set<number>()
+        for (const item of batch) {
+          const ok = results.get(item.productId) ?? false
+          if (!ok) newBroken.add(item.productId)
+          newChecked.add(item.productId)
+        }
+
+        setBrokenIds((prev) => {
+          const n = new Set(prev)
+          for (const id of newBroken) n.add(id)
+          return n
+        })
+        setCheckedIds((prev) => {
+          const n = new Set(prev)
+          for (const id of newChecked) n.add(id)
+          return n
+        })
+        processed += batch.length
+        setScanProgress(processed)
+      }
+    } finally {
+      setIsScanning(false)
+    }
+  }
+
+  function stopScan() {
+    scanCancelledRef.current = true
+    setIsScanning(false)
+  }
+
+  function clearScanResults() {
+    setBrokenIds(new Set())
+    setCheckedIds(new Set())
+    setManualOverrides({})
+    localStorage.removeItem(SCAN_CACHE_KEY)
+  }
 
   const filteredNoBrand = useMemo(() => {
     if (!query) return noBrandProducts
@@ -172,10 +394,39 @@ export default function ProductIssuesPanel({ noBrandProducts: initialNoBrandProd
     )
   }, [zeroListingProducts, query])
 
+  const filteredMissingImages = useMemo(() => {
+    if (!query) return missingImageProducts
+    const q = normalizeText(query)
+    return missingImageProducts.filter((p) =>
+      normalizeText([p.name, p.productId, p.brand, p.description].join(" ")).includes(q),
+    )
+  }, [missingImageProducts, query])
+
+  const brokenProducts = useMemo(() => {
+    return productsWithImage.filter((item) => {
+      if (brokenIds.has(item.productId)) {
+        // Check manual override: admin marked it as good
+        if (manualOverrides[item.productId] === true) return false
+        return true
+      }
+      return false
+    })
+  }, [productsWithImage, brokenIds, manualOverrides])
+
+  const filteredBroken = useMemo(() => {
+    if (!query) return brokenProducts
+    const q = normalizeText(query)
+    return brokenProducts.filter((p) =>
+      normalizeText([p.name, p.productId, p.brand, p.description].join(" ")).includes(q),
+    )
+  }, [brokenProducts, query])
+
   const visibleNoBrand = showAllNoBrand ? filteredNoBrand : filteredNoBrand.slice(0, 10)
   const visibleZeroPrice = showAllZeroPrice ? filteredZeroPrice : filteredZeroPrice.slice(0, 10)
   const visibleInactive = showAllInactive ? filteredInactive : filteredInactive.slice(0, 10)
   const visibleZeroListings = showAllZeroListings ? filteredZeroListings : filteredZeroListings.slice(0, 10)
+  const visibleMissingImages = showAllMissingImages ? filteredMissingImages : filteredMissingImages.slice(0, 10)
+  const visibleBroken = showAllBrokenImages ? filteredBroken : filteredBroken.slice(0, 10)
 
   useEffect(() => {
     if (dialogProductId === null) return
@@ -202,6 +453,14 @@ export default function ProductIssuesPanel({ noBrandProducts: initialNoBrandProd
     setBrandInput("")
   }
 
+  function openEditImageDialog(productId: number) {
+    setDialogTab("edit-image")
+    setDialogProductId(productId)
+    setDialogListingId(null)
+    setProductDetails(null)
+    setNewImageUrl("")
+  }
+
   function openListingDetailDialog(listingId: number, productId: number) {
     setDialogTab("listing-detail")
     setDialogProductId(productId)
@@ -215,6 +474,7 @@ export default function ProductIssuesPanel({ noBrandProducts: initialNoBrandProd
     setDialogListingId(null)
     setProductDetails(null)
     setBrandInput("")
+    setNewImageUrl("")
   }
 
   async function applySetBrand() {
@@ -231,6 +491,24 @@ export default function ProductIssuesPanel({ noBrandProducts: initialNoBrandProd
       router.refresh()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to set brand.")
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  async function applyUpdateImage() {
+    if (!dialogProductId || !newImageUrl.trim()) {
+      toast.error("Enter an image URL first.")
+      return
+    }
+    setSubmitting(true)
+    try {
+      await updateProduct(dialogProductId, { image_url: newImageUrl.trim() })
+      toast.success(`Image updated for product #${dialogProductId}.`)
+      closeDialog()
+      router.refresh()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to update image.")
     } finally {
       setSubmitting(false)
     }
@@ -470,7 +748,7 @@ export default function ProductIssuesPanel({ noBrandProducts: initialNoBrandProd
           </div>
         </div>
         <div className="mt-2 text-xs text-muted-foreground">
-          {filteredNoBrand.length} missing brand | {filteredZeroPrice.length} zero-price | {filteredInactive.length} inactive | {filteredZeroListings.length} zero-listings
+          {productsWithImage.length} with image | {filteredMissingImages.length} missing image | {filteredNoBrand.length} missing brand | {filteredZeroPrice.length} zero-price | {filteredInactive.length} inactive | {filteredZeroListings.length} zero-listings
           {query ? ` (filtered)` : ""}
         </div>
       </div>
@@ -527,18 +805,20 @@ export default function ProductIssuesPanel({ noBrandProducts: initialNoBrandProd
         </div>
       ) : null}
 
-      <details className="rounded-lg border bg-card p-4" open>
-        <summary className="cursor-pointer list-none">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Section 1</p>
-          <p className="mt-1 text-xl font-semibold">Products Missing Brand</p>
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+      {/* Section 1: Missing Brand */}
+      <div className="rounded-lg border bg-card">
+        <button type="button" className="flex w-full items-center justify-between p-4 text-left" onClick={() => toggleSection("s1")}>
+          <div className="flex items-center gap-3">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Section 1</p>
+            <p className="text-xl font-semibold">Products Missing Brand</p>
             <span className="rounded-full bg-rose-100 px-2.5 py-1 text-xs font-semibold text-rose-800">
               {noBrandProducts.length} products
             </span>
           </div>
-        </summary>
-
-        <div className="mt-4 space-y-3">
+          <ChevronIcon open={!collapsedSections.s1} />
+        </button>
+        {collapsedSections.s1 ? null : (
+        <div className="mt-0 border-t px-4 pb-4 pt-3 space-y-3">
           {noBrandProducts.length === 0 ? (
             <div className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">
               All products have a brand set.
@@ -598,19 +878,287 @@ export default function ProductIssuesPanel({ noBrandProducts: initialNoBrandProd
             </Button>
           ) : null}
         </div>
-      </details>
+        )}
+      </div>
 
-      <details className="rounded-lg border bg-card p-4" open>
-        <summary className="cursor-pointer list-none">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Section 2</p>
-          <p className="mt-1 text-xl font-semibold">Zero Price Listings</p>
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+      {/* Section 2: Missing Image */}
+      <div className="rounded-lg border bg-card">
+        <button type="button" className="flex w-full items-center justify-between p-4 text-left" onClick={() => toggleSection("s2")}>
+          <div className="flex items-center gap-3">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Section 2</p>
+            <p className="text-xl font-semibold">Products Missing Image</p>
+            <span className="rounded-full bg-orange-100 px-2.5 py-1 text-xs font-semibold text-orange-800">
+              {missingImageProducts.length} products
+            </span>
+          </div>
+          <ChevronIcon open={!collapsedSections.s2} />
+        </button>
+        {collapsedSections.s2 ? null : (
+        <div className="mt-0 border-t px-4 pb-4 pt-3 space-y-3">
+          {missingImageProducts.length === 0 ? (
+            <div className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">
+              All products have an image set.
+            </div>
+          ) : (
+            visibleMissingImages.map((item) => (
+              <div
+                key={`mi-${item.productId}`}
+                className="rounded-lg border bg-card p-4"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold">
+                      #{item.productId} - {item.name}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground line-clamp-2">
+                      {item.description || "No description"}
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                      <span className="rounded-full bg-orange-100 px-2 py-1 text-orange-800">Missing image</span>
+                      {item.brand ? (
+                        <span className="rounded-full bg-muted px-2 py-1">Brand: {item.brand}</span>
+                      ) : (
+                        <span className="rounded-full bg-muted px-2 py-1">No brand</span>
+                      )}
+                      {item.categoryId && (
+                        <span className="rounded-full bg-muted px-2 py-1">Category #{item.categoryId}</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 gap-2">
+                    <Button asChild type="button" size="sm" variant="outline">
+                      <Link href={`/admin/products/${item.productId}`}>
+                        Edit Product
+                      </Link>
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+
+          {filteredMissingImages.length > 10 ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowAllMissingImages(!showAllMissingImages)}
+            >
+              {showAllMissingImages
+                ? `Show fewer (${visibleMissingImages.length})`
+                : `Show all (${filteredMissingImages.length})`}
+            </Button>
+          ) : null}
+        </div>
+        )}
+      </div>
+
+      {/* Section 3: Image Problems (fast fetch HEAD scan) */}
+      <div className="rounded-lg border bg-card">
+        <button
+          type="button"
+          className="flex w-full items-center justify-between p-4 text-left"
+          onClick={() => toggleSection("s3")}
+        >
+          <div className="flex items-center gap-3">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Section 3</p>
+            <p className="text-xl font-semibold">Image Problems</p>
+            <span className="rounded-full bg-sky-100 px-2.5 py-1 text-xs font-semibold text-sky-800">
+              {productsWithImage.length} total
+            </span>
+            {checkedIds.size > 0 && (
+              <>
+                <span className="rounded-full bg-red-100 px-2.5 py-1 text-xs font-semibold text-red-800">
+                  {brokenIds.size} broken
+                </span>
+                <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-800">
+                  {checkedIds.size - brokenIds.size} ok
+                </span>
+              </>
+            )}
+          </div>
+          <ChevronIcon open={!collapsedSections.s3} />
+        </button>
+
+        {!collapsedSections.s3 ? (
+          <div className="border-t px-4 pb-4">
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              {!isScanning ? (
+                <Button type="button" size="sm" onClick={startScan}>
+                  {checkedIds.size > 0 ? "Re-scan Images" : "Start Scan"}
+                </Button>
+              ) : (
+                <Button type="button" size="sm" variant="destructive" onClick={stopScan}>
+                  Stop Scan
+                </Button>
+              )}
+              {checkedIds.size > 0 && !isScanning ? (
+                <Button type="button" size="sm" variant="ghost" onClick={clearScanResults}>
+                  Clear Results
+                </Button>
+              ) : null}
+              {isScanning ? (
+                <span className="text-xs text-muted-foreground">
+                  Scanning... {scanProgress}/{productsWithImage.length}
+                </span>
+              ) : checkedIds.size > 0 ? (
+                <span className="text-xs text-muted-foreground">
+                  Last scan: {checkedIds.size}/{productsWithImage.length} checked (cached 24h)
+                </span>
+              ) : null}
+            </div>
+
+            <div className="mt-4 space-y-3">
+              {productsWithImage.length === 0 ? (
+                <div className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">
+                  No products have images set.
+                </div>
+              ) : checkedIds.size === 0 ? (
+                <div className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">
+                  Click &quot;Start Scan&quot; to check {productsWithImage.length} product images using fast HEAD requests.
+                </div>
+              ) : brokenIds.size === 0 && checkedIds.size === productsWithImage.length ? (
+                <div className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">
+                  All {productsWithImage.length} product images are valid.
+                </div>
+              ) : (
+                visibleBroken.map((item) => (
+                  <div
+                    key={`bi-${item.productId}`}
+                    className="rounded-lg border border-red-200 bg-red-50/30 p-4"
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold">
+                          #{item.productId} - {item.name}
+                        </p>
+                        <p className="mt-1 text-xs text-muted-foreground line-clamp-2">
+                          {item.description || "No description"}
+                        </p>
+                        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                          <span className="rounded-full bg-red-100 px-2 py-1 text-xs text-red-800">Broken image</span>
+                          {item.brand ? (
+                            <span className="rounded-full bg-muted px-2 py-1">Brand: {item.brand}</span>
+                          ) : null}
+                          {item.categoryId ? (
+                            <span className="rounded-full bg-muted px-2 py-1">Category #{item.categoryId}</span>
+                          ) : null}
+                        </div>
+                        <button
+                          type="button"
+                          className="mt-1 max-w-md truncate font-mono text-xs text-blue-600 hover:text-blue-800 hover:underline text-left"
+                          onClick={() => {
+                            setEnlargeImageUrl(item.imageUrl)
+                            setEnlargeImageName(`${item.name} (#${item.productId})`)
+                            setEnlargeImageError(false)
+                          }}
+                        >
+                          {item.imageUrl}
+                        </button>
+                      </div>
+                      <div className="flex shrink-0 flex-col gap-1">
+                        <div className="flex gap-1">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="default"
+                            className="bg-emerald-600 hover:bg-emerald-700"
+                            onClick={() => {
+                              setManualOverrides((prev) => ({ ...prev, [item.productId]: true }))
+                              toast.success(`Marked #${item.productId} as OK`)
+                            }}
+                          >
+                            ✓ Mark OK
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => {
+                              setManualOverrides((prev) => {
+                                const next = { ...prev }
+                                delete next[item.productId]
+                                return next
+                              })
+                              setBrokenIds((prev) => new Set(prev).add(item.productId))
+                              toast.success(`Marked #${item.productId} as Broken`)
+                            }}
+                          >
+                            ✗ Mark Broken
+                          </Button>
+                        </div>
+                        <Button type="button" size="sm" variant="default" onClick={() => openEditImageDialog(item.productId)}>
+                          Edit Image
+                        </Button>
+                        {(productListingsMap[item.productId]?.length ?? 0) > 0 ? (
+                          productListingsMap[item.productId]?.flatMap((listing) => {
+                            if (!listing.product_url) return []
+                            let urls: string[] = []
+                            try {
+                              const parsed = JSON.parse(listing.product_url)
+                              if (Array.isArray(parsed)) {
+                                urls = parsed.filter((u): u is string => typeof u === "string")
+                              } else if (typeof parsed === "string") {
+                                urls = [parsed]
+                              }
+                            } catch {
+                              urls = [listing.product_url]
+                            }
+                            return urls.map((url, i) => (
+                              <Button key={`${listing.id}-${i}`} asChild type="button" size="sm" variant="outline">
+                                <Link href={url} target="_blank" rel="noopener noreferrer">
+                                  Open Listing #{listing.id}{urls.length > 1 ? ` (${i + 1})` : ""}
+                                </Link>
+                              </Button>
+                            ))
+                          })
+                        ) : null}
+                        <Button asChild type="button" size="sm" variant="outline">
+                          <Link href={`/admin/products/${item.productId}`}>
+                            View Product
+                          </Link>
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+
+              {filteredBroken.length > 10 ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowAllBrokenImages(!showAllBrokenImages)}
+                >
+                  {showAllBrokenImages
+                    ? `Show fewer (${visibleBroken.length})`
+                    : `Show all (${filteredBroken.length})`}
+                </Button>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+      </div>
+
+      {/* Section 4: Zero Price */}
+      <div className="rounded-lg border bg-card">
+        <button type="button" className="flex w-full items-center justify-between p-4 text-left" onClick={() => toggleSection("s4")}>
+          <div className="flex items-center gap-3">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Section 4</p>
+            <p className="text-xl font-semibold">Zero Price Listings</p>
             <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">
               {zeroPriceListings.length} listings
             </span>
             <span className="rounded-full bg-muted px-2.5 py-1 text-xs">
               {activeZeroPriceListings} active | {inactiveZeroPriceListings} inactive
             </span>
+          </div>
+          <ChevronIcon open={!collapsedSections.s4} />
+        </button>
+        {collapsedSections.s4 ? null : (
+        <div className="mt-0 border-t px-4 pb-4 pt-3">
+          <div className="mb-3 flex flex-wrap items-center gap-2">
             <Button type="button" variant="outline" size="sm" onClick={selectAllZeroPrice}>
               Select All
             </Button>
@@ -618,9 +1166,7 @@ export default function ProductIssuesPanel({ noBrandProducts: initialNoBrandProd
               Clear
             </Button>
           </div>
-        </summary>
-
-        <div className="mt-4 space-y-3">
+        <div className="space-y-3">
           {zeroPriceListings.length === 0 ? (
             <div className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">
               No listings with zero price found.
@@ -720,16 +1266,25 @@ export default function ProductIssuesPanel({ noBrandProducts: initialNoBrandProd
             </Button>
           ) : null}
         </div>
-      </details>
+        </div>
+        )}
+      </div>
 
-      <details className="rounded-lg border bg-card p-4" open>
-        <summary className="cursor-pointer list-none">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Section 3</p>
-          <p className="mt-1 text-xl font-semibold">Inactive Listings</p>
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+      {/* Section 5: Inactive */}
+      <div className="rounded-lg border bg-card">
+        <button type="button" className="flex w-full items-center justify-between p-4 text-left" onClick={() => toggleSection("s5")}>
+          <div className="flex items-center gap-3">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Section 5</p>
+            <p className="text-xl font-semibold">Inactive Listings</p>
             <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-800">
               {inactiveListings.length} listings
             </span>
+          </div>
+          <ChevronIcon open={!collapsedSections.s5} />
+        </button>
+        {collapsedSections.s5 ? null : (
+        <div className="mt-0 border-t px-4 pb-4 pt-3">
+          <div className="mb-3 flex flex-wrap items-center gap-2">
             <Button type="button" variant="outline" size="sm" onClick={selectAllInactive}>
               Select All
             </Button>
@@ -737,9 +1292,7 @@ export default function ProductIssuesPanel({ noBrandProducts: initialNoBrandProd
               Clear
             </Button>
           </div>
-        </summary>
-
-        <div className="mt-4 space-y-3">
+        <div className="space-y-3">
           {inactiveListings.length === 0 ? (
             <div className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">
               No inactive listings found.
@@ -833,16 +1386,25 @@ export default function ProductIssuesPanel({ noBrandProducts: initialNoBrandProd
             </Button>
           ) : null}
         </div>
-      </details>
+        </div>
+        )}
+      </div>
 
-      <details className="rounded-lg border bg-card p-4" open>
-        <summary className="cursor-pointer list-none">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Section 4</p>
-          <p className="mt-1 text-xl font-semibold">Products With No Listings</p>
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+      {/* Section 6: No Listings */}
+      <div className="rounded-lg border bg-card">
+        <button type="button" className="flex w-full items-center justify-between p-4 text-left" onClick={() => toggleSection("s6")}>
+          <div className="flex items-center gap-3">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Section 6</p>
+            <p className="text-xl font-semibold">Products With No Listings</p>
             <span className="rounded-full bg-purple-100 px-2.5 py-1 text-xs font-semibold text-purple-800">
               {zeroListingProducts.length} products
             </span>
+          </div>
+          <ChevronIcon open={!collapsedSections.s6} />
+        </button>
+        {collapsedSections.s6 ? null : (
+        <div className="mt-0 border-t px-4 pb-4 pt-3">
+          <div className="mb-3 flex flex-wrap items-center gap-2">
             <Button type="button" variant="outline" size="sm" onClick={selectAllZeroListings}>
               Select All
             </Button>
@@ -850,9 +1412,7 @@ export default function ProductIssuesPanel({ noBrandProducts: initialNoBrandProd
               Clear
             </Button>
           </div>
-        </summary>
-
-        <div className="mt-4 space-y-3">
+        <div className="space-y-3">
           {zeroListingProducts.length === 0 ? (
             <div className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">
               All products have at least one listing.
@@ -931,16 +1491,19 @@ export default function ProductIssuesPanel({ noBrandProducts: initialNoBrandProd
             </Button>
           ) : null}
         </div>
-      </details>
+        </div>
+        )}
+      </div>
 
+      {/* Dialog: Set Brand */}
       <Dialog
         open={dialogTab === "set-brand"}
         onOpenChange={(open) => { if (!open) closeDialog() }}
       >
-        <DialogContent className="w-[96vw] max-w-[96vw] sm:max-w-4xl">
+        <DialogContent className="w-[96vw] max-w-[96vw] sm:max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
           {dialogTab === "set-brand" && (
             <>
-              <DialogHeader>
+              <DialogHeader className="shrink-0">
                 <DialogTitle>Set Brand for Product #{dialogProductId}</DialogTitle>
                 <DialogDescription>
                   View full product details below, then enter the brand name to assign.
@@ -952,7 +1515,7 @@ export default function ProductIssuesPanel({ noBrandProducts: initialNoBrandProd
                   Loading product details...
                 </div>
               ) : productDetails ? (
-                <div className="space-y-4">
+                <div className="space-y-4 overflow-y-auto flex-1 min-h-0 pr-1">
                   <div className="grid gap-4 md:grid-cols-[200px_1fr]">
                     <div className="flex items-center justify-center overflow-hidden rounded-lg border bg-muted/20">
                       {productDetails.image_url ? (
@@ -975,14 +1538,12 @@ export default function ProductIssuesPanel({ noBrandProducts: initialNoBrandProd
                         </p>
                         <p className="text-sm font-semibold">#{productDetails.id}</p>
                       </div>
-
                       <div>
                         <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                           Name
                         </p>
                         <p className="text-sm font-semibold">{productDetails.name}</p>
                       </div>
-
                       <div>
                         <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                           Current Brand
@@ -993,7 +1554,6 @@ export default function ProductIssuesPanel({ noBrandProducts: initialNoBrandProd
                           )}
                         </p>
                       </div>
-
                       <div>
                         <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                           Category ID
@@ -1002,7 +1562,6 @@ export default function ProductIssuesPanel({ noBrandProducts: initialNoBrandProd
                           {productDetails.categoryId ?? "N/A"}
                         </p>
                       </div>
-
                       <div>
                         <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                           Total Listings
@@ -1070,7 +1629,7 @@ export default function ProductIssuesPanel({ noBrandProducts: initialNoBrandProd
                   <div className="rounded-md border border-rose-200 bg-rose-50 p-4">
                     <p className="text-xs font-semibold text-rose-800">Set Brand</p>
                     <p className="mt-1 text-xs text-rose-600">
-                      Enter the brand name for this product. This will make it appear in brand-based filters on B2C.
+                      Enter the brand name for this product.
                     </p>
                     <div className="mt-3 flex flex-wrap items-center gap-2">
                       <input
@@ -1106,17 +1665,18 @@ export default function ProductIssuesPanel({ noBrandProducts: initialNoBrandProd
         </DialogContent>
       </Dialog>
 
+      {/* Dialog: Listing Detail */}
       <Dialog
         open={dialogTab === "listing-detail"}
         onOpenChange={(open) => { if (!open) closeDialog() }}
       >
-        <DialogContent className="w-[96vw] max-w-[96vw] sm:max-w-4xl">
+        <DialogContent className="w-[96vw] max-w-[96vw] sm:max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
           {dialogTab === "listing-detail" && dialogListingData && (
             <>
-              <DialogHeader>
+              <DialogHeader className="shrink-0">
                 <DialogTitle>Listing #{dialogListingData.listingId} Details</DialogTitle>
                 <DialogDescription>
-                  Full details for this zero-price listing. Deactivate or delete it to clean up the catalog.
+                  Full details for this zero-price listing.
                 </DialogDescription>
               </DialogHeader>
 
@@ -1125,7 +1685,7 @@ export default function ProductIssuesPanel({ noBrandProducts: initialNoBrandProd
                   Loading product details...
                 </div>
               ) : productDetails ? (
-                <div className="space-y-4">
+                <div className="space-y-4 overflow-y-auto flex-1 min-h-0 pr-1">
                   <div className="grid gap-4 md:grid-cols-[200px_1fr]">
                     <div className="flex items-center justify-center overflow-hidden rounded-lg border bg-muted/20">
                       {productDetails.image_url ? (
@@ -1150,7 +1710,6 @@ export default function ProductIssuesPanel({ noBrandProducts: initialNoBrandProd
                           #{productDetails.id} - {productDetails.name}
                         </p>
                       </div>
-
                       <div>
                         <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                           Brand
@@ -1159,7 +1718,6 @@ export default function ProductIssuesPanel({ noBrandProducts: initialNoBrandProd
                           {productDetails.brand || <span className="italic">Not set</span>}
                         </p>
                       </div>
-
                       <div>
                         <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                           Description
@@ -1237,6 +1795,209 @@ export default function ProductIssuesPanel({ noBrandProducts: initialNoBrandProd
                       >
                         Open Product Page
                       </Link>
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Image Enlargement Modal */}
+      {enlargeImageUrl ? (
+        <Dialog open={!!enlargeImageUrl} onOpenChange={(open) => { if (!open) { setEnlargeImageUrl(null); setEnlargeImageName("") } }}>
+          <DialogContent className="w-[98vw] max-w-[98vw] p-0 sm:max-w-5xl">
+            <DialogHeader className="px-6 pt-6 pb-2">
+              <DialogTitle className="text-base">{enlargeImageName}</DialogTitle>
+              <DialogDescription className="break-all text-xs">{enlargeImageUrl}</DialogDescription>
+            </DialogHeader>
+            <div className="flex items-center justify-center overflow-auto bg-black/5" style={{ maxHeight: "75vh" }}>
+              {enlargeImageError ? (
+                <div className="flex flex-col items-center gap-2 p-8 text-red-500">
+                  <svg className="h-12 w-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span className="text-sm">Failed to load image</span>
+                </div>
+              ) : (
+                <img
+                  src={enlargeImageUrl}
+                  alt={enlargeImageName}
+                  className="max-h-[70vh] w-full object-contain"
+                  onError={() => setEnlargeImageError(true)}
+                />
+              )}
+            </div>
+            <div className="flex justify-end gap-2 px-6 pb-6 pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  window.open(enlargeImageUrl, "_blank")
+                }}
+              >
+                Open in New Tab
+              </Button>
+              <Button type="button" size="sm" onClick={() => { setEnlargeImageUrl(null); setEnlargeImageName("") }}>
+                Close
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      ) : null}
+
+      {/* Dialog: Edit Image */}
+      <Dialog
+        open={dialogTab === "edit-image"}
+        onOpenChange={(open) => { if (!open) closeDialog() }}
+      >
+        <DialogContent className="w-[96vw] max-w-[96vw] sm:max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+          {dialogTab === "edit-image" && (
+            <>
+              <DialogHeader className="shrink-0">
+                <DialogTitle>Edit Image for Product #{dialogProductId}</DialogTitle>
+                <DialogDescription>
+                  Verify the current image URL, enter a new one, and confirm.
+                </DialogDescription>
+              </DialogHeader>
+
+              {loadingDetails ? (
+                <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">
+                  Loading product details...
+                </div>
+              ) : productDetails ? (
+                <div className="space-y-4 overflow-y-auto flex-1 min-h-0 pr-1">
+                  <div className="grid gap-4 md:grid-cols-[200px_1fr]">
+                    <div className="flex items-center justify-center overflow-hidden rounded-lg border bg-muted/20">
+                      <ImagePreview url={productDetails.image_url} alt={productDetails.name} />
+                    </div>
+
+                    <div className="space-y-3">
+                      <div>
+                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                          Product
+                        </p>
+                        <p className="text-sm font-semibold">
+                          #{productDetails.id} - {productDetails.name}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                          Brand
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          {productDetails.brand || <span className="italic">Not set</span>}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                          Category ID
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          {productDetails.categoryId ?? "N/A"}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                      Description
+                    </p>
+                    <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                      {productDetails.description || "No description available."}
+                    </p>
+                  </div>
+
+                  {productDetails.listings.length > 0 ? (
+                    <div>
+                      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                        Associated Listings ({productDetails.listings.length})
+                      </p>
+                      <div className="mt-1 overflow-hidden rounded-md border">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>ID</TableHead>
+                              <TableHead>Ref</TableHead>
+                              <TableHead>Price</TableHead>
+                              <TableHead>Seller</TableHead>
+                              <TableHead className="text-right">Actions</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {productDetails.listings.map((listing) => (
+                              <TableRow key={`edit-img-listing-${listing.id}`}>
+                                <TableCell>#{listing.id}</TableCell>
+                                <TableCell className="font-mono text-xs">
+                                  {listing.ref ?? "-"}
+                                </TableCell>
+                                <TableCell>{toMoney(listing.price)}</TableCell>
+                                <TableCell>{listing.sellerName ?? "-"}</TableCell>
+                                <TableCell className="text-right">
+                                  <div className="flex justify-end gap-1">
+                                    {listing.product_url ? (
+                                      <Button asChild type="button" size="sm" variant="outline">
+                                        <Link href={listing.product_url} target="_blank">
+                                          Open Listing
+                                        </Link>
+                                      </Button>
+                                    ) : null}
+                                    <Button asChild type="button" size="sm" variant="outline">
+                                      <Link
+                                        href={`/admin/products/${productDetails.id}`}
+                                        target="_blank"
+                                      >
+                                        Open Product
+                                      </Link>
+                                    </Button>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  <div className="rounded-md border border-amber-200 bg-amber-50 p-4">
+                    <p className="text-xs font-semibold text-amber-800">Change Image URL</p>
+                    <p className="mt-1 text-xs text-amber-600">
+                      Enter a new image URL below.
+                    </p>
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <input
+                        className="h-9 flex-1 min-w-[300px] rounded-md border bg-background px-3 text-sm font-mono"
+                        placeholder="https://example.com/image.jpg"
+                        value={newImageUrl}
+                        onChange={(event) => setNewImageUrl(event.target.value)}
+                      />
+                    </div>
+                    {newImageUrl.trim() ? (
+                      <div className="mt-3 rounded-lg border bg-background overflow-hidden">
+                        <div className="relative min-h-[200px]">
+                          <ImagePreview url={newImageUrl.trim()} alt="New image preview" />
+                        </div>
+                        <div className="border-t px-3 py-2">
+                          <p className="text-xs text-muted-foreground break-all font-mono">{newImageUrl.trim()}</p>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+
+                  <div className="flex justify-end gap-2">
+                    <Button type="button" variant="outline" size="sm" onClick={closeDialog}>
+                      Cancel
+                    </Button>
+                    <Button
+                      type="button"
+                      onClick={applyUpdateImage}
+                      disabled={submitting || !newImageUrl.trim()}
+                    >
+                      {submitting ? "Saving..." : "Save Image URL"}
                     </Button>
                   </div>
                 </div>

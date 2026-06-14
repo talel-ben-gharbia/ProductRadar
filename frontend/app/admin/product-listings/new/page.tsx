@@ -10,8 +10,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import SmoothDropdown, { type SmoothDropdownOption } from "@/components/ui/smooth-dropdown"
 import { Switch } from "@/components/ui/switch"
-import { getProducts } from "@/services/admin/products"
-import { getSellers, type Seller } from "@/services/admin/sellers"
+import { getProducts } from "@/services/products"
+import { getSellers, type Seller } from "@/services/sellers"
 import type { Product } from "@/utils/types"
 
 export default function NewProductListingPage() {

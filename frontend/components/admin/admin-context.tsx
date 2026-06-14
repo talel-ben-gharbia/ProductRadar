@@ -26,12 +26,14 @@ type AdminContextValue = {
 
 const AdminContext = createContext<AdminContextValue | null>(null)
 
-export function AdminProvider({ children }: { children: ReactNode }) {
+export function AdminProvider({ children, initialAdmin }: { children: ReactNode; initialAdmin?: AdminData | null }) {
   const router = useRouter()
-  const [admin, setAdmin] = useState<AdminData | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [admin, setAdmin] = useState<AdminData | null>(initialAdmin ?? null)
+  const [loading, setLoading] = useState(!initialAdmin)
 
   useEffect(() => {
+    if (initialAdmin) return
+
     let cancelled = false
 
     fetch("/api/admin/auth/me")
@@ -47,7 +49,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [initialAdmin])
 
   const logout = useCallback(async () => {
     await fetch("/api/admin/auth/logout", { method: "POST" })

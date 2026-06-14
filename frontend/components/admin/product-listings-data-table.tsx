@@ -32,10 +32,10 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { useAdmin } from "@/components/admin/admin-context"
-import { splitListingToNewProduct } from "@/services/admin/quality"
-import type { CategoryRaw } from "@/services/admin/categories"
+import { splitListingToNewProduct } from "@/services/quality"
+import type { CategoryRaw } from "@/services/categories"
 import type { Product, ProductListing } from "@/utils/types"
-import type { Seller } from "@/services/admin/sellers"
+import type { Seller } from "@/services/sellers"
 
 type ProductListingsDataTableProps = {
   productListings: ProductListing[]
@@ -81,10 +81,10 @@ function SmoothDropdown({ value, options, onChange, className }: SmoothDropdownP
       </button>
 
       <div
-        className={`absolute z-20 mt-2 w-full origin-top rounded-md border bg-background p-1 shadow transition-all duration-200 ease-out ${
+        className={`absolute z-20 mt-2 w-full origin-top rounded-md border bg-background p-1 shadow ${
           isOpen
-            ? "pointer-events-auto translate-y-0 scale-100 opacity-100"
-            : "pointer-events-none -translate-y-1 scale-95 opacity-0"
+            ? "visible opacity-100"
+            : "invisible opacity-0"
         }`}
       >
         {options.map((option) => (
@@ -532,10 +532,10 @@ export default function ProductListingsDataTable({
             </Button>
 
             <div
-              className={`absolute right-0 z-20 mt-2 w-52 origin-top-right rounded-md border bg-background p-2 shadow transition-all duration-200 ease-out ${
+              className={`absolute right-0 z-20 mt-2 w-52 origin-top-right rounded-md border bg-background p-2 shadow ${
                 isColumnsOpen
-                  ? "pointer-events-auto translate-y-0 scale-100 opacity-100"
-                  : "pointer-events-none -translate-y-1 scale-95 opacity-0"
+                  ? "visible opacity-100"
+                  : "invisible opacity-0"
               }`}
             >
               {(

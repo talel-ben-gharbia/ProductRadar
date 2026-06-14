@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import CategoriesDataTable from "@/components/admin/categories-data-table"
 import CategoryTree from "@/components/admin/category-tree"
-import { getCategoriesWithParents } from "@/services/admin/categories"
+import { getCategoriesWithParents } from "@/services/categories"
 
 export default function CategoriesPage() {
 	const [categories, setCategories] = useState<

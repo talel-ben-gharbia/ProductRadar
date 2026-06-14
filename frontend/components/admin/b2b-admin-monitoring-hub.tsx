@@ -1,14 +1,19 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
+import { toast } from "sonner"
 import { 
+  Ban,
   Building2, 
+  CheckCircle,
   ChevronRight, 
   Download, 
   FileText, 
   Globe, 
   LayoutDashboard, 
   Package, 
+  PauseCircle,
   TrendingUp, 
   Users 
 } from "lucide-react"
@@ -18,6 +23,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { updateUserStatus } from "@/services/users"
 
 type Company = {
   id: number
@@ -51,10 +57,26 @@ type B2BReport = {
 }
 
 export default function B2BAdminMonitoringHub() {
+  const router = useRouter()
   const [companies, setCompanies] = useState<Company[]>([])
   const [markets, setMarkets] = useState<Market[]>([])
   const [reports, setReports] = useState<B2BReport[]>([])
   const [loading, setLoading] = useState(true)
+  const [updatingId, setUpdatingId] = useState<number | null>(null)
+
+  async function handleStatusUpdate(id: number, status: "ACTIVE" | "SUSPENDED" | "BANNED") {
+    setUpdatingId(id)
+    try {
+      await updateUserStatus(id, status)
+      setCompanies(prev => prev.map(c => c.id === id ? { ...c, status } : c))
+      setMarkets(prev => prev.map(m => m.id === id ? { ...m, status } : m))
+      toast.success(`User ${status.toLowerCase()}`)
+    } catch {
+      toast.error("Failed to update status")
+    } finally {
+      setUpdatingId(null)
+    }
+  }
 
   useEffect(() => {
     async function loadData() {
@@ -120,7 +142,7 @@ export default function B2BAdminMonitoringHub() {
                 <TabsTrigger value="companies" className="rounded-lg px-4">Companies</TabsTrigger>
                 <TabsTrigger value="markets" className="rounded-lg px-4">Markets</TabsTrigger>
               </TabsList>
-              <Button variant="outline" size="sm" className="gap-2 rounded-xl">
+              <Button variant="outline" size="sm" className="gap-2 rounded-xl" onClick={() => router.push("/admin/b2b-verification")}>
                 View All Partners <ChevronRight className="size-4" />
               </Button>
             </div>
@@ -134,7 +156,9 @@ export default function B2BAdminMonitoringHub() {
                       <TableHead className="font-semibold">Listings</TableHead>
                       <TableHead className="font-semibold">Reports</TableHead>
                       <TableHead className="font-semibold">Status</TableHead>
+                      <TableHead className="font-semibold">Account</TableHead>
                       <TableHead className="text-right font-semibold">Joined</TableHead>
+                      <TableHead className="text-right font-semibold">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -155,8 +179,32 @@ export default function B2BAdminMonitoringHub() {
                             {c.is_verified ? "VERIFIED" : "PENDING"}
                           </Badge>
                         </TableCell>
+                        <TableCell>
+                          <Badge variant={c.status === "BANNED" ? "destructive" : "default"} className={c.status === "SUSPENDED" ? "text-amber-600 bg-amber-50 border-amber-200 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-800" : c.status === "ACTIVE" ? "text-emerald-600 bg-emerald-50 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-800" : ""}>
+                            {c.status ?? "ACTIVE"}
+                          </Badge>
+                        </TableCell>
                         <TableCell className="text-right text-xs text-muted-foreground">
                           {new Date(c.joined_at).toLocaleDateString()}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-1">
+                            {c.status !== "ACTIVE" && (
+                              <Button variant="ghost" size="icon" className="size-7" title="Activate" disabled={updatingId === c.id} onClick={() => handleStatusUpdate(c.id, "ACTIVE")}>
+                                <CheckCircle className="size-4 text-green-600" />
+                              </Button>
+                            )}
+                            {c.status !== "SUSPENDED" && (
+                              <Button variant="ghost" size="icon" className="size-7" title="Suspend" disabled={updatingId === c.id} onClick={() => handleStatusUpdate(c.id, "SUSPENDED")}>
+                                <PauseCircle className="size-4 text-amber-600" />
+                              </Button>
+                            )}
+                            {c.status !== "BANNED" && (
+                              <Button variant="ghost" size="icon" className="size-7" title="Ban" disabled={updatingId === c.id} onClick={() => handleStatusUpdate(c.id, "BANNED")}>
+                                <Ban className="size-4 text-red-600" />
+                              </Button>
+                            )}
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -173,29 +221,55 @@ export default function B2BAdminMonitoringHub() {
                       <TableHead className="font-semibold">Market Name</TableHead>
                       <TableHead className="font-semibold">Reports</TableHead>
                       <TableHead className="font-semibold">Status</TableHead>
+                      <TableHead className="font-semibold">Account</TableHead>
                       <TableHead className="text-right font-semibold">Joined</TableHead>
+                      <TableHead className="text-right font-semibold">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
-                      <TableBody>
-                        {markets.slice(0, 10).map((m) => (
-                          <TableRow key={m.id} className="transition-colors hover:bg-muted/10">
-                            <TableCell>
-                              <div className="font-medium">{m.name}</div>
-                              <div className="text-xs text-muted-foreground">{m.email}</div>
-                            </TableCell>
-                            <TableCell>
-                              <span className="text-xs font-medium">{m.reports_count} generated</span>
-                            </TableCell>
-                            <TableCell>
-                              <Badge variant={m.is_verified ? "default" : "secondary"} className="text-[10px]">
-                                {m.is_verified ? "VERIFIED" : "PENDING"}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-right text-xs text-muted-foreground">
-                              {new Date(m.joined_at).toLocaleDateString()}
-                            </TableCell>
-                          </TableRow>
-                        ))}
+                  <TableBody>
+                    {markets.slice(0, 10).map((m) => (
+                      <TableRow key={m.id} className="transition-colors hover:bg-muted/10">
+                        <TableCell>
+                          <div className="font-medium">{m.name}</div>
+                          <div className="text-xs text-muted-foreground">{m.email}</div>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-xs font-medium">{m.reports_count} generated</span>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={m.is_verified ? "default" : "secondary"} className="text-[10px]">
+                            {m.is_verified ? "VERIFIED" : "PENDING"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={m.status === "BANNED" ? "destructive" : "default"} className={m.status === "SUSPENDED" ? "text-amber-600 bg-amber-50 border-amber-200 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-800" : m.status === "ACTIVE" ? "text-emerald-600 bg-emerald-50 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-800" : ""}>
+                            {m.status ?? "ACTIVE"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right text-xs text-muted-foreground">
+                          {new Date(m.joined_at).toLocaleDateString()}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-1">
+                            {m.status !== "ACTIVE" && (
+                              <Button variant="ghost" size="icon" className="size-7" title="Activate" disabled={updatingId === m.id} onClick={() => handleStatusUpdate(m.id, "ACTIVE")}>
+                                <CheckCircle className="size-4 text-green-600" />
+                              </Button>
+                            )}
+                            {m.status !== "SUSPENDED" && (
+                              <Button variant="ghost" size="icon" className="size-7" title="Suspend" disabled={updatingId === m.id} onClick={() => handleStatusUpdate(m.id, "SUSPENDED")}>
+                                <PauseCircle className="size-4 text-amber-600" />
+                              </Button>
+                            )}
+                            {m.status !== "BANNED" && (
+                              <Button variant="ghost" size="icon" className="size-7" title="Ban" disabled={updatingId === m.id} onClick={() => handleStatusUpdate(m.id, "BANNED")}>
+                                <Ban className="size-4 text-red-600" />
+                              </Button>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
                   </TableBody>
                 </Table>
               </Card>
@@ -236,7 +310,7 @@ export default function B2BAdminMonitoringHub() {
                  {reports.length === 0 && <div className="p-8 text-center text-xs text-muted-foreground">No reports available.</div>}
                </div>
                <div className="p-3 bg-muted/10 border-t">
-                 <Button variant="outline" className="w-full text-xs rounded-xl h-8">View All Reports Archive</Button>
+                  <Button variant="outline" className="w-full text-xs rounded-xl h-8" onClick={() => router.push("/admin/b2b-workflows/reports")}>View All Reports Archive</Button>
                </div>
              </CardContent>
            </Card>

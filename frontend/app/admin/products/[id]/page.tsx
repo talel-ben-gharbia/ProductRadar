@@ -1,10 +1,12 @@
 /* eslint-disable @next/next/no-img-element */
 
+import React, { Suspense } from "react"
 import Link from "next/link"
 import { notFound } from "next/navigation"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Skeleton } from "@/components/ui/skeleton"
 import ProductPriceHistoryChart from "@/components/admin/product-price-history-chart"
 import {
   Table,
@@ -14,10 +16,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { getCategoriesWithParents } from "@/services/admin/categories"
-import { getPriceHistory } from "@/services/admin/price-history"
-import { getProductListings } from "@/services/admin/product-listings"
-import { getProducts } from "@/services/admin/products"
+import { getCategoriesWithParents } from "@/services/categories"
+import { getPriceHistory } from "@/services/price-history"
+import { getProductListings } from "@/services/product-listings"
+import { getProducts } from "@/services/products"
 import type {
   CategoryWithParent,
   PriceHistoryEntry,
@@ -88,16 +90,7 @@ function getCategoryPath(product: Product, categories: CategoryWithParent[]): st
     .join(" > ")
 }
 
-export default async function ProductInfoPage({ params }: ProductInfoPageProps) {
-  const resolvedParams = await params
-  const parsedId = Number(resolvedParams.id)
-
-  if (!Number.isFinite(parsedId) || parsedId <= 0) {
-    notFound()
-  }
-
-  const productId = parsedId
-
+async function ProductInfoPageContent({ productId }: { productId: number }) {
   let product: Product | null = null
   let listings: ProductListing[] = []
   let priceHistory: PriceHistoryEntry[] = []
@@ -137,7 +130,7 @@ export default async function ProductInfoPage({ params }: ProductInfoPageProps) 
   }, {})
 
   return (
-    <section className="w-full max-w-none space-y-4">
+    <>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold">Product Information</h1>
         <div className="flex items-center gap-2">
@@ -286,6 +279,54 @@ export default async function ProductInfoPage({ params }: ProductInfoPageProps) 
           />
         </>
       ) : null}
+    </>
+  )
+}
+
+function ProductInfoFallback() {
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Skeleton className="h-8 w-56" />
+        <div className="flex gap-2">
+          <Skeleton className="h-9 w-32 rounded-md" />
+          <Skeleton className="h-9 w-44 rounded-md" />
+        </div>
+      </div>
+      <div className="rounded-lg border bg-card p-4 sm:p-5">
+        <div className="grid gap-6 lg:grid-cols-[minmax(340px,46%)_1fr] lg:items-start">
+          <Skeleton className="h-72 w-full rounded-lg" />
+          <div className="space-y-5">
+            <Skeleton className="h-8 w-48" />
+            <Skeleton className="h-6 w-32" />
+            <Skeleton className="h-20 w-full" />
+            <div className="grid gap-3 sm:grid-cols-3">
+              <Skeleton className="h-20 rounded-md" />
+              <Skeleton className="h-20 rounded-md" />
+              <Skeleton className="h-20 rounded-md" />
+            </div>
+          </div>
+        </div>
+      </div>
+      <Skeleton className="h-64 w-full rounded-lg" />
+      <Skeleton className="h-80 w-full rounded-lg" />
+    </div>
+  )
+}
+
+export default async function ProductInfoPage({ params }: ProductInfoPageProps) {
+  const resolvedParams = await params
+  const parsedId = Number(resolvedParams.id)
+
+  if (!Number.isFinite(parsedId) || parsedId <= 0) {
+    notFound()
+  }
+
+  return (
+    <section className="w-full max-w-none space-y-4">
+      <Suspense fallback={<ProductInfoFallback />}>
+        <ProductInfoPageContent productId={parsedId} />
+      </Suspense>
     </section>
   )
 }

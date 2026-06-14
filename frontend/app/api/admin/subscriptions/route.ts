@@ -1,61 +1,28 @@
-import { cookies } from "next/headers"
 import { NextRequest, NextResponse } from "next/server"
-
-import { verifySessionToken, COOKIE_NAME } from "@/lib/admin-session"
+import { getAdminSession, parseBackendResponse, adminHeaders } from "@/lib/admin-api-helper"
+import { cachedFetch } from "@/lib/fetch-with-cache"
 import { BACKEND_URL } from "@/utils/admin/constants"
 
-const ADMIN_API_KEY = process.env.ADMIN_API_KEY ?? "dev-admin-api-key-change-me"
-
-async function getAdminSession() {
-  const cookieStore = await cookies()
-  const token = cookieStore.get(COOKIE_NAME)?.value
-  if (!token) return null
-
-  const session = await verifySessionToken(token)
-  if (!session) return null
-
-  if (!["ROLE_SUPER_ADMIN", "ROLE_SUB_ADMIN"].includes(session.role)) {
-    return null
-  }
-
-  return session
-}
-
-async function parseBackendResponse(response: Response): Promise<unknown> {
-  const contentType = response.headers.get("content-type") ?? ""
-  if (contentType.includes("application/json")) {
-    return response.json().catch(() => ({}))
-  }
-
-  const text = await response.text().catch(() => "")
-  return { error: text.trim() || "Backend returned a non-JSON response." }
-}
-
 export async function GET(request: NextRequest) {
+  return handleAdminGetWithFetch(request, "/admin/api/subscriptions", "admin:api:subscriptions", 30)
+}
+
+async function handleAdminGetWithFetch(request: NextRequest, backendPath: string, baseCacheKey: string, cacheTtl = 30) {
   const session = await getAdminSession()
   if (!session) {
     return NextResponse.json({ error: "Forbidden." }, { status: 403 })
   }
 
-  const targetUrl = `${BACKEND_URL}/admin/api/subscriptions${request.nextUrl.search}`
+  const qs = request.nextUrl.searchParams.toString()
+  const targetUrl = `${BACKEND_URL}${backendPath}${request.nextUrl.search}`
+  const cacheKey = qs ? `${baseCacheKey}:${qs}` : baseCacheKey
 
   try {
-    const response = await fetch(targetUrl, {
-      method: "GET",
-      headers: {
-        "X-Admin-Api-Key": ADMIN_API_KEY,
-        "X-Admin-Role": session.role,
-        "X-Admin-Id": String(session.id),
-      },
-      cache: "no-store",
+    const data = await cachedFetch<unknown>(targetUrl, {
+      cacheKey,
+      cacheTtl,
+      headers: adminHeaders(session),
     })
-
-    const data = await parseBackendResponse(response)
-    if (!response.ok) {
-      const error = (data as { error?: string }).error || "Failed to fetch subscriptions."
-      return NextResponse.json({ error }, { status: response.status })
-    }
-
     return NextResponse.json(data)
   } catch {
     return NextResponse.json(
@@ -78,9 +45,7 @@ export async function POST(request: NextRequest) {
     const response = await fetch(targetUrl, {
       method: "POST",
       headers: {
-        "X-Admin-Api-Key": ADMIN_API_KEY,
-        "X-Admin-Role": session.role,
-        "X-Admin-Id": String(session.id),
+        ...adminHeaders(session),
         "Content-Type": "application/json",
       },
       body: rawBody,

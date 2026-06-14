@@ -45,11 +45,14 @@ final class AdminController extends AbstractController
             $admins = $adminRepository->findBy([], ['created_at' => 'DESC']);
 
             return array_map(static fn(Admin $admin) => [
-                'id'         => $admin->getId(),
-                'email'      => $admin->getEmail(),
-                'role'       => $admin->getRole(),
-                'created_at' => $admin->getCreatedAt()->format(\DateTimeInterface::ATOM),
-                'updated_at' => $admin->getUpdatedAt()->format(\DateTimeInterface::ATOM),
+                'id'           => $admin->getId(),
+                'email'        => $admin->getEmail(),
+                'role'         => $admin->getRole(),
+                'status'       => $admin->getStatus(),
+                'suspended_at' => $admin->getSuspendedAt()?->format(\DateTimeInterface::ATOM),
+                'banned_at'    => $admin->getBannedAt()?->format(\DateTimeInterface::ATOM),
+                'created_at'   => $admin->getCreatedAt()->format(\DateTimeInterface::ATOM),
+                'updated_at'   => $admin->getUpdatedAt()->format(\DateTimeInterface::ATOM),
             ], $admins);
         });
     }
@@ -126,6 +129,7 @@ final class AdminController extends AbstractController
             'id'         => $admin->getId(),
             'email'      => $admin->getEmail(),
             'role'       => $admin->getRole(),
+            'status'     => $admin->getStatus(),
             'created_at' => $admin->getCreatedAt()->format(\DateTimeInterface::ATOM),
         ], 201);
     }
@@ -263,6 +267,231 @@ final class AdminController extends AbstractController
         );
 
         return $this->json(['success' => true]);
+    }
+
+    #[Route('/{id}/suspend', name: 'admin_suspend', methods: ['POST'])]
+    public function suspend(
+        int $id,
+        Request $request,
+        AdminRepository $adminRepository,
+        EntityManagerInterface $em,
+        AdminApiGuard $adminApiGuard,
+        AuditService $auditService,
+    ): JsonResponse {
+        $authError = $adminApiGuard->assertAuthorized($request, true);
+        if ($authError !== null) {
+            return $authError;
+        }
+
+        $admin = $adminRepository->find($id);
+        if ($admin === null) {
+            return $this->json(['error' => 'Admin not found.'], 404);
+        }
+
+        // Cannot suspend yourself
+        $requestAdminId = $adminApiGuard->getAdminId($request);
+        if ($requestAdminId !== null && $requestAdminId === $admin->getId()) {
+            return $this->json(['error' => 'You cannot suspend your own account.'], 422);
+        }
+
+        // Cannot suspend the last super admin
+        if ($admin->getRole() === 'ROLE_SUPER_ADMIN') {
+            $superAdminCount = count($adminRepository->findBy(['role' => 'ROLE_SUPER_ADMIN', 'status' => 'active']));
+            if ($superAdminCount <= 1) {
+                return $this->json(['error' => 'Cannot suspend the last active super admin.'], 422);
+            }
+        }
+
+        if ($admin->getStatus() === 'suspended') {
+            return $this->json(['error' => 'Admin is already suspended.'], 422);
+        }
+
+        $admin->setStatus('suspended');
+        $admin->setSuspendedAt(new \DateTimeImmutable());
+        $admin->setSuspendedBy($requestAdminId);
+        $em->flush();
+
+        $this->invalidateCache($this->cache);
+
+        $currentAdmin = $this->resolveCurrentAdmin($request, $adminApiGuard, $adminRepository);
+        $auditService->logModeration(
+            $currentAdmin,
+            'ADMIN_SUSPEND',
+            'ADMIN',
+            $id,
+            ['status' => 'active'],
+            ['status' => 'suspended'],
+            $request->getClientIp(),
+        );
+
+        return $this->json([
+            'id'     => $admin->getId(),
+            'email'  => $admin->getEmail(),
+            'role'   => $admin->getRole(),
+            'status' => $admin->getStatus(),
+        ]);
+    }
+
+    #[Route('/{id}/unsuspend', name: 'admin_unsuspend', methods: ['POST'])]
+    public function unsuspend(
+        int $id,
+        Request $request,
+        AdminRepository $adminRepository,
+        EntityManagerInterface $em,
+        AdminApiGuard $adminApiGuard,
+        AuditService $auditService,
+    ): JsonResponse {
+        $authError = $adminApiGuard->assertAuthorized($request, true);
+        if ($authError !== null) {
+            return $authError;
+        }
+
+        $admin = $adminRepository->find($id);
+        if ($admin === null) {
+            return $this->json(['error' => 'Admin not found.'], 404);
+        }
+
+        if ($admin->getStatus() !== 'suspended') {
+            return $this->json(['error' => 'Admin is not suspended.'], 422);
+        }
+
+        $admin->setStatus('active');
+        $admin->setSuspendedAt(null);
+        $admin->setSuspendedBy(null);
+        $em->flush();
+
+        $this->invalidateCache($this->cache);
+
+        $currentAdmin = $this->resolveCurrentAdmin($request, $adminApiGuard, $adminRepository);
+        $auditService->logModeration(
+            $currentAdmin,
+            'ADMIN_UNSUSPEND',
+            'ADMIN',
+            $id,
+            ['status' => 'suspended'],
+            ['status' => 'active'],
+            $request->getClientIp(),
+        );
+
+        return $this->json([
+            'id'     => $admin->getId(),
+            'email'  => $admin->getEmail(),
+            'role'   => $admin->getRole(),
+            'status' => $admin->getStatus(),
+        ]);
+    }
+
+    #[Route('/{id}/ban', name: 'admin_ban', methods: ['POST'])]
+    public function ban(
+        int $id,
+        Request $request,
+        AdminRepository $adminRepository,
+        EntityManagerInterface $em,
+        AdminApiGuard $adminApiGuard,
+        AuditService $auditService,
+    ): JsonResponse {
+        $authError = $adminApiGuard->assertAuthorized($request, true);
+        if ($authError !== null) {
+            return $authError;
+        }
+
+        $admin = $adminRepository->find($id);
+        if ($admin === null) {
+            return $this->json(['error' => 'Admin not found.'], 404);
+        }
+
+        // Cannot ban yourself
+        $requestAdminId = $adminApiGuard->getAdminId($request);
+        if ($requestAdminId !== null && $requestAdminId === $admin->getId()) {
+            return $this->json(['error' => 'You cannot ban your own account.'], 422);
+        }
+
+        // Cannot ban the last super admin
+        if ($admin->getRole() === 'ROLE_SUPER_ADMIN') {
+            $superAdminCount = count($adminRepository->findBy(['role' => 'ROLE_SUPER_ADMIN', 'status' => 'active']));
+            if ($superAdminCount <= 1) {
+                return $this->json(['error' => 'Cannot ban the last active super admin.'], 422);
+            }
+        }
+
+        if ($admin->getStatus() === 'banned') {
+            return $this->json(['error' => 'Admin is already banned.'], 422);
+        }
+
+        $previousStatus = $admin->getStatus();
+        $admin->setStatus('banned');
+        $admin->setBannedAt(new \DateTimeImmutable());
+        $admin->setBannedBy($requestAdminId);
+        $em->flush();
+
+        $this->invalidateCache($this->cache);
+
+        $currentAdmin = $this->resolveCurrentAdmin($request, $adminApiGuard, $adminRepository);
+        $auditService->logModeration(
+            $currentAdmin,
+            'ADMIN_BAN',
+            'ADMIN',
+            $id,
+            ['status' => $previousStatus],
+            ['status' => 'banned'],
+            $request->getClientIp(),
+        );
+
+        return $this->json([
+            'id'     => $admin->getId(),
+            'email'  => $admin->getEmail(),
+            'role'   => $admin->getRole(),
+            'status' => $admin->getStatus(),
+        ]);
+    }
+
+    #[Route('/{id}/unban', name: 'admin_unban', methods: ['POST'])]
+    public function unban(
+        int $id,
+        Request $request,
+        AdminRepository $adminRepository,
+        EntityManagerInterface $em,
+        AdminApiGuard $adminApiGuard,
+        AuditService $auditService,
+    ): JsonResponse {
+        $authError = $adminApiGuard->assertAuthorized($request, true);
+        if ($authError !== null) {
+            return $authError;
+        }
+
+        $admin = $adminRepository->find($id);
+        if ($admin === null) {
+            return $this->json(['error' => 'Admin not found.'], 404);
+        }
+
+        if ($admin->getStatus() !== 'banned') {
+            return $this->json(['error' => 'Admin is not banned.'], 422);
+        }
+
+        $admin->setStatus('active');
+        $admin->setBannedAt(null);
+        $admin->setBannedBy(null);
+        $em->flush();
+
+        $this->invalidateCache($this->cache);
+
+        $currentAdmin = $this->resolveCurrentAdmin($request, $adminApiGuard, $adminRepository);
+        $auditService->logModeration(
+            $currentAdmin,
+            'ADMIN_UNBAN',
+            'ADMIN',
+            $id,
+            ['status' => 'banned'],
+            ['status' => 'active'],
+            $request->getClientIp(),
+        );
+
+        return $this->json([
+            'id'     => $admin->getId(),
+            'email'  => $admin->getEmail(),
+            'role'   => $admin->getRole(),
+            'status' => $admin->getStatus(),
+        ]);
     }
 
     private function resolveCurrentAdmin(

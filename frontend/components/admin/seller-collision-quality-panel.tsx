@@ -26,7 +26,7 @@ import {
   deleteProductListing,
   setProductListingActive,
   updateProductListing,
-} from "@/services/admin/product-listings"
+} from "@/services/product-listings"
 
 type CollisionListing = {
   id: number

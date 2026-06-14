@@ -30,6 +30,7 @@ type DuplicateItem = {
   name: string
   brand: string | null
   description: string
+  specs_json?: Record<string, string> | null
 }
 
 type CompareItem = {
@@ -37,6 +38,7 @@ type CompareItem = {
   name: string
   brand: string | null
   description: string
+  specs_json?: Record<string, string> | null
 }
 
 type ActionTab = "merge" | "split" | "compare"
@@ -90,6 +92,7 @@ function toCompareItems(primaryId: number | null, duplicateIds: number[], allGro
           name: item.name,
           brand: item.brand,
           description: item.description,
+          specs_json: item.specs_json,
         })
       }
     }
@@ -100,6 +103,7 @@ function toCompareItems(primaryId: number | null, duplicateIds: number[], allGro
     name: `Product #${id}`,
     brand: null,
     description: "",
+    specs_json: null,
   })
 }
 
@@ -162,6 +166,10 @@ function GroupSection({
             const nameDiffers = hasVariation(group.items, (item) => item.name)
             const brandDiffers = hasVariation(group.items, (item) => item.brand ?? "")
             const descriptionDiffers = hasVariation(group.items, (item) => item.description)
+            const specsDiffers = hasVariation(group.items, (item) => {
+              const s = item.specs_json
+              return s ? JSON.stringify(s) : ""
+            })
 
             return (
               <details key={group.key} className="rounded-lg border bg-card p-4">
@@ -233,6 +241,7 @@ function GroupSection({
                         <TableHead className={nameDiffers ? "bg-amber-50 dark:bg-amber-950/20" : undefined}>Product</TableHead>
                         <TableHead className={brandDiffers ? "bg-amber-50 dark:bg-amber-950/20" : undefined}>Brand</TableHead>
                         <TableHead className={descriptionDiffers ? "bg-amber-50 dark:bg-amber-950/20" : undefined}>Description</TableHead>
+                        <TableHead className={specsDiffers ? "bg-amber-50 dark:bg-amber-950/20" : undefined}>Specifications</TableHead>
                         <TableHead className="w-44 text-right">Action</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -258,6 +267,11 @@ function GroupSection({
                           <TableCell className={brandDiffers ? "bg-amber-50 dark:bg-amber-950/20" : undefined}>{item.brand ?? "-"}</TableCell>
                           <TableCell className={`max-w-md truncate text-muted-foreground ${descriptionDiffers ? "bg-amber-50 dark:bg-amber-950/20" : ""}`} title={item.description}>
                             {item.description || "-"}
+                          </TableCell>
+                          <TableCell className={`max-w-[180px] truncate text-muted-foreground ${specsDiffers ? "bg-amber-50 dark:bg-amber-950/20" : ""}`} title={item.specs_json ? Object.entries(item.specs_json).map(([k, v]) => `${k}: ${v}`).join("\n") : undefined}>
+                            {item.specs_json && Object.keys(item.specs_json).length > 0
+                              ? Object.entries(item.specs_json).slice(0, 3).map(([k, v]) => `${k}: ${v}`).join(", ") + (Object.keys(item.specs_json).length > 3 ? "..." : "")
+                              : "-"}
                           </TableCell>
                           <TableCell className="text-right">
                             {item.productId !== null ? (
@@ -366,10 +380,14 @@ function filterAndSortGroups(
 
     return group.items.some((item) => {
       const productIdText = item.productId !== null ? String(item.productId) : ""
+      const specsText = item.specs_json
+        ? Object.entries(item.specs_json).map(([k, v]) => `${k} ${v}`).join(" ")
+        : ""
       return (
         normalize(item.name).includes(normalizedQuery) ||
         normalize(item.brand).includes(normalizedQuery) ||
         normalize(item.description).includes(normalizedQuery) ||
+        normalize(specsText).includes(normalizedQuery) ||
         productIdText.includes(normalizedQuery)
       )
     })
@@ -414,70 +432,46 @@ export default function DuplicatesManagementPanel({
   const [collisionFilter, setCollisionFilter] = useState<"all" | "with-collision" | "without-collision">("all")
   const [levelFilter, setLevelFilter] = useState<"all" | "level1" | "level2">("all")
 
-  const [excludedProductsByGroup, setExcludedProductsByGroup] = useState<ExcludedProductsByGroup>(() => {
-    if (typeof window === "undefined") {
-      return {}
-    }
+  const [excludedProductsByGroup, setExcludedProductsByGroup] = useState<ExcludedProductsByGroup>({})
+  const [groupNotesByKey, setGroupNotesByKey] = useState<GroupNotesByKey>({})
 
+  useEffect(() => {
     try {
       const raw = window.localStorage.getItem("duplicates:excluded-products-by-group")
-      if (!raw) {
-        return {}
-      }
-
-      const parsed = JSON.parse(raw)
-      if (!parsed || typeof parsed !== "object") {
-        return {}
-      }
-
-      const next: ExcludedProductsByGroup = {}
-      for (const [groupKey, value] of Object.entries(parsed)) {
-        if (!Array.isArray(value)) {
-          continue
-        }
-
-        const ids = value
-          .map((entry) => Number(entry))
-          .filter((id) => Number.isInteger(id) && id > 0)
-
-        if (ids.length > 0) {
-          next[groupKey] = Array.from(new Set(ids))
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        if (parsed && typeof parsed === "object") {
+          const next: ExcludedProductsByGroup = {}
+          for (const [groupKey, value] of Object.entries(parsed)) {
+            if (!Array.isArray(value)) continue
+            const ids = (value as unknown[])
+              .map((entry) => Number(entry))
+              .filter((id) => Number.isInteger(id) && id > 0)
+            if (ids.length > 0) {
+              next[groupKey] = Array.from(new Set(ids))
+            }
+          }
+          setExcludedProductsByGroup(next)
         }
       }
-
-      return next
-    } catch {
-      return {}
-    }
-  })
-  const [groupNotesByKey, setGroupNotesByKey] = useState<GroupNotesByKey>(() => {
-    if (typeof window === "undefined") {
-      return {}
-    }
+    } catch {}
 
     try {
       const raw = window.localStorage.getItem("duplicates:group-notes-by-key")
-      if (!raw) {
-        return {}
-      }
-
-      const parsed = JSON.parse(raw)
-      if (!parsed || typeof parsed !== "object") {
-        return {}
-      }
-
-      const next: GroupNotesByKey = {}
-      for (const [groupKey, value] of Object.entries(parsed)) {
-        if (typeof value === "string") {
-          next[groupKey] = value
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        if (parsed && typeof parsed === "object") {
+          const next: GroupNotesByKey = {}
+          for (const [groupKey, value] of Object.entries(parsed)) {
+            if (typeof value === "string") {
+              next[groupKey] = value
+            }
+          }
+          setGroupNotesByKey(next)
         }
       }
-
-      return next
-    } catch {
-      return {}
-    }
-  })
+    } catch {}
+  }, [])
 
   function persistExcludedProductsByGroup(next: ExcludedProductsByGroup) {
     setExcludedProductsByGroup(next)
@@ -629,7 +623,7 @@ export default function DuplicatesManagementPanel({
 
   function getLevelInfo(key: string): { levelTitle: string; subtitle: string } {
     if (key.startsWith("ref:")) return { levelTitle: "Level 1", subtitle: "Same Reference" }
-    return { levelTitle: "Level 2", subtitle: "Same Name + Description + Brand" }
+    return { levelTitle: "Level 2", subtitle: "Same Name + Description + Brand + Specs" }
   }
 
   const openNextMergeGroup = useCallback(() => {
@@ -844,7 +838,7 @@ export default function DuplicatesManagementPanel({
         {levelFilter === "all" || levelFilter === "level2" ? (
           <GroupSection
             title="Level 2"
-            subtitle="Same Name + Description + Brand"
+            subtitle="Same Name + Description + Brand + Specs"
             groups={filteredLevel2Groups}
             badgeClass="bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400"
             onMergeGroup={openMergePopupFromGroup}

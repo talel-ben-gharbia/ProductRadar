@@ -89,6 +89,7 @@ export const EN_DICT: Record<string, string> = {
   "listing.for": " for \"{term}\"",
   // Homepage
   "home.popular": "Popular",
+  "home.popular_brands": "Popular brands",
   "home.new_arrivals": "New arrivals",
   "home.best_deals": "Best deals",
   "home.gaming": "Gaming",
@@ -107,11 +108,13 @@ export const EN_DICT: Record<string, string> = {
   "home.start_browsing": "Start browsing",
   "home.premium_plans": "Premium plans",
   "home.featured": "Featured products",
+  "home.featured_explanation": "Top products with the most sellers and active offers",
   "home.no_products": "No products available yet.",
   "home.no_deals": "No deals available right now.",
   "home.trending": "Trending now",
   "home.no_trending": "No trending products right now.",
   "home.browse_all": "Browse all products",
+  "home.sponsored": "Recommended for you",
   "home.gaming_zone": "Gaming zone",
   "home.no_gaming": "No gaming products available.",
   "home.explore_gaming": "Explore gaming",
@@ -393,6 +396,9 @@ export const EN_DICT: Record<string, string> = {
   "spec.option.color": "Color",
   "spec.option.weight": "Weight",
   "spec.option.water": "Water Resistance",
+  // B2B
+  "b2b.partner_title": "Become a Partner",
+  "b2b.partner_subtitle": "Choose your account type and fill in your details.",
   // Price alert
   "alert.activate": "Activate a price alert",
   "alert.update": "Update alert",
@@ -501,6 +507,7 @@ export const FR_DICT: Record<string, string> = {
   "listing.for": " pour \"{term}\"",
   // Homepage
   "home.popular": "Populaires",
+  "home.popular_brands": "Marques populaires",
   "home.new_arrivals": "Nouveautés",
   "home.best_deals": "Meilleures offres",
   "home.gaming": "Gaming",
@@ -519,11 +526,13 @@ export const FR_DICT: Record<string, string> = {
   "home.start_browsing": "Commencer",
   "home.premium_plans": "Offres premium",
   "home.featured": "Produits en vedette",
+  "home.featured_explanation": "Meilleurs produits avec le plus de vendeurs et d'offres actives",
   "home.no_products": "Aucun produit disponible pour le moment.",
   "home.no_deals": "Aucune offre disponible pour le moment.",
   "home.trending": "Tendances",
   "home.no_trending": "Aucun produit tendance pour le moment.",
   "home.browse_all": "Voir tous les produits",
+  "home.sponsored": "Recommandé pour vous",
   "home.gaming_zone": "Espace gaming",
   "home.no_gaming": "Aucun produit gaming disponible.",
   "home.explore_gaming": "Explorer le gaming",
@@ -805,6 +814,9 @@ export const FR_DICT: Record<string, string> = {
   "spec.option.color": "Couleur",
   "spec.option.weight": "Poids",
   "spec.option.water": "Résistance à l'eau",
+  // B2B
+  "b2b.partner_title": "Devenir Partenaire",
+  "b2b.partner_subtitle": "Choisissez votre type de compte et remplissez vos coordonnées.",
   // Price alert
   "alert.activate": "Activer une alerte prix",
   "alert.update": "Modifier l'alerte",

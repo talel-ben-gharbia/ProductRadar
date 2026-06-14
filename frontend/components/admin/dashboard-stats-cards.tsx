@@ -7,8 +7,8 @@ import {
 } from "lucide-react"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { getCategoriesWithParents } from "@/services/admin/categories"
-import { getProductListings } from "@/services/admin/product-listings"
+import { getCategoriesWithParents } from "@/services/categories"
+import { getProductListings } from "@/services/product-listings"
 
 type DashboardStats = {
   totalListedProducts: number

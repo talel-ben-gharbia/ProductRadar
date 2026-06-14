@@ -26,6 +26,21 @@ class Admin implements UserInterface, PasswordAuthenticatedUserInterface
     #[ORM\Column(length: 50)]
     private string $role = 'ROLE_SUB_ADMIN';
 
+    #[ORM\Column(length: 20)]
+    private string $status = 'active';
+
+    #[ORM\Column(nullable: true)]
+    private ?\DateTimeImmutable $suspended_at = null;
+
+    #[ORM\Column(nullable: true)]
+    private ?int $suspended_by = null;
+
+    #[ORM\Column(nullable: true)]
+    private ?\DateTimeImmutable $banned_at = null;
+
+    #[ORM\Column(nullable: true)]
+    private ?int $banned_by = null;
+
     #[ORM\Column]
     private \DateTimeImmutable $created_at;
 
@@ -87,6 +102,66 @@ class Admin implements UserInterface, PasswordAuthenticatedUserInterface
     public function getUpdatedAt(): \DateTimeImmutable
     {
         return $this->updated_at;
+    }
+
+    public function getStatus(): string
+    {
+        return $this->status;
+    }
+
+    public function setStatus(string $status): static
+    {
+        $this->status = $status;
+
+        return $this;
+    }
+
+    public function getSuspendedAt(): ?\DateTimeImmutable
+    {
+        return $this->suspended_at;
+    }
+
+    public function setSuspendedAt(\DateTimeImmutable $suspended_at): static
+    {
+        $this->suspended_at = $suspended_at;
+
+        return $this;
+    }
+
+    public function getSuspendedBy(): ?int
+    {
+        return $this->suspended_by;
+    }
+
+    public function setSuspendedBy(?int $suspended_by): static
+    {
+        $this->suspended_by = $suspended_by;
+
+        return $this;
+    }
+
+    public function getBannedAt(): ?\DateTimeImmutable
+    {
+        return $this->banned_at;
+    }
+
+    public function setBannedAt(\DateTimeImmutable $banned_at): static
+    {
+        $this->banned_at = $banned_at;
+
+        return $this;
+    }
+
+    public function getBannedBy(): ?int
+    {
+        return $this->banned_by;
+    }
+
+    public function setBannedBy(?int $banned_by): static
+    {
+        $this->banned_by = $banned_by;
+
+        return $this;
     }
 
     public function setUpdatedAt(\DateTimeImmutable $updated_at): static

@@ -5,8 +5,8 @@ import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { getRawCategories, type CategoryRaw } from "@/services/admin/categories"
-import { getSellers, type Seller } from "@/services/admin/sellers"
+import { getRawCategories, type CategoryRaw } from "@/services/categories"
+import { getSellers, type Seller } from "@/services/sellers"
 
 type DefaultLinkResponse = {
   exists: boolean
@@ -68,10 +68,33 @@ async function triggerManualScrape(payload: {
   }
 }
 
+/** Fetch the unique category IDs that a specific seller has active listings for */
+async function fetchCategoryIdsForSeller(sellerId: number): Promise<Set<number>> {
+  try {
+    const res = await fetch(`/api/product-listings?sellerId=${sellerId}&limit=1000`, {
+      cache: "no-store",
+    })
+    if (!res.ok) return new Set()
+    const data = await res.json()
+    const listings: Array<{ categoryId?: number | null }> = Array.isArray(data)
+      ? data
+      : (data?.items ?? data?.data ?? [])
+    const ids = new Set<number>()
+    for (const l of listings) {
+      if (typeof l.categoryId === "number") ids.add(l.categoryId)
+    }
+    return ids
+  } catch {
+    return new Set()
+  }
+}
+
 export default function ScrapingWebhookPanel() {
   const [sellers, setSellers] = useState<Seller[]>([])
-  const [categories, setCategories] = useState<CategoryRaw[]>([])
+  const [allCategories, setAllCategories] = useState<CategoryRaw[]>([])
   const [loadingOptions, setLoadingOptions] = useState(true)
+  const [sellerCategoryIds, setSellerCategoryIds] = useState<Set<number> | null>(null)
+  const [loadingSellerCategories, setLoadingSellerCategories] = useState(false)
 
   const [sellerId, setSellerId] = useState("")
   const [categoryId, setCategoryId] = useState("")
@@ -82,6 +105,12 @@ export default function ScrapingWebhookPanel() {
 
   const [submitting, setSubmitting] = useState(false)
 
+  /** Categories filtered to those the selected seller actually has products in */
+  const filteredCategories = useMemo(() => {
+    if (!sellerCategoryIds || sellerCategoryIds.size === 0) return allCategories
+    return allCategories.filter((cat) => sellerCategoryIds.has(cat.id))
+  }, [allCategories, sellerCategoryIds])
+
   const selectedSellerName = useMemo(() => {
     const id = Number(sellerId)
     return sellers.find((seller) => seller.id === id)?.name ?? "-"
@@ -89,8 +118,8 @@ export default function ScrapingWebhookPanel() {
 
   const selectedCategoryName = useMemo(() => {
     const id = Number(categoryId)
-    return categories.find((category) => category.id === id)?.name ?? "-"
-  }, [categoryId, categories])
+    return filteredCategories.find((category) => category.id === id)?.name ?? "-"
+  }, [categoryId, filteredCategories])
 
   useEffect(() => {
     let cancelled = false
@@ -104,7 +133,7 @@ export default function ScrapingWebhookPanel() {
         ])
         if (cancelled) return
         setSellers(sellerRows)
-        setCategories(categoryRows)
+        setAllCategories(categoryRows)
       } catch (error) {
         if (cancelled) return
         toast.error(error instanceof Error ? error.message : "Failed to load sellers/categories.")
@@ -121,6 +150,28 @@ export default function ScrapingWebhookPanel() {
       cancelled = true
     }
   }, [])
+
+  /** When seller changes, fetch the categories that seller has products in */
+  useEffect(() => {
+    const id = Number(sellerId)
+    if (!Number.isInteger(id) || id <= 0) {
+      setSellerCategoryIds(null)
+      setCategoryId("")
+      return
+    }
+
+    let cancelled = false
+    setLoadingSellerCategories(true)
+    setCategoryId("") // reset category when seller changes
+
+    fetchCategoryIdsForSeller(id).then((ids) => {
+      if (cancelled) return
+      setSellerCategoryIds(ids)
+      setLoadingSellerCategories(false)
+    })
+
+    return () => { cancelled = true }
+  }, [sellerId])
 
   useEffect(() => {
     let cancelled = false
@@ -205,6 +256,12 @@ export default function ScrapingWebhookPanel() {
     }
   }
 
+  const hasNoCategoriesForSeller =
+    sellerId !== "" &&
+    !loadingSellerCategories &&
+    sellerCategoryIds !== null &&
+    sellerCategoryIds.size === 0
+
   return (
     <div className="space-y-4 rounded-xl border bg-card p-4">
       <div className="space-y-1">
@@ -231,18 +288,36 @@ export default function ScrapingWebhookPanel() {
         </div>
 
         <div className="space-y-2">
-          <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Category</label>
-          <select
-            className="h-9 w-full rounded-md border bg-background px-3 text-sm"
-            value={categoryId}
-            onChange={(event) => setCategoryId(event.target.value)}
-            disabled={loadingOptions}
-          >
-            <option value="">Select category</option>
-            {categories.map((category) => (
-              <option key={category.id} value={category.id}>{`#${category.id} - ${category.name}`}</option>
-            ))}
-          </select>
+          <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Category
+            {sellerId && !loadingSellerCategories && sellerCategoryIds !== null && (
+              <span className="ml-1.5 text-[10px] font-normal text-muted-foreground">
+                ({filteredCategories.length} available for this seller)
+              </span>
+            )}
+          </label>
+          {loadingSellerCategories ? (
+            <div className="h-9 w-full rounded-md border bg-background px-3 flex items-center">
+              <span className="text-xs text-muted-foreground animate-pulse">Loading categories…</span>
+            </div>
+          ) : (
+            <select
+              className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+              value={categoryId}
+              onChange={(event) => setCategoryId(event.target.value)}
+              disabled={loadingOptions || loadingSellerCategories}
+            >
+              <option value="">Select category</option>
+              {filteredCategories.map((category) => (
+                <option key={category.id} value={category.id}>{`#${category.id} - ${category.name}`}</option>
+              ))}
+            </select>
+          )}
+          {hasNoCategoriesForSeller && (
+            <p className="text-xs text-amber-600">
+              ⚠ No products found for this seller. All categories are shown.
+            </p>
+          )}
         </div>
       </div>
 
@@ -288,12 +363,13 @@ export default function ScrapingWebhookPanel() {
             setUseCategoryLink(true)
             setManualLink("")
             setResolvedCategoryLink(null)
+            setSellerCategoryIds(null)
           }}
           disabled={submitting}
         >
           Reset
         </Button>
-        <Button onClick={handleTrigger} disabled={submitting || loadingOptions}>
+        <Button onClick={handleTrigger} disabled={submitting || loadingOptions || loadingSellerCategories}>
           {submitting ? "Triggering..." : "Start Manual Scrape"}
         </Button>
       </div>

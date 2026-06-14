@@ -3,22 +3,29 @@
 import Link from "next/link"
 import Image from "next/image"
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
+import type { B2BBannerCampaign } from "@/types/b2b"
 import {
   ArrowRight,
+  BarChart3,
+  Bell,
+  ChevronDown,
   ChevronRight,
   Flame,
   Gamepad2,
   Menu,
   ShoppingBag,
   Sparkles,
+  Star,
   TicketPercent,
+  Trophy,
   type LucideIcon,
 } from "lucide-react"
 
 import { useApiUrl } from "@/lib/use-api-url"
 import { useI18n } from "@/lib/i18n-context"
 import { translateCategoryName } from "@/lib/category-translations"
-import { Badge } from "@/components/ui/badge"
+import BannerCarousel from "./banner-carousel"
+
 import { Button } from "@/components/ui/button"
 import {
   NavigationMenu,
@@ -34,9 +41,23 @@ type ShowcaseProduct = {
   id: number
   name: string
   imageUrl: string | null
+  brand: string | null
   offersCount: number
   bestPrice: number | null
   discountPercent: number
+}
+
+type SponsoredProduct = {
+  id: number
+  listing_id: number
+  product_id: number
+  product_name: string
+  product_image: string | null
+  product_brand: string | null
+  price: number | null
+  seller_name: string | null
+  seller_id: number | null
+  in_stock: boolean
 }
 
 type CategoryWithChildren = {
@@ -49,6 +70,77 @@ type CategoryWithChildren = {
 function toMoney(value: number | null): string {
   if (value === null) return "-"
   return `${value.toFixed(3)} DT`
+}
+
+// ─── Logo Configuration (logo.dev) ───────────────────────────────────────────────
+const LOGO_DEV_PUBLIC_KEY = process.env.NEXT_PUBLIC_LOGO_DEV_KEY || 'pk_RNnnRFTeTLerEF502SvlPg'
+
+/** Map of brand/seller name (lowercase) → domain */
+const BRAND_DOMAIN_MAP: Record<string, string> = {
+  msi: "msi.com",
+  apple: "apple.com",
+  lenovo: "lenovo.com",
+  asus: "asus.com",
+  samsung: "samsung.com",
+  hp: "hp.com",
+  dell: "dell.com",
+  xiaomi: "xiaomi.com",
+  jbl: "jbl.com",
+  redragon: "redragon.com",
+  gigabyte: "gigabyte.com",
+  infinix: "infinixmobiles.com",
+  "d-link": "dlink.com",
+  havit: "havit.com",
+  "white shark": "whitesharkgaming.com",
+  hoco: "hoco.com",
+  sony: "sony.com",
+  lg: "lg.com",
+  acer: "acer.com",
+  logitech: "logitech.com",
+  corsair: "corsair.com",
+  razer: "razer.com",
+  intel: "intel.com",
+  amd: "amd.com",
+  nvidia: "nvidia.com",
+  microsoft: "microsoft.com",
+  huawei: "huawei.com",
+}
+
+/** Premium partner sellers with their website domains */
+const SELLER_CONFIG: { name: string; domain: string; color: string }[] = [
+  { name: "Gamershop", domain: "gamershop.tn", color: "from-red-500 to-rose-600" },
+  { name: "iStore", domain: "istore.com.tn", color: "from-slate-700 to-slate-900" },
+  { name: "L'Officiel", domain: "lofficielshop.tn", color: "from-amber-500 to-orange-600" },
+  { name: "Mytek", domain: "mytek.tn", color: "from-blue-500 to-indigo-600" },
+  { name: "Tunisianet", domain: "tunisianet.com.tn", color: "from-emerald-500 to-teal-600" },
+]
+
+/** Logo component using logo.dev */
+function CompanyLogo({
+  name, domain, fallbackGradient = "from-slate-600 to-slate-700", size = "h-14 w-14", bgSize = "p-2"
+}: {
+  name: string
+  domain?: string
+  fallbackGradient?: string
+  size?: string
+  bgSize?: string
+}) {
+  const [imgError, setImgError] = useState(false)
+
+  return (
+    <div className={`flex ${size} items-center justify-center rounded-2xl shadow-sm overflow-hidden ${domain && !imgError ? `bg-white ${bgSize}` : `bg-gradient-to-br ${fallbackGradient}`}`}>
+      {domain && !imgError ? (
+        <img
+          src={`https://img.logo.dev/${domain}?token=${LOGO_DEV_PUBLIC_KEY}`}
+          alt={name}
+          className="h-full w-full object-contain"
+          onError={() => setImgError(true)}
+        />
+      ) : (
+        <span className="text-sm font-bold text-white">{name.charAt(0).toUpperCase()}</span>
+      )}
+    </div>
+  )
 }
 
 const GAMING_KEYWORDS = [
@@ -204,16 +296,101 @@ function prefetchCategory(ids: string, locale: string) {
   fetch(`/api/product-listings?lang=${locale}`).catch(() => {})
 }
 
+/** Collapsible section: Premium Partners */
+function PremiumPartnersSection({
+  sellers,
+}: {
+  sellers: { id: number; name: string }[]
+}) {
+  const [open, setOpen] = useState(false)
+
+  // Match DB sellers to SELLER_CONFIG by name (case-insensitive)
+  const matchedSellers = SELLER_CONFIG.filter((cfg) =>
+    sellers.some((s) => s.name.toLowerCase().includes(cfg.name.toLowerCase().replace("'", "")) ||
+      cfg.name.toLowerCase().includes(s.name.toLowerCase()))
+  )
+  // Fall back to raw sellers if no matches
+  const displaySellers = matchedSellers.length > 0 ? matchedSellers : sellers.slice(0, 5).map((s) => ({
+    name: s.name,
+    domain: undefined as string | undefined,
+    color: "from-slate-600 to-slate-700",
+  }))
+
+  if (displaySellers.length === 0) return null
+
+  return (
+    <section className="overflow-hidden rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white shadow-sm">
+      {/* Clickable header */}
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between gap-4 px-6 py-4 transition-colors hover:bg-slate-50/80"
+      >
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-amber-100 to-orange-100">
+            <Trophy className="h-5 w-5 text-amber-600" />
+          </div>
+          <div className="text-left">
+            <p className="text-base font-bold tracking-tight text-slate-900">Nos partenaires premium</p>
+            <p className="text-xs text-muted-foreground">Offres exclusives de nos partenaires officiels</p>
+          </div>
+        </div>
+        <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white shadow-xs transition-transform duration-300 ${open ? "rotate-180" : ""}`}>
+          <ChevronDown className="h-4 w-4 text-slate-500" />
+        </div>
+      </button>
+
+      {/* Expandable content */}
+      {open && (
+        <div className="border-t border-slate-100 px-6 pb-6 pt-5 space-y-6 animate-in fade-in slide-in-from-top-2 duration-200">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5">
+            {displaySellers.map((cfg) => {
+              const rawSeller = sellers.find((s) =>
+                s.name.toLowerCase().includes(cfg.name.toLowerCase().replace("'", "")) ||
+                cfg.name.toLowerCase().includes(s.name.toLowerCase())
+              )
+              const searchName = rawSeller?.name ?? cfg.name
+              return (
+                <Link
+                  key={cfg.name}
+                  href={`/B2C/products?search=${encodeURIComponent(searchName)}`}
+                  className="group flex flex-col items-center gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-xs transition-all hover:-translate-y-1 hover:border-amber-300 hover:shadow-md"
+                >
+                  <CompanyLogo
+                    name={cfg.name}
+                    domain={"domain" in cfg ? (cfg as { domain?: string }).domain : undefined}
+                    fallbackGradient={cfg.color}
+                    size="h-16 w-16"
+                    bgSize="p-2.5"
+                  />
+                  <div className="text-center">
+                    <p className="text-xs font-semibold text-slate-800 group-hover:text-amber-600 transition-colors">{cfg.name}</p>
+                    <p className="mt-0.5 text-[10px] font-medium text-amber-500">Voir les offres →</p>
+                  </div>
+                </Link>
+              )
+            })}
+          </div>
+        </div>
+      )}
+    </section>
+  )
+}
+
 export default function ClientHomePage() {
   const apiUrl = useApiUrl()
   const { locale, t } = useI18n()
   const [loading, setLoading] = useState(true)
   const [rootCategories, setRootCategories] = useState<CategoryWithChildren[]>([])
   const [productsForShowcase, setProductsForShowcase] = useState<ShowcaseProduct[]>([])
+  const [sponsoredProducts, setSponsoredProducts] = useState<SponsoredProduct[]>([])
+  const [banners, setBanners] = useState<B2BBannerCampaign[]>([])
+  const [popularBrands, setPopularBrands] = useState<{ id: number; name: string; product_count: number }[]>([])
+  const [sellers, setSellers] = useState<{ id: number; name: string }[]>([])
 
   const homeCacheLoadedRef = useRef(false)
 
-  useLayoutEffect(() => {
+  useEffect(() => {
     const cats = homeReadLs<CategoryWithChildren[]>("b2c_home_cats")
     const showcase = homeReadLs<ShowcaseProduct[]>("b2c_home_showcase")
     if (cats && showcase) {
@@ -229,10 +406,12 @@ export default function ClientHomePage() {
 
     async function load() {
       try {
-        const [catsRes, prodsRes, listRes] = await Promise.all([
+        const [catsRes, prodsRes, listRes, sponsoredRes, bannersRes] = await Promise.all([
           homeCachedFetch(apiUrl("/api/categories")),
           homeCachedFetch(apiUrl("/api/products?limit=200")),
           homeCachedFetch(apiUrl("/api/product-listings")),
+          homeCachedFetch(apiUrl("/api/b2c/sponsored-products")),
+          fetch("/api/b2c/banners").then((r) => r.json()).catch(() => ({ items: [] })),
         ])
 
         if (cancelled) return
@@ -300,12 +479,13 @@ export default function ClientHomePage() {
         }
 
         const showcase = rawProducts
-          .map((product: { id: number; name: string; image_url: string | null; categoryId?: number | null }) => {
+          .map((product: { id: number; name: string; image_url: string | null; brand?: string | null; categoryId?: number | null }) => {
             const stats = listingStatsByProduct.get(product.id)
             return {
               id: product.id,
               name: product.name,
               imageUrl: product.image_url,
+              brand: product.brand ?? null,
               offersCount: stats?.count ?? 0,
               bestPrice: stats?.bestPrice ?? null,
               discountPercent: stats?.bestDiscount ?? 0,
@@ -314,8 +494,15 @@ export default function ClientHomePage() {
           .filter((p: ShowcaseProduct) => p.offersCount > 0)
           .sort((a: ShowcaseProduct, b: ShowcaseProduct) => b.offersCount - a.offersCount)
 
+        const sponsoredRaw: any = sponsoredRes ?? { items: [] }
+        const sponsored: SponsoredProduct[] = (sponsoredRaw.items ?? [])
+          .filter((s: any) => s.in_stock !== false)
+          .slice(0, 10)
+
         if (!cancelled) {
           setProductsForShowcase(showcase)
+          setSponsoredProducts(sponsored)
+          setBanners((bannersRes as { items?: B2BBannerCampaign[] })?.items ?? [])
           setLoading(false)
           homeWriteLs("b2c_home_showcase", showcase)
           homeWriteLs("b2c_home_cats", filtered)
@@ -327,6 +514,28 @@ export default function ClientHomePage() {
     }
 
     load()
+    // Fetch brands from brand table
+    homeCachedFetch(apiUrl("/api/brands")).then((data) => {
+      if (!cancelled && Array.isArray(data)) {
+        const BLACKLIST = new Set([
+          "generic", "reseller_blacklist", "tunisianet", "gamershop", "myteck",
+          "tunisia net", "gamershop tunisie", "myteck tunisie", "unknown",
+        ])
+        const filtered = data
+          .filter((b: any) => {
+            const name = (b.name ?? "").toLowerCase().trim()
+            return !BLACKLIST.has(name) && b.product_count > 0
+          })
+          .slice(0, 16)
+        setPopularBrands(filtered)
+      }
+    }).catch(() => {})
+    // Fetch sellers for premium partners section
+    homeCachedFetch(apiUrl("/api/sellers")).then((data) => {
+      if (!cancelled && Array.isArray(data)) {
+        setSellers(data.slice(0, 12))
+      }
+    }).catch(() => {})
     return () => { cancelled = true }
   }, [])
 
@@ -344,7 +553,9 @@ export default function ClientHomePage() {
   const heroFeatured = productsForShowcase.slice(0, 3)
   const featuredGrid = productsForShowcase.slice(0, 8)
   const bestDeals = [...productsForShowcase].sort((a, b) => b.discountPercent - a.discountPercent).slice(0, 6)
-  const trendingGrid = productsForShowcase.slice(0, 8)
+  const trendingGrid = [...productsForShowcase]
+    .sort((a, b) => (b.offersCount * (1 + b.discountPercent / 100)) - (a.offersCount * (1 + a.discountPercent / 100)))
+    .slice(0, 8)
   const gamingGrid = productsForShowcase.filter((p) => matchesGaming(p.name)).slice(0, 4)
 
   return (
@@ -510,9 +721,92 @@ export default function ClientHomePage() {
           </div>
         </section>
 
+        {/* ─── Banner Ads ─── */}
+        {banners.length > 0 && (
+          <section>
+            <BannerCarousel banners={banners} />
+          </section>
+        )}
+
+        {/* ─── Popular Brands (with Brandfetch real logos) ─── */}
+        {popularBrands.length > 0 && (
+          <section>
+            <SectionHeader icon={Star} label={t("home.popular_brands")} color="bg-purple-100" iconColor="text-purple-600" />
+            <p className="-mt-3 mb-5 text-xs text-muted-foreground">Discover the most followed brands on ProductRadar.</p>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
+              {popularBrands.map((brand) => {
+                const domain = BRAND_DOMAIN_MAP[brand.name.toLowerCase().trim()]
+                return (
+                  <Link
+                    key={brand.id}
+                    href={`/B2C/products?search=${encodeURIComponent(brand.name)}`}
+                    className="group flex flex-col items-center gap-2 rounded-xl border border-slate-200 bg-white p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:border-purple-300 hover:shadow-md"
+                  >
+                    <CompanyLogo
+                      name={brand.name}
+                      domain={domain}
+                      fallbackGradient="from-purple-500 to-indigo-600"
+                      size="h-14 w-14"
+                      bgSize="p-2"
+                    />
+                    <span className="line-clamp-1 text-center text-xs font-medium text-slate-700 group-hover:text-purple-600">{brand.name}</span>
+                    <span className="text-[10px] text-muted-foreground">{brand.product_count.toLocaleString("en-US")} produits</span>
+                  </Link>
+                )
+              })}
+            </div>
+          </section>
+        )}
+
+        {/* ─── Premium Partners ─── */}
+        {sellers.length > 0 && (
+          <PremiumPartnersSection sellers={sellers} />
+        )}
+
+        {/* ─── Sponsored Products (Recommended for you) ─── */}
+        {sponsoredProducts.length > 0 && (
+          <section>
+            <SectionHeader icon={Star} label={t("home.sponsored")} color="bg-amber-100" iconColor="text-amber-600" />
+            <div className="flex gap-4 overflow-x-auto pb-2">
+              {sponsoredProducts.map((sp) => (
+                <Link
+                  key={sp.id}
+                  href={`/B2C/products/${sp.product_id}`}
+                  className="group flex min-w-[230px] max-w-[230px] shrink-0 flex-col rounded-xl border border-slate-200 bg-white p-4 shadow-xs transition-all duration-200 hover:-translate-y-1 hover:border-amber-300 hover:shadow-md"
+                >
+                  <div className="relative mb-3 flex h-44 items-center justify-center overflow-hidden rounded-lg bg-gradient-to-b from-slate-50 to-slate-100/50">
+                    {sp.product_image ? (
+                      <Image
+                        src={sp.product_image}
+                        alt={sp.product_name}
+                        width={230}
+                        height={176}
+                        className="h-full w-full object-contain p-3 transition-all duration-500 group-hover:scale-110"
+                        unoptimized
+                      />
+                    ) : (
+                      <ShoppingBag className="h-12 w-12 text-slate-200" />
+                    )}
+                  </div>
+                  <div className="flex flex-1 flex-col justify-between gap-1.5">
+                    <h3 className="line-clamp-2 text-sm font-medium leading-snug text-slate-800">{sp.product_name}</h3>
+                    {sp.price !== null && sp.price > 0 && (
+                      <p className="text-lg font-bold text-orange-600">{toMoney(sp.price)}</p>
+                    )}
+                    {sp.seller_name && (
+                      <p className="truncate text-xs font-medium text-slate-400">{sp.seller_name}</p>
+                    )}
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
+
         {/* ─── Featured Products ─── */}
         <section>
           <SectionHeader icon={Sparkles} label={t("home.featured")} href="/B2C/products" color="bg-amber-100" iconColor="text-amber-600" />
+          <p className="-mt-3 mb-5 text-xs text-muted-foreground">{t("home.featured_explanation")}</p>
           {featuredGrid.length > 0 ? (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {featuredGrid.map((product, i) => (
@@ -543,7 +837,7 @@ export default function ClientHomePage() {
 
         {/* ─── Trending Now ─── */}
         <section>
-          <SectionHeader icon={Flame} label={t("home.trending")} href="/B2C/products" color="bg-red-100" iconColor="text-red-500" />
+          <SectionHeader icon={Flame} label={t("home.trending")} href="/B2C/products?sort=trending" color="bg-red-100" iconColor="text-red-500" />
           {trendingGrid.length > 0 ? (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {trendingGrid.map((product) => (
@@ -568,6 +862,7 @@ export default function ClientHomePage() {
             </Button>
           </div>
         </section>
+
 
         {/* ─── Gaming Zone ─── */}
         <section className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200/50">
@@ -609,8 +904,83 @@ export default function ClientHomePage() {
         </section>
 
         {/* ─── Footer ─── */}
-        <footer className="border-t border-slate-200 pb-6 pt-8 text-center">
-          <p className="text-xs text-slate-400">
+        <footer className="border-t border-slate-200 pt-10 pb-6">
+          {/* About section - top */}
+          <div className="mb-8 rounded-2xl bg-gradient-to-br from-slate-50 to-white p-6 shadow-sm ring-1 ring-slate-200/50">
+            <div className="grid gap-8 lg:grid-cols-[1.5fr_1fr_1fr_1fr]">
+              <div>
+                <h3 className="flex items-center gap-2 text-lg font-bold tracking-tight text-slate-900">
+                  <ShoppingBag className="h-5 w-5 text-orange-500" />
+                  ProductRadar
+                </h3>
+                <p className="mt-3 text-sm leading-6 text-slate-500">
+                  {t("home.hero_description")}
+                </p>
+              </div>
+              <div>
+                <h4 className="mb-3 text-sm font-bold tracking-tight text-slate-900">Service client</h4>
+                <ul className="space-y-2 text-sm text-slate-500">
+                  <li><Link href="/B2C/contact-us" className="transition-colors hover:text-orange-600">Contactez-nous</Link></li>
+                  <li><Link href="/B2C/contact-us" className="transition-colors hover:text-orange-600">Aide / FAQ</Link></li>
+                </ul>
+              </div>
+              <div>
+                <h4 className="mb-3 text-sm font-bold tracking-tight text-slate-900">Découvrir</h4>
+                <ul className="space-y-2 text-sm text-slate-500">
+                  <li><Link href="/B2C/products" className="transition-colors hover:text-orange-600">Tous les produits</Link></li>
+                  <li><Link href="/B2C/products?sort=discount" className="transition-colors hover:text-orange-600">Meilleures offres</Link></li>
+                  <li><Link href="/B2C/products?sort=trending" className="transition-colors hover:text-orange-600">Tendances</Link></li>
+                  <li><Link href="/B2C/contact-us?section=marques" className="transition-colors hover:text-orange-600">Marques populaires</Link></li>
+                  <li><Link href="/B2C/contact-us?section=paiement" className="transition-colors hover:text-orange-600">Abonnements Premium</Link></li>
+                </ul>
+              </div>
+              <div>
+                <h4 className="mb-3 text-sm font-bold tracking-tight text-slate-900">Fonctionnalités</h4>
+                <ul className="space-y-2 text-sm text-slate-500">
+                  <li className="flex items-center gap-1.5"><Bell className="h-3.5 w-3.5" /> Alertes de prix</li>
+                  <li className="flex items-center gap-1.5"><BarChart3 className="h-3.5 w-3.5" /> Historique des prix</li>
+                  <li className="flex items-center gap-1.5"><ShoppingBag className="h-3.5 w-3.5" /> Comparaison d'offres</li>
+                  <li className="flex items-center gap-1.5"><Star className="h-3.5 w-3.5" /> Favoris et watchlist</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          {/* Separator */}
+          <Separator className="mb-8" />
+
+          {/* Bottom links */}
+          <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4 mb-6">
+            <div>
+              <h4 className="mb-3 text-sm font-bold tracking-tight text-slate-900">Service client</h4>
+              <ul className="space-y-2 text-sm text-slate-500">
+                <li><Link href="/B2C/contact-us" className="transition-colors hover:text-orange-600">Contactez-nous</Link></li>
+                <li><Link href="/B2C/contact-us" className="transition-colors hover:text-orange-600">Aide</Link></li>
+              </ul>
+            </div>
+            <div>
+              <h4 className="mb-3 text-sm font-bold tracking-tight text-slate-900">Marques</h4>
+              <ul className="space-y-2 text-sm text-slate-500">
+                <li><Link href="/B2C/contact-us?section=marques" className="transition-colors hover:text-orange-600">Marques populaires</Link></li>
+              </ul>
+            </div>
+            <div>
+              <h4 className="mb-3 text-sm font-bold tracking-tight text-slate-900">Promotions</h4>
+              <ul className="space-y-2 text-sm text-slate-500">
+                <li><Link href="/B2C/products?sort=discount" className="transition-colors hover:text-orange-600">Meilleures offres</Link></li>
+                <li><Link href="/B2C/products?sort=trending" className="transition-colors hover:text-orange-600">Tendances</Link></li>
+              </ul>
+            </div>
+            <div>
+              <h4 className="mb-3 text-sm font-bold tracking-tight text-slate-900">Paiement</h4>
+              <ul className="space-y-2 text-sm text-slate-500">
+                <li><Link href="/B2C/profile/plans" className="transition-colors hover:text-orange-600">Abonnements</Link></li>
+                <li><Link href="/B2C/contact-us?section=paiement" className="transition-colors hover:text-orange-600">Plans et tarifs</Link></li>
+              </ul>
+            </div>
+          </div>
+          <Separator className="my-6" />
+          <p className="text-center text-xs text-slate-400">
             {t("home.footer_tagline")}
           </p>
         </footer>

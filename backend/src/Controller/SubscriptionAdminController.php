@@ -2,6 +2,7 @@
 
 namespace App\Controller;
 
+use App\Entity\B2B;
 use App\Entity\B2BCompany;
 use App\Entity\B2BMarket;
 use App\Entity\Subscription;
@@ -57,12 +58,22 @@ final class SubscriptionAdminController extends AbstractController
                 continue;
             }
 
-            $subscription = $user->getSubscription();
-            if (!$subscription instanceof Subscription) {
-                $subscription = $subscriptionLifecycleService->ensureDefaultFreePlan($user);
-                $entityManager->persist($subscription);
-                $created++;
-                continue;
+            if ($user instanceof B2B) {
+                $subscription = $this->entityManager->getRepository(Subscription::class)->findActiveByOwner(
+                    $user instanceof B2BMarket ? 'MARKET' : 'COMPANY',
+                    (int) $user->getId()
+                );
+                if ($subscription === null) {
+                    continue;
+                }
+            } else {
+                $subscription = $user->getSubscription();
+                if (!$subscription instanceof Subscription) {
+                    $subscription = $subscriptionLifecycleService->ensureDefaultFreePlan($user);
+                    $entityManager->persist($subscription);
+                    $created++;
+                    continue;
+                }
             }
 
             $changed = $subscriptionLifecycleService->resyncExistingSubscription($subscription);
@@ -112,14 +123,36 @@ final class SubscriptionAdminController extends AbstractController
 
         return $this->cachedGet($this->cache, $cacheKey, function () use ($subscriptionRepository, $filters, $limit, $offset): array {
             $result = $subscriptionRepository->paginateForAdmin($filters, $limit, $offset);
+
+            $b2bOwnerIds = [];
+            foreach ($result['items'] as $sub) {
+                $type = strtoupper((string) $sub->getOwnerType());
+                if (in_array($type, ['COMPANY', 'B2B_COMPANY', 'MARKET', 'B2B_MARKET'], true)) {
+                    $b2bOwnerIds[(int) $sub->getOwnerId()] = true;
+                }
+            }
+
+            if (!empty($b2bOwnerIds)) {
+                $filtered = [];
+                foreach ($result['items'] as $sub) {
+                    $type = strtoupper((string) $sub->getOwnerType());
+                    if ($type === 'USER' && $sub->getPlanType() === 'FREE' && isset($b2bOwnerIds[(int) $sub->getOwnerId()])) {
+                        continue;
+                    }
+                    $filtered[] = $sub;
+                }
+                $result['items'] = $filtered;
+            }
+
             $stats = $subscriptionRepository->getAdminStats();
+            $owners = $this->loadOwners($result['items']);
 
             return [
-                'items' => array_map(fn(Subscription $subscription) => $this->serializeSubscription($subscription), $result['items']),
+                'items' => array_map(fn(Subscription $subscription) => $this->serializeSubscription($subscription, $owners), $result['items']),
                 'pagination' => [
                     'limit' => $limit,
                     'offset' => $offset,
-                    'total' => $result['total'],
+                    'total' => count($result['items']),
                 ],
                 'stats' => $stats,
             ];
@@ -144,15 +177,16 @@ final class SubscriptionAdminController extends AbstractController
                 throw new \RuntimeException('Subscription not found.');
             }
 
-            return $this->serializeSubscription($subscription);
+            return $this->serializeSubscription($subscription, $this->loadOwners([$subscription]));
         });
     }
 
-    private function serializeSubscription(Subscription $subscription): array
+    private function serializeSubscription(Subscription $subscription, array $owners): array
     {
         $ownerType = $subscription->getOwnerType();
         $ownerId = $subscription->getOwnerId();
-        $ownerName = $this->resolveOwnerName($ownerType, $ownerId);
+        $ownerKey = strtoupper((string) $ownerType) . ':' . $ownerId;
+        $ownerName = $owners[$ownerKey] ?? 'Unknown';
 
         return [
             'id' => $subscription->getId(),
@@ -171,45 +205,67 @@ final class SubscriptionAdminController extends AbstractController
         ];
     }
 
-    private function resolveOwnerName(?string $ownerType, ?int $ownerId): string
+    private function loadOwners(array $subscriptions): array
     {
-        if ($ownerType === null || $ownerId === null || $ownerId <= 0) {
-            return 'Unknown';
+        $userIds = [];
+        $companyIds = [];
+        $marketIds = [];
+
+        foreach ($subscriptions as $sub) {
+            $type = strtoupper((string) $sub->getOwnerType());
+            $id = $sub->getOwnerId();
+            if ($id === null || $id <= 0) continue;
+
+            match ($type) {
+                'USER' => $userIds[] = $id,
+                'COMPANY', 'B2B_COMPANY' => $companyIds[] = $id,
+                'MARKET', 'B2B_MARKET' => $marketIds[] = $id,
+                default => null,
+            };
         }
 
-        return match (strtoupper($ownerType)) {
-            'USER' => $this->resolveUserName($ownerId),
-            'COMPANY', 'B2B_COMPANY' => $this->resolveCompanyName($ownerId),
-            'MARKET', 'B2B_MARKET' => $this->resolveMarketName($ownerId),
-            default => 'Unknown (' . $ownerType . ')',
-        };
-    }
+        $owners = [];
 
-    private function resolveUserName(int $userId): string
-    {
-        $user = $this->entityManager->find(User::class, $userId);
-        if (!$user instanceof User) {
-            return "User #{$userId}";
+        if (!empty($userIds)) {
+            $users = $this->entityManager->createQueryBuilder()
+                ->select('u.id, u.email, u.firebase_uid')
+                ->from(User::class, 'u')
+                ->where('u.id IN (:ids)')
+                ->setParameter('ids', array_unique($userIds))
+                ->getQuery()
+                ->getScalarResult();
+            foreach ($users as $u) {
+                $owners['USER:' . $u['id']] = (string) ($u['email'] ?? $u['firebase_uid'] ?? "User #{$u['id']}");
+            }
         }
-        return (string) ($user->getEmail() ?? $user->getFirebaseUid() ?? "User #{$userId}");
-    }
 
-    private function resolveCompanyName(int $companyId): string
-    {
-        $company = $this->entityManager->find(B2BCompany::class, $companyId);
-        if (!$company instanceof B2BCompany) {
-            return "Company #{$companyId}";
+        if (!empty($companyIds)) {
+            $companies = $this->entityManager->createQueryBuilder()
+                ->select('c.id, c.name, c.full_name, c.email')
+                ->from(B2BCompany::class, 'c')
+                ->where('c.id IN (:ids)')
+                ->setParameter('ids', array_unique($companyIds))
+                ->getQuery()
+                ->getScalarResult();
+            foreach ($companies as $c) {
+                $owners['COMPANY:' . $c['id']] = (string) ($c['name'] ?? $c['full_name'] ?? $c['email'] ?? "Company #{$c['id']}");
+            }
         }
-        return (string) ($company->getName() ?? $company->getFullName() ?? $company->getEmail() ?? "Company #{$companyId}");
-    }
 
-    private function resolveMarketName(int $marketId): string
-    {
-        $market = $this->entityManager->find(B2BMarket::class, $marketId);
-        if (!$market instanceof B2BMarket) {
-            return "Market #{$marketId}";
+        if (!empty($marketIds)) {
+            $markets = $this->entityManager->createQueryBuilder()
+                ->select('m.id, m.name, m.sector, m.email')
+                ->from(B2BMarket::class, 'm')
+                ->where('m.id IN (:ids)')
+                ->setParameter('ids', array_unique($marketIds))
+                ->getQuery()
+                ->getScalarResult();
+            foreach ($markets as $m) {
+                $owners['MARKET:' . $m['id']] = (string) ($m['name'] ?? $m['sector'] ?? $m['email'] ?? "Market #{$m['id']}");
+            }
         }
-        return (string) ($market->getName() ?? $market->getSector() ?? $market->getEmail() ?? "Market #{$marketId}");
+
+        return $owners;
     }
 
 }

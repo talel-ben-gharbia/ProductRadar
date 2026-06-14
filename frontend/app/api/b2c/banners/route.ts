@@ -9,7 +9,11 @@ export async function GET() {
     })
     const body = await res.json()
     if (res.ok) {
-      return NextResponse.json(body)
+      const items = (body.items ?? []).map((b: Record<string, unknown>) => ({
+        ...b,
+        company_name: b.name ?? null,
+      }))
+      return NextResponse.json({ items })
     }
     return NextResponse.json({ error: body?.error ?? "Backend error" }, { status: res.status })
   } catch (err) {

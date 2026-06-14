@@ -1,11 +1,16 @@
 "use client"
 
+import dynamic from "next/dynamic"
 import { useEffect, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
 import { B2BProvider, type B2BSummary } from "@/components/B2B/b2b-context"
-import B2BNavbar from "@/components/B2B/b2b-navbar"
-import B2BSidebar from "@/components/B2B/b2b-sidebar"
 import { SidebarProvider } from "@/components/ui/sidebar"
+
+const B2BNavbar = dynamic(() => import("@/components/B2B/b2b-navbar"), { ssr: false })
+const B2BSidebar = dynamic(() => import("@/components/B2B/b2b-sidebar"), {
+  ssr: false,
+  loading: () => <div className="w-64 shrink-0" />,
+})
 
 function B2BLoginRedirect() {
   const router = useRouter()

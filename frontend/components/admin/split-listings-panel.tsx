@@ -7,8 +7,8 @@ import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { getProductListings } from "@/services/admin/product-listings"
-import { splitListingToNewProduct } from "@/services/admin/quality"
+import { getProductListings } from "@/services/product-listings"
+import { splitListingToNewProduct } from "@/services/quality"
 import type { ProductListing } from "@/utils/types"
 
 type CandidateItem = {

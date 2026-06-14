@@ -19,9 +19,6 @@ class Product
     #[ORM\Column(length: 255)]
     private ?string $name = null;
 
-    #[ORM\Column(length: 255, nullable: true)]
-    private ?string $brand = null;
-
     #[ORM\ManyToOne(targetEntity: Brand::class)]
     #[ORM\JoinColumn(name: 'brand_id', referencedColumnName: 'id', nullable: true)]
     private ?Brand $brandEntity = null;
@@ -42,7 +39,7 @@ class Product
     /**
      * @var Collection<int, ProductListing>
      */
-    #[ORM\OneToMany(targetEntity: ProductListing::class, mappedBy: 'product', cascade: ['remove'], orphanRemoval: true)]
+    #[ORM\OneToMany(targetEntity: ProductListing::class, mappedBy: 'product', cascade: ['remove'])]
     private Collection $productListings;
 
     /**
@@ -83,14 +80,7 @@ class Product
 
     public function getBrand(): ?string
     {
-        return $this->brand;
-    }
-
-    public function setBrand(?string $brand): static
-    {
-        $this->brand = $brand;
-
-        return $this;
+        return $this->brandEntity?->getName();
     }
 
     public function getBrandEntity(): ?Brand

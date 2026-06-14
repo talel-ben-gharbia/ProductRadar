@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 
-import { getProductListings } from "@/services/admin/product-listings"
-import { getProducts } from "@/services/admin/products"
+import { getProductListings } from "@/services/product-listings"
+import { getProducts } from "@/services/products"
 
 type SearchResult = {
   id: number

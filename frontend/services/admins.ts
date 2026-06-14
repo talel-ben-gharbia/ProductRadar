@@ -2,6 +2,9 @@
   id: number
   email: string
   role: string
+  status: string
+  suspended_at?: string | null
+  banned_at?: string | null
   created_at: string
   updated_at: string
 }
@@ -52,4 +55,40 @@ export async function deleteAdmin(id: number): Promise<void> {
     const data = await response.json().catch(() => ({}))
     throw new Error((data as { error?: string }).error || "Failed to delete admin.")
   }
+}
+
+export async function suspendAdmin(id: number): Promise<AdminUser> {
+  const response = await fetch(`/api/admin/admins/${id}/suspend`, { method: "POST" })
+  const data = await response.json()
+  if (!response.ok) {
+    throw new Error((data as { error?: string }).error || "Failed to suspend admin.")
+  }
+  return data
+}
+
+export async function unsuspendAdmin(id: number): Promise<AdminUser> {
+  const response = await fetch(`/api/admin/admins/${id}/unsuspend`, { method: "POST" })
+  const data = await response.json()
+  if (!response.ok) {
+    throw new Error((data as { error?: string }).error || "Failed to unsuspend admin.")
+  }
+  return data
+}
+
+export async function banAdmin(id: number): Promise<AdminUser> {
+  const response = await fetch(`/api/admin/admins/${id}/ban`, { method: "POST" })
+  const data = await response.json()
+  if (!response.ok) {
+    throw new Error((data as { error?: string }).error || "Failed to ban admin.")
+  }
+  return data
+}
+
+export async function unbanAdmin(id: number): Promise<AdminUser> {
+  const response = await fetch(`/api/admin/admins/${id}/unban`, { method: "POST" })
+  const data = await response.json()
+  if (!response.ok) {
+    throw new Error((data as { error?: string }).error || "Failed to unban admin.")
+  }
+  return data
 }

@@ -4,11 +4,12 @@ namespace App\Controller;
 
 use App\Entity\PartnerRequest;
 use App\Entity\User;
-use App\Entity\B2BCompany;
-use App\Entity\B2BMarket;
+
 use App\Repository\PartnerRequestRepository;
 use App\Repository\UserRepository;
 use Doctrine\DBAL\Exception\ForeignKeyConstraintViolationException;
+use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
+use Doctrine\DBAL\Exception\NotNullConstraintViolationException;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -94,33 +95,34 @@ final class PartnerRequestController extends AbstractController
         $partnerRequest->setNotes($notes);
         $partnerRequest->setCreatedAt(new \DateTimeImmutable());
 
-        // Also create an unverified B2B user record immediately so the business can be tracked.
-        $b2bUser = $accountType === 'B2B_MARKET' ? new B2BMarket() : new B2BCompany();
-        $b2bUser->setEmail($email);
-        $b2bUser->setFullName($fullName);
-        // firebase_uid is non-nullable in the schema; use a temporary placeholder until provisioning completes
-        $b2bUser->setFirebaseUid('pending_' . uniqid('', true));
-        $b2bUser->setIsActive(true);
-        $b2bUser->setAccountStatus('PENDING_REVIEW');
-
-        $b2bUser->setName($companyName);
-        $b2bUser->setSector($companyMarket);
-        $b2bUser->setCompanyCountry($companyCountry);
-        $b2bUser->setCompanyWebsite($companyWebsite);
-        $b2bUser->setB2bStatus('PENDING');
-        $b2bUser->setJoinedAt(new \DateTimeImmutable());
-        $b2bUser->setUpdatedAt(null);
-        $b2bUser->setIsVerified(false);
-
+        // Only persist the partner request. The B2B user is created during admin approval
+        // in B2BVerificationController, which handles the full entity hierarchy correctly.
         $entityManager->getConnection()->beginTransaction();
         try {
             $entityManager->persist($partnerRequest);
-            $entityManager->persist($b2bUser);
             $entityManager->flush();
             $entityManager->getConnection()->commit();
+        } catch (UniqueConstraintViolationException $e) {
+            $entityManager->getConnection()->rollBack();
+            $logger->warning('Partner request duplicate constraint: ' . $e->getMessage(), [
+                'email' => $email,
+                'accountType' => $accountType,
+            ]);
+
+            // If the email already exists as a user, return a specific message.
+            $existingUser = $userRepository->findOneBy(['email' => $email]);
+            if ($existingUser instanceof User) {
+                return $this->json([
+                    'error' => 'An account with this email already exists.',
+                ], 409);
+            }
+
+            return $this->json([
+                'error' => 'A request with this information already exists. Please try again.',
+            ], 409);
         } catch (ForeignKeyConstraintViolationException $e) {
             $entityManager->getConnection()->rollBack();
-            $logger->error('Partner request FK violation: ' . $e->getMessage(), [
+            $logger->error('Partner request FK violation: ' . $e->getMessage() . "\n" . $e->getTraceAsString(), [
                 'email' => $email,
                 'accountType' => $accountType,
             ]);
@@ -128,9 +130,19 @@ final class PartnerRequestController extends AbstractController
             return $this->json([
                 'error' => 'Unable to create account due to a database constraint. Please try again.',
             ], 500);
+        } catch (NotNullConstraintViolationException $e) {
+            $entityManager->getConnection()->rollBack();
+            $logger->error('Partner request NOT NULL violation: ' . $e->getMessage() . "\n" . $e->getTraceAsString(), [
+                'email' => $email,
+                'accountType' => $accountType,
+            ]);
+
+            return $this->json([
+                'error' => 'A required field is missing. Please check your form and try again.',
+            ], 422);
         } catch (\Throwable $e) {
             $entityManager->getConnection()->rollBack();
-            $logger->error('Partner request creation failed: ' . $e->getMessage(), [
+            $logger->error('Partner request creation failed: ' . $e->getMessage() . "\n" . $e->getTraceAsString(), [
                 'email' => $email,
                 'accountType' => $accountType,
             ]);

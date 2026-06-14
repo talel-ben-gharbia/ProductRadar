@@ -213,8 +213,8 @@ final class B2BVerificationController extends AbstractController
 
             try {
                 $entityManager->wrapInTransaction(function (EntityManagerInterface $em) use (
-                    $existingUser, $partnerRequest, $seller, $payload, $plainPassword, $logger, $brandName,
-                    &$approvedUser, &$subscription, &$firebaseUid
+                    $existingUser, $partnerRequest, $seller, $brandName,
+                    &$approvedUser
                 ) {
                     if ($existingUser === null) {
                         $approvedUser = $this->createVerifiedB2bUser($partnerRequest, $em);
@@ -248,29 +248,34 @@ final class B2BVerificationController extends AbstractController
                     $subscription = $this->attachB2bSubscription($approvedUser, $planType, $durationMonths);
                     $em->persist($subscription);
                     $em->flush();
-
-                    // Firebase provisioning — if this fails, the transaction rolls back everything
-                    $provisionResult = $this->provisionFirebaseB2bUser((string) $partnerRequest->getEmail(), $plainPassword, $logger);
-                    $firebaseUid = $provisionResult['uid'] ?? null;
-                    if ($firebaseUid === null) {
-                        $logger->error('Firebase provisioning failed for B2B approval', ['email' => $partnerRequest->getEmail()]);
-                        throw new \RuntimeException($provisionResult['error'] ?? 'Firebase provisioning returned no UID');
-                    }
-
-                    $approvedUser->setFirebaseUid($firebaseUid);
-                    $em->flush();
                 });
-
-                // Handle Firebase failure — the transaction was already rolled back
-                $subscription = null;
             } catch (\Throwable $e) {
-                $logger->error('Exception during B2B approval flow', ['exception' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
-                $appEnv = $_ENV['APP_ENV'] ?? $_SERVER['APP_ENV'] ?? 'prod';
-                if (is_string($appEnv) && strtolower($appEnv) === 'dev') {
-                    return $this->json(['error' => 'Internal server error during B2B approval.', 'exception' => $e->getMessage(), 'trace' => $e->getTraceAsString()], 500);
-                }
+                $logger->error('Exception during B2B approval flow', [
+                    'exception' => $e->getMessage(),
+                    'trace' => $e->getTraceAsString(),
+                    'partner_request_id' => $id,
+                    'email' => $partnerRequest->getEmail(),
+                ]);
 
-                return $this->json(['error' => 'Internal server error during B2B approval.'], 500);
+                return $this->json([
+                    'error' => 'Internal server error during B2B approval.',
+                    'detail' => $e->getMessage(),
+                ], 500);
+            }
+
+            // Firebase provisioning — non-blocking: if it fails the approval still succeeds
+            if ($approvedUser !== null) {
+                $provisionResult = $this->provisionFirebaseB2bUser((string) $partnerRequest->getEmail(), $plainPassword, $logger);
+                $firebaseUid = $provisionResult['uid'] ?? null;
+                if ($firebaseUid !== null) {
+                    $approvedUser->setFirebaseUid($firebaseUid);
+                    $entityManager->flush();
+                } else {
+                    $logger->warning('Firebase provisioning failed for B2B approval (non-blocking)', [
+                        'email' => $partnerRequest->getEmail(),
+                        'error' => is_string($provisionResult['error'] ?? null) ? $provisionResult['error'] : json_encode($provisionResult['error'] ?? 'unknown'),
+                    ]);
+                }
             }
 
             // Trigger brand discovery for B2B Market accounts
@@ -375,27 +380,120 @@ final class B2BVerificationController extends AbstractController
     private function createVerifiedB2bUser(PartnerRequest $partnerRequest, EntityManagerInterface $entityManager): B2B
     {
         $email = (string) $partnerRequest->getEmail();
-        $userRepo = $entityManager->getRepository(User::class);
-        $existing = $userRepo->findOneBy(['email' => $email]);
+        $isMarket = $partnerRequest->getAccountType() === 'B2B_MARKET';
+        $conn = $entityManager->getConnection();
+        $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
+        $firebaseUid = 'pending_' . uniqid('', true);
+        $companyName = (string) $partnerRequest->getCompanyName();
 
-        if ($existing instanceof B2BCompany || $existing instanceof B2BMarket) {
-            $user = $existing;
+        // Check for existing user via raw SQL (avoids Doctrine JOINED inheritance issues)
+        $existingUser = $conn->fetchAssociative(
+            'SELECT id, type FROM "user" WHERE email = :email LIMIT 1',
+            ['email' => $email],
+        );
+
+        if (is_array($existingUser)) {
+            // User row exists — backfill any missing JOINED inheritance rows
+            $userId = (int) $existingUser['id'];
+            $leafTable = $isMarket ? 'b2b_market' : 'b2b_company';
+
+            // Backfill b2b intermediate row if missing
+            $b2bExists = $conn->fetchOne('SELECT 1 FROM b2b WHERE id = :id', ['id' => $userId]);
+            if (!$b2bExists) {
+                $conn->executeStatement(
+                    'INSERT INTO b2b (id, name, b2b_status, is_verified, joined_at, company_country, company_website, sector, full_name, owner_user_id)
+                     VALUES (:id, :name, :b2b_status, :is_verified, :joined_at, :company_country, :company_website, :sector, :full_name, :owner_user_id)',
+                    [
+                        'id' => $userId,
+                        'name' => $companyName,
+                        'b2b_status' => 'APPROVED',
+                        'is_verified' => true,
+                        'joined_at' => $now,
+                        'company_country' => $partnerRequest->getCompanyCountry(),
+                        'company_website' => $partnerRequest->getCompanyWebsite(),
+                        'sector' => $partnerRequest->getCompanyMarket(),
+                        'full_name' => $partnerRequest->getFullName(),
+                        'owner_user_id' => $userId,
+                    ],
+                );
+            }
+
+            // Backfill leaf table row if missing
+            $leafExists = $conn->fetchOne(
+                "SELECT 1 FROM {$leafTable} WHERE id = :id",
+                ['id' => $userId],
+            );
+            if (!$leafExists) {
+                $conn->executeStatement(
+                    "INSERT INTO {$leafTable} (id) VALUES (:id)",
+                    ['id' => $userId],
+                );
+            }
+
+            // Reload the entity fresh from DB (Doctrine now sees all rows)
+            $user = $entityManager->find(User::class, $userId);
+            if (!$user instanceof B2BCompany && !$user instanceof B2BMarket) {
+                throw new \RuntimeException("Failed to load B2B entity for user id {$userId}");
+            }
         } else {
-            // Fallback if for some reason the pre-created user is missing or of wrong type
-            $user = $partnerRequest->getAccountType() === 'B2B_MARKET' ? new B2BMarket() : new B2BCompany();
-            $user->setEmail($email);
-            $user->setJoinedAt(new \DateTimeImmutable());
+            // No pre-existing user — create fresh via raw SQL (correct FK order)
+            $type = $isMarket ? 'b2b_market' : 'b2b_company';
+            $leafTable = $isMarket ? 'b2b_market' : 'b2b_company';
+
+            // 1. Insert into root table (user) — only columns on the `user` table
+            $result = $conn->executeQuery(
+                'INSERT INTO "user" (email, firebase_uid, type, account_status, is_active)
+                 VALUES (:email, :firebase_uid, :type, :account_status, :is_active)
+                 RETURNING id',
+                [
+                    'email' => $email,
+                    'firebase_uid' => $firebaseUid,
+                    'type' => $type,
+                    'account_status' => 'ACTIVE',
+                    'is_active' => true,
+                ],
+            );
+            $userId = (int) $result->fetchOne();
+
+            // 2. Insert into intermediate table (b2b) — FK: b2b.id → user.id
+            $conn->executeStatement(
+                'INSERT INTO b2b (id, name, b2b_status, is_verified, joined_at, company_country, company_website, sector, full_name, owner_user_id)
+                 VALUES (:id, :name, :b2b_status, :is_verified, :joined_at, :company_country, :company_website, :sector, :full_name, :owner_user_id)',
+                [
+                    'id' => $userId,
+                    'name' => $companyName,
+                    'b2b_status' => 'APPROVED',
+                    'is_verified' => true,
+                    'joined_at' => $now,
+                    'company_country' => $partnerRequest->getCompanyCountry(),
+                    'company_website' => $partnerRequest->getCompanyWebsite(),
+                    'sector' => $partnerRequest->getCompanyMarket(),
+                    'full_name' => $partnerRequest->getFullName(),
+                    'owner_user_id' => $userId,
+                ],
+            );
+
+            // 3. Insert into leaf table (b2b_company / b2b_market) — FK: leaf.id → b2b.id
+            $conn->executeStatement(
+                "INSERT INTO {$leafTable} (id) VALUES (:id)",
+                ['id' => $userId],
+            );
+
+            // Load the entity fresh via Doctrine
+            $user = $entityManager->find(User::class, $userId);
+            if (!$user instanceof B2BCompany && !$user instanceof B2BMarket) {
+                throw new \RuntimeException("Failed to load B2B entity for newly created user id {$userId}");
+            }
         }
 
+        // Set remaining fields on the managed entity
         $user->setFullName($partnerRequest->getFullName());
-        // firebase_uid is non-nullable in DB — use a temporary placeholder until provisioning succeeds
         if (!$user->getFirebaseUid() || str_starts_with($user->getFirebaseUid(), 'pending_')) {
-            $user->setFirebaseUid('pending_' . uniqid('', true));
+            $user->setFirebaseUid($firebaseUid);
         }
         $user->setIsActive(true);
         $user->setAccountStatus('ACTIVE');
-
-        $user->setName((string) $partnerRequest->getCompanyName());
+        $user->setName($companyName);
         $user->setSector((string) $partnerRequest->getCompanyMarket());
         $user->setCompanyCountry((string) $partnerRequest->getCompanyCountry());
         $user->setCompanyWebsite((string) $partnerRequest->getCompanyWebsite());
@@ -428,6 +526,9 @@ final class B2BVerificationController extends AbstractController
         $subscription->setActive(true);
         $subscription->setCreatedAt(new \DateTimeImmutable());
         $subscription->setActivatedAt(new \DateTimeImmutable());
+        $subscription->setFavoritesLimit(999);
+        $subscription->setAlertsLimit(20);
+        $subscription->setPriceHistoryAccess(12);
 
         return $subscription;
     }
@@ -548,7 +649,9 @@ final class B2BVerificationController extends AbstractController
 
     private function sendApprovalConfirmationEmail(string $businessEmail, string $companyName, LoggerInterface $logger, MailerInterface $mailer): void
     {
-        $from = $_ENV['B2B_NOTIFICATIONS_FROM'] ?? $_SERVER['B2B_NOTIFICATIONS_FROM'] ?? 'noreply@productradar.tn';
+        // $_SERVER is populated by Symfony's .env loader and docker-compose env vars.
+        // $_ENV depends on php.ini's variables_order (not set by default in CLI).
+        $from = $_SERVER['B2B_NOTIFICATIONS_FROM'] ?? $_ENV['B2B_NOTIFICATIONS_FROM'] ?? 'noreply@productradar.tn';
         $subject = 'Your ProductRadar B2B account has been approved';
         $message = "Hello,\n\nYour B2B registration for {$companyName} has been approved successfully.\nYou can now sign in and access the B2B dashboard.\n\nBest regards,\nProductRadar Team";
 
@@ -571,7 +674,7 @@ final class B2BVerificationController extends AbstractController
 
     private function sendRejectionEmail(string $businessEmail, string $companyName, string $reviewerNote, LoggerInterface $logger, MailerInterface $mailer): void
     {
-        $from = $_ENV['B2B_NOTIFICATIONS_FROM'] ?? $_SERVER['B2B_NOTIFICATIONS_FROM'] ?? 'noreply@productradar.tn';
+        $from = $_SERVER['B2B_NOTIFICATIONS_FROM'] ?? $_ENV['B2B_NOTIFICATIONS_FROM'] ?? 'noreply@productradar.tn';
         $subject = 'Update on Your ProductRadar B2B Registration';
         $reasonText = $reviewerNote !== '' ? "\n\nReason: {$reviewerNote}" : '';
         $message = "Hello,\n\nYour B2B registration for {$companyName} was not approved at this time.{$reasonText}\n\nIf you have any questions, please contact our support team.\n\nBest regards,\nProductRadar Team";
@@ -619,4 +722,5 @@ final class B2BVerificationController extends AbstractController
             'company_website' => $user->getCompanyWebsite(),
         ];
     }
+
 }

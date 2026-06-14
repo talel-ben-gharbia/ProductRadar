@@ -93,8 +93,8 @@ final class B2BAdminController extends AbstractController
             $activeSubscriptions = $entityManager->createQueryBuilder()
                 ->select('COUNT(s.id)')
                 ->from(Subscription::class, 's')
-                ->where('s.status = :status')
-                ->setParameter('status', 'ACTIVE')
+                ->where('s.active = :active')
+                ->setParameter('active', true)
                 ->getQuery()
                 ->getSingleScalarResult();
 
@@ -136,8 +136,8 @@ final class B2BAdminController extends AbstractController
             return $errorResponse;
         }
 
-        $subscription = $entityManager->find(Subscription::class, $subscriptionId);
-        if (!$subscription instanceof Subscription) {
+        $upgradeRequest = $entityManager->find(Subscription::class, $subscriptionId);
+        if (!$upgradeRequest instanceof Subscription) {
             return $this->json(['error' => 'Subscription not found.'], 404);
         }
 
@@ -147,20 +147,38 @@ final class B2BAdminController extends AbstractController
             return $this->json(['error' => 'Current user is not an admin.'], 403);
         }
 
-        $subscription->setActive(true);
-        $subscription->setActivatedAt(new \DateTimeImmutable());
-        $subscription->setActivatedByAdminId($admin?->getId());
-        $subscription->setUpdatedAt(new \DateTimeImmutable());
+        // Update the existing active subscription in-place (change plan_type to the new plan)
+        // instead of creating a separate new subscription record.
+        $ownerType = $upgradeRequest->getOwnerType();
+        $ownerId = $upgradeRequest->getOwnerId();
+        $newPlanType = $upgradeRequest->getPlanType();
+
+        $currentActive = $entityManager->getRepository(Subscription::class)->findOneBy(
+            ['owner_type' => $ownerType, 'owner_id' => $ownerId, 'active' => true],
+            ['created_at' => 'DESC', 'id' => 'DESC']
+        );
+
+        $targetSub = $currentActive ?? $upgradeRequest;
+        $targetSub->setPlanType($newPlanType);
+        $targetSub->setActive(true);
+        $targetSub->setActivatedAt(new \DateTimeImmutable());
+        $targetSub->setActivatedByAdminId($admin?->getId());
+        $targetSub->setUpdatedAt(new \DateTimeImmutable());
+
+        // Remove the upgrade request subscription if it's distinct from the target
+        if ($currentActive instanceof Subscription && $currentActive->getId() !== $upgradeRequest->getId()) {
+            $entityManager->remove($upgradeRequest);
+        }
 
         $entityManager->flush();
 
         $this->invalidateCache($this->cache);
-        $b2bNotificationService->notifySubscriptionApproved($subscription, $admin);
+        $b2bNotificationService->notifySubscriptionApproved($targetSub, $admin);
 
         return $this->json([
-            'id' => $subscription->getId(),
+            'id' => $targetSub->getId(),
             'status' => 'APPROVED',
-            'activated_at' => $subscription->getActivatedAt()?->format(\DateTimeInterface::ATOM),
+            'activated_at' => $targetSub->getActivatedAt()?->format(\DateTimeInterface::ATOM),
         ]);
     }
 
@@ -393,27 +411,41 @@ final class B2BAdminController extends AbstractController
             ->getResult();
 
         return $this->json([
-                'items' => array_map(function (Subscription $sub): array {
-                    $company = $sub->getOwnerType() === 'COMPANY' && $sub->getOwnerId() !== null
-                        ? $this->entityManager->find(B2BCompany::class, $sub->getOwnerId()) : null;
-                    $market = $sub->getOwnerType() === 'MARKET' && $sub->getOwnerId() !== null
-                        ? $this->entityManager->find(B2BMarket::class, $sub->getOwnerId()) : null;
+                'items' => $this->hydrateSubscriptionItems($items),
+        ]);
+    }
 
-                    return [
-                        'id' => $sub->getId(),
-                        'owner_type' => $sub->getOwnerType(),
-                        'plan_type' => $sub->getPlanType(),
-                        'active' => $sub->isActive(),
-                        'duration_months' => $sub->getDurationMonths(),
-                        'start_date' => $sub->getStartDate()?->format(\DateTimeInterface::ATOM),
-                        'end_date' => $sub->getEndDate()?->format(\DateTimeInterface::ATOM),
-                        'created_at' => $sub->getCreatedAt()?->format(\DateTimeInterface::ATOM),
-                        'company_id' => $company?->getId(),
-                        'market_id' => $market?->getId(),
-                        'name' => $company?->getName(),
-                        'market_name' => $market?->getName(),
-                    ];
-                }, $items),
+    #[Route('/subscriptions/pending-upgrades', name: 'b2b_admin_list_pending_upgrades', methods: ['GET'])]
+    public function listPendingUpgrades(
+        Request $request,
+        AdminApiGuard $adminApiGuard,
+        EntityManagerInterface $entityManager,
+    ): JsonResponse {
+        if ($errorResponse = $adminApiGuard->assertAuthorized($request)) {
+            return $errorResponse;
+        }
+
+        $pending = $entityManager->createQueryBuilder()
+            ->select('sub')
+            ->from(Subscription::class, 'sub')
+            ->where('sub.active = false')
+            ->orderBy('sub.created_at', 'DESC')
+            ->getQuery()
+            ->getResult();
+
+        $items = [];
+        foreach ($pending as $sub) {
+            $activeSub = $entityManager->getRepository(Subscription::class)->findOneBy(
+                ['owner_type' => $sub->getOwnerType(), 'owner_id' => $sub->getOwnerId(), 'active' => true],
+                ['created_at' => 'DESC', 'id' => 'DESC']
+            );
+            if ($activeSub instanceof Subscription && $activeSub->getPlanType() !== $sub->getPlanType()) {
+                $items[] = $sub;
+            }
+        }
+
+        return $this->json([
+            'items' => $this->hydrateSubscriptionItems($items),
         ]);
     }
 
@@ -480,7 +512,7 @@ final class B2BAdminController extends AbstractController
 
         $cacheKey = self::CACHE_KEY_SUBSCRIPTIONS . ".l{$limit}o{$offset}a" . ($activeOnly ? '1' : '0');
 
-        return $this->cachedGet($this->cache, $cacheKey, static function () use ($entityManager, $limit, $offset, $activeOnly): array {
+        return $this->cachedGet($this->cache, $cacheKey, function () use ($entityManager, $limit, $offset, $activeOnly): array {
             $qb = $entityManager->createQueryBuilder()
                 ->select('sub')
                 ->from(Subscription::class, 'sub')
@@ -500,28 +532,7 @@ final class B2BAdminController extends AbstractController
                 ->getSingleScalarResult();
 
             return [
-                'items' => array_map(function (Subscription $sub): array {
-                    $company = $sub->getOwnerType() === 'COMPANY' && $sub->getOwnerId() !== null
-                        ? $this->entityManager->find(B2BCompany::class, $sub->getOwnerId()) : null;
-                    $market = $sub->getOwnerType() === 'MARKET' && $sub->getOwnerId() !== null
-                        ? $this->entityManager->find(B2BMarket::class, $sub->getOwnerId()) : null;
-
-                    return [
-                        'id' => $sub->getId(),
-                        'owner_type' => $sub->getOwnerType(),
-                        'plan_type' => $sub->getPlanType(),
-                        'active' => $sub->isActive(),
-                        'duration_months' => $sub->getDurationMonths(),
-                        'start_date' => $sub->getStartDate()?->format(\DateTimeInterface::ATOM),
-                        'end_date' => $sub->getEndDate()?->format(\DateTimeInterface::ATOM),
-                        'created_at' => $sub->getCreatedAt()?->format(\DateTimeInterface::ATOM),
-                        'activated_at' => $sub->getActivatedAt()?->format(\DateTimeInterface::ATOM),
-                        'company_id' => $company?->getId(),
-                        'market_id' => $market?->getId(),
-                        'name' => $company?->getName(),
-                        'market_name' => $market?->getName(),
-                    ];
-                }, $items),
+                'items' => $this->hydrateSubscriptionItems($items),
                 'pagination' => [
                     'limit' => $limit,
                     'offset' => $offset,
@@ -820,6 +831,70 @@ final class B2BAdminController extends AbstractController
 
             return ['items' => $rows];
         });
+    }
+
+    private function hydrateSubscriptionItems(array $items): array
+    {
+        $companyIds = [];
+        $marketIds = [];
+
+        foreach ($items as $sub) {
+            if ($sub->getOwnerType() === 'COMPANY' && $sub->getOwnerId() !== null) {
+                $companyIds[] = $sub->getOwnerId();
+            }
+            if ($sub->getOwnerType() === 'MARKET' && $sub->getOwnerId() !== null) {
+                $marketIds[] = $sub->getOwnerId();
+            }
+        }
+
+        $companyMap = [];
+        if (!empty($companyIds)) {
+            $rows = $this->entityManager->createQueryBuilder()
+                ->select('c.id, c.name')
+                ->from(B2BCompany::class, 'c')
+                ->where('c.id IN (:ids)')
+                ->setParameter('ids', array_unique($companyIds))
+                ->getQuery()
+                ->getScalarResult();
+            foreach ($rows as $r) {
+                $companyMap[(int) $r['id']] = $r['name'];
+            }
+        }
+
+        $marketMap = [];
+        if (!empty($marketIds)) {
+            $rows = $this->entityManager->createQueryBuilder()
+                ->select('m.id, m.name')
+                ->from(B2BMarket::class, 'm')
+                ->where('m.id IN (:ids)')
+                ->setParameter('ids', array_unique($marketIds))
+                ->getQuery()
+                ->getScalarResult();
+            foreach ($rows as $r) {
+                $marketMap[(int) $r['id']] = $r['name'];
+            }
+        }
+
+        return array_map(function (Subscription $sub) use ($companyMap, $marketMap): array {
+            $companyId = $sub->getOwnerType() === 'COMPANY' ? $sub->getOwnerId() : null;
+            $marketId = $sub->getOwnerType() === 'MARKET' ? $sub->getOwnerId() : null;
+
+            return [
+                'id' => $sub->getId(),
+                'owner_type' => $sub->getOwnerType(),
+                'plan_type' => $sub->getPlanType(),
+                'active' => $sub->isActive(),
+                'duration_months' => $sub->getDurationMonths(),
+                'start_date' => $sub->getStartDate()?->format(\DateTimeInterface::ATOM),
+                'end_date' => $sub->getEndDate()?->format(\DateTimeInterface::ATOM),
+                'created_at' => $sub->getCreatedAt()?->format(\DateTimeInterface::ATOM),
+                'activated_at' => $sub->getActivatedAt()?->format(\DateTimeInterface::ATOM),
+                'company_id' => $companyId,
+                'market_id' => $marketId,
+                'name' => $companyId !== null ? ($companyMap[$companyId] ?? null) : null,
+                'market_name' => $marketId !== null ? ($marketMap[$marketId] ?? null) : null,
+            ];
+        }, $items);
     }
 
     private function normalizeNullableFloat(mixed $value): ?float

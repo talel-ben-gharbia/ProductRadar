@@ -1,9 +1,13 @@
+import React, { Suspense } from "react"
 import Link from "next/link"
 
 import ProductIssuesPanel from "@/components/admin/product-issues-panel"
+import { RefreshButton } from "@/components/admin/refresh-button"
 import { Button } from "@/components/ui/button"
-import { getProductListings } from "@/services/admin/product-listings"
-import { getProducts } from "@/services/admin/products"
+import { Skeleton } from "@/components/ui/skeleton"
+import { getProductListings } from "@/services/product-listings"
+import { getProducts } from "@/services/products"
+
 
 type NoBrandItem = {
   productId: number
@@ -44,95 +48,154 @@ type ZeroListingItem = {
   categoryId: number | null
 }
 
-function buildData(): Promise<{
+type MissingImageItem = {
+  productId: number
+  name: string
+  brand: string | null
+  description: string
+  categoryId: number | null
+}
+
+type WithImageItem = {
+  productId: number
+  name: string
+  brand: string | null
+  description: string
+  imageUrl: string
+  categoryId: number | null
+}
+
+async function buildData(): Promise<{
   noBrandProducts: NoBrandItem[]
   zeroPriceListings: ZeroPriceItem[]
   inactiveListings: InactiveItem[]
   zeroListingProducts: ZeroListingItem[]
+  missingImageProducts: MissingImageItem[]
+  productsWithImage: WithImageItem[]
   totalProducts: number
   totalListings: number
   fetchError: string | null
+  productListingsMap: Record<number, { id: number; ref: string | null; price: number | null; product_url: string | null; sellerName: string | null }[]>
 }> {
-  return Promise.all([getProducts(), getProductListings()])
-    .then(([products, listings]) => {
-      const noBrandProducts: NoBrandItem[] = products
-        .filter((p) => !p.brand || p.brand.trim() === "")
-        .map((p) => ({
-          productId: p.id,
-          name: p.name,
-          brand: p.brand,
-          description: p.description,
-          imageUrl: p.image_url,
-        }))
-        .sort((a, b) => a.name.localeCompare(b.name))
+  try {
+    const [products, listings] = await Promise.all([getProducts(), getProductListings()])
 
-      const zeroPriceListings: ZeroPriceItem[] = listings
-        .filter((l) => l.productId !== null && l.price !== null && l.price === 0)
-        .map((l) => ({
-          listingId: l.id,
-          productId: l.productId!,
-          productName: l.productName ?? `Product #${l.productId}`,
-          productBrand: null,
-          productImageUrl: null,
-          price: l.price,
-          ref: l.ref,
-          sellerName: l.sellerName,
-          isActive: l.is_active,
-        }))
-        .sort((a, b) => a.productName.localeCompare(b.productName))
-
-      const inactiveListings: InactiveItem[] = listings
-        .filter((l) => l.is_active === false)
-        .map((l) => ({
-          listingId: l.id,
-          productId: l.productId ?? 0,
-          productName: l.productName ?? (l.productId ? `Product #${l.productId}` : "Unknown"),
-          price: l.price,
-          ref: l.ref,
-          sellerName: l.sellerName,
-          isActive: l.is_active,
-        }))
-        .sort((a, b) => a.productName.localeCompare(b.productName))
-
-      const listedProductIds = new Set(listings.map((l) => l.productId).filter((id): id is number => id !== null))
-      const zeroListingProducts: ZeroListingItem[] = products
-        .filter((p) => !listedProductIds.has(p.id))
-        .map((p) => ({
-          productId: p.id,
-          name: p.name,
-          brand: p.brand,
-          description: p.description,
-          imageUrl: p.image_url,
-          categoryId: p.categoryId,
-        }))
-        .sort((a, b) => a.name.localeCompare(b.name))
-
-      return {
-        noBrandProducts,
-        zeroPriceListings,
-        inactiveListings,
-        zeroListingProducts,
-        totalProducts: products.length,
-        totalListings: listings.length,
-        fetchError: null,
+    const productListingsMap: Record<number, { id: number; ref: string | null; price: number | null; product_url: string | null; sellerName: string | null }[]> = {}
+    for (const l of listings) {
+      if (l.productId != null) {
+        if (!productListingsMap[l.productId]) productListingsMap[l.productId] = []
+        productListingsMap[l.productId].push({ id: l.id, ref: l.ref, price: l.price, product_url: l.product_url ?? null, sellerName: l.sellerName ?? null })
       }
-    })
-    .catch((error) => ({
+    }
+
+    const noBrandProducts: NoBrandItem[] = products
+      .filter((p) => !p.brand || p.brand.trim() === "")
+      .map((p) => ({
+        productId: p.id,
+        name: p.name,
+        brand: p.brand,
+        description: p.description,
+        imageUrl: p.image_url,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+
+    const zeroPriceListings: ZeroPriceItem[] = listings
+      .filter((l) => l.productId !== null && l.price !== null && l.price === 0)
+      .map((l) => ({
+        listingId: l.id,
+        productId: l.productId!,
+        productName: l.productName ?? `Product #${l.productId}`,
+        productBrand: null,
+        productImageUrl: null,
+        price: l.price,
+        ref: l.ref,
+        sellerName: l.sellerName,
+        isActive: l.is_active,
+      }))
+      .sort((a, b) => a.productName.localeCompare(b.productName))
+
+    const inactiveListings: InactiveItem[] = listings
+      .filter((l) => l.is_active === false)
+      .map((l) => ({
+        listingId: l.id,
+        productId: l.productId ?? 0,
+        productName: l.productName ?? (l.productId ? `Product #${l.productId}` : "Unknown"),
+        price: l.price,
+        ref: l.ref,
+        sellerName: l.sellerName,
+        isActive: l.is_active,
+      }))
+      .sort((a, b) => a.productName.localeCompare(b.productName))
+
+    const missingImageProducts: MissingImageItem[] = products
+      .filter((p) => !p.image_url || p.image_url.trim() === "")
+      .map((p) => ({
+        productId: p.id,
+        name: p.name,
+        brand: p.brand,
+        description: p.description,
+        categoryId: p.categoryId,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+
+    const productsWithImage: WithImageItem[] = products
+      .filter((p): p is typeof p & { image_url: string } => !!p.image_url && p.image_url.trim() !== "")
+      .map((p) => ({
+        productId: p.id,
+        name: p.name,
+        brand: p.brand,
+        description: p.description,
+        imageUrl: p.image_url!,
+        categoryId: p.categoryId,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+
+    const listedProductIds = new Set(listings.map((l) => l.productId).filter((id): id is number => id !== null))
+    const zeroListingProducts: ZeroListingItem[] = products
+      .filter((p) => !listedProductIds.has(p.id))
+      .map((p) => ({
+        productId: p.id,
+        name: p.name,
+        brand: p.brand,
+        description: p.description,
+        imageUrl: p.image_url,
+        categoryId: p.categoryId,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+
+    return {
+      noBrandProducts,
+      zeroPriceListings,
+      inactiveListings,
+      zeroListingProducts,
+      missingImageProducts,
+      productsWithImage,
+      totalProducts: products.length,
+      totalListings: listings.length,
+      fetchError: null,
+      productListingsMap,
+    }
+  } catch (error) {
+    return {
       noBrandProducts: [],
       zeroPriceListings: [],
       inactiveListings: [],
       zeroListingProducts: [],
+      missingImageProducts: [],
+      productsWithImage: [],
       totalProducts: 0,
       totalListings: 0,
       fetchError: error instanceof Error ? error.message : "Unable to load product issues.",
-    }))
+      productListingsMap: {},
+    }
+  }
 }
 
-export default async function ProductIssuesQualityPage() {
-  const { noBrandProducts, zeroPriceListings, inactiveListings, zeroListingProducts, totalProducts, totalListings, fetchError } = await buildData()
+async function ProductIssuesPageContent() {
+  const { noBrandProducts, zeroPriceListings, inactiveListings, zeroListingProducts, missingImageProducts, productsWithImage, fetchError, productListingsMap } = await buildData()
 
   return (
-    <section className="w-full max-w-none space-y-4">
+    <>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="space-y-1">
           <h1 className="text-2xl font-bold">Product Issues</h1>
@@ -141,9 +204,7 @@ export default async function ProductIssuesQualityPage() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button asChild size="sm" variant="outline">
-            <Link href="/admin/quality-control/product-issues">Refresh</Link>
-          </Button>
+          <RefreshButton />
           <Button asChild size="sm" variant="outline">
             <Link href="/admin/quality-control">Back to Data Quality</Link>
           </Button>
@@ -171,15 +232,39 @@ export default async function ProductIssuesQualityPage() {
             zeroPriceListings={zeroPriceListings}
             inactiveListings={inactiveListings}
             zeroListingProducts={zeroListingProducts}
+            missingImageProducts={missingImageProducts}
+            productsWithImage={productsWithImage}
+            productListingsMap={productListingsMap}
           />
 
-          {noBrandProducts.length === 0 && zeroPriceListings.length === 0 && inactiveListings.length === 0 ? (
+          {noBrandProducts.length === 0 && zeroPriceListings.length === 0 && inactiveListings.length === 0 && zeroListingProducts.length === 0 && missingImageProducts.length === 0 ? (
             <div className="rounded-lg border bg-card p-6 text-sm text-muted-foreground">
-              No product issues found. Every product has a brand and all listings have valid prices and are active.
+              No product issues found. Every product has a brand, a valid image, an associated listing, and all listings have active prices.
             </div>
           ) : null}
         </>
       )}
+    </>
+  )
+}
+
+function ProductIssuesFallback() {
+  return (
+    <div className="space-y-4">
+      <Skeleton className="h-8 w-48" />
+      <Skeleton className="h-4 w-full" />
+      <Skeleton className="h-24 rounded-lg" />
+      <Skeleton className="h-64 w-full rounded-lg" />
+    </div>
+  )
+}
+
+export default async function ProductIssuesQualityPage() {
+  return (
+    <section className="w-full max-w-none space-y-4">
+      <Suspense fallback={<ProductIssuesFallback />}>
+        <ProductIssuesPageContent />
+      </Suspense>
     </section>
   )
 }

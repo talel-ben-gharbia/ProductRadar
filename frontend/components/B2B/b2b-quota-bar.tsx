@@ -9,7 +9,7 @@ export function QuotaBar({ usage, limit, label }: { usage: number; limit: number
     <div className="rounded-xl border border-border/50 bg-muted/20 p-4">
       <div className="mb-1.5 flex items-center justify-between text-xs">
         <span className="font-medium text-muted-foreground">{label}</span>
-        <span className={`font-bold ${pct >= 90 ? "text-red-600" : pct >= 70 ? "text-amber-600" : "text-emerald-600"}`}>
+        <span suppressHydrationWarning className={`font-bold ${pct >= 90 ? "text-red-600" : pct >= 70 ? "text-amber-600" : "text-emerald-600"}`}>
           {usage} / {limit} used
         </span>
       </div>

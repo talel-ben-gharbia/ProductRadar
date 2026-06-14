@@ -163,7 +163,7 @@ final class B2BDetectAlertsCommand extends Command
              FROM product p
              LEFT JOIN brand b ON b.id = p.brand_id
              JOIN product_listing pl ON pl.product_id = p.id AND pl.is_active = true
-             WHERE COALESCE(LOWER(b.name), LOWER(p.brand)) = LOWER(:brand)
+             WHERE LOWER(b.name) = LOWER(:brand)
              GROUP BY p.id, p.name
              HAVING COUNT(pl.id) > 1
              AND SUM(CASE WHEN pl.availability = 'out_of_stock' THEN 1 ELSE 0 END) >= 2",
@@ -211,7 +211,7 @@ final class B2BDetectAlertsCommand extends Command
              JOIN product p ON p.id = pl.product_id
              LEFT JOIN brand b ON b.id = p.brand_id
              JOIN category c ON c.id = p.category_id
-             WHERE COALESCE(LOWER(b.name), LOWER(p.brand)) = LOWER(:brand)
+             WHERE LOWER(b.name) = LOWER(:brand)
              AND pl.is_active = true
              AND pl.price IS NOT NULL
              GROUP BY c.id, c.name",
@@ -297,7 +297,7 @@ final class B2BDetectAlertsCommand extends Command
              FROM review r
              JOIN product p ON p.id = r.product_id
              LEFT JOIN brand b ON b.id = p.brand_id
-             WHERE COALESCE(LOWER(b.name), LOWER(p.brand)) = LOWER(:brand)
+             WHERE LOWER(b.name) = LOWER(:brand)
                AND r.status = 'approved'
                AND r.created_at >= :prior_start
              GROUP BY period",
@@ -335,7 +335,7 @@ final class B2BDetectAlertsCommand extends Command
                 "SELECT r.comment FROM review r
                  JOIN product p ON p.id = r.product_id
                  LEFT JOIN brand b ON b.id = p.brand_id
-                 WHERE COALESCE(LOWER(b.name), LOWER(p.brand)) = LOWER(:brand)
+                 WHERE LOWER(b.name) = LOWER(:brand)
                    AND r.status = 'approved'
                    AND r.rating <= 2
                    AND r.created_at >= :recent
@@ -365,7 +365,7 @@ final class B2BDetectAlertsCommand extends Command
              JOIN product p ON p.id = pl.product_id
              LEFT JOIN brand b ON b.id = p.brand_id
              JOIN seller s ON s.id = pl.seller_id
-             WHERE COALESCE(LOWER(b.name), LOWER(p.brand)) = LOWER(:brand)
+             WHERE LOWER(b.name) = LOWER(:brand)
                AND pl.is_active = true
                AND pl.created_at >= :since
              ORDER BY pl.created_at DESC",

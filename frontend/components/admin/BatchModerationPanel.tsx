@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { batchModerationReviews } from '@/services/admin/enhanced-reviews';
+import { batchModerationReviews } from '@/services/enhanced-reviews';
 
 interface BatchModerationPanelProps {
   selectedReviewIds: number[];

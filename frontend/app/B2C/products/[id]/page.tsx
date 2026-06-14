@@ -28,13 +28,13 @@ import { COOKIE_NAME, verifyB2CSessionToken } from "@/lib/b2c-session"
 import { getServerLocale } from "@/lib/get-server-locale"
 import { serverT } from "@/lib/translations"
 import { translateCategoryName } from "@/lib/category-translations"
-import { getBestTimeToBuy } from "@/services/admin/best-time-to-buy"
-import { getRawCategories } from "@/services/admin/categories"
-import { getPriceHistory } from "@/services/admin/price-history"
-import { getProductListings } from "@/services/admin/product-listings"
-import { getProducts } from "@/services/admin/products"
-import { getSellers, type Seller } from "@/services/admin/sellers"
-import type { CategoryRaw } from "@/services/admin/categories"
+import { getBestTimeToBuy } from "@/services/best-time-to-buy"
+import { getRawCategories } from "@/services/categories"
+import { getPriceHistory } from "@/services/price-history"
+import { getProductListings } from "@/services/product-listings"
+import { getProducts } from "@/services/products"
+import { getSellers, type Seller } from "@/services/sellers"
+import type { CategoryRaw } from "@/services/categories"
 import type {
   BestTimeToBuyPrediction,
   PriceHistoryEntry,
@@ -141,14 +141,22 @@ function getBestPrice(listings: ProductListing[]): number | null {
   return bestPrice
 }
 
+type BreadcrumbItem = {
+  id: number
+  name: string
+  allCategoryIds: number[]
+}
+
 function buildBreadcrumbTrail(categories: CategoryRaw[], categoryId?: number) {
-  if (!categoryId) {
-    return []
-  }
+  if (!categoryId) return [] as BreadcrumbItem[]
 
   const byId = new Map<number, CategoryRaw>()
-  for (const category of categories) {
-    byId.set(category.id, category)
+  const byParent = new Map<number | null, CategoryRaw[]>()
+  for (const c of categories) {
+    byId.set(c.id, c)
+    const arr = byParent.get(c.parentId) ?? []
+    arr.push(c)
+    byParent.set(c.parentId, arr)
   }
 
   const trail: CategoryRaw[] = []
@@ -161,7 +169,23 @@ function buildBreadcrumbTrail(categories: CategoryRaw[], categoryId?: number) {
     current = current.parentId ? (byId.get(current.parentId) ?? null) : null
   }
 
-  return trail.reverse()
+  trail.reverse()
+
+  function descendants(id: number): number[] {
+    const direct = byParent.get(id) ?? []
+    const ids: number[] = []
+    for (const child of direct) {
+      ids.push(child.id)
+      ids.push(...descendants(child.id))
+    }
+    return ids
+  }
+
+  return trail.map((c) => ({
+    id: c.id,
+    name: c.name,
+    allCategoryIds: [c.id, ...descendants(c.id)],
+  }))
 }
 
 function buildRootCategoriesForMenu(rows: CategoryRaw[]): RootCategoryMenu[] {
@@ -462,9 +486,12 @@ async function ProductDetailContent({
               {breadcrumbTrail.map((crumb) => (
                 <span key={crumb.id} className="flex items-center gap-2">
                   <span>/</span>
-                  <span className="font-medium text-muted-foreground">
+                  <Link
+                    href={`/B2C/products?categoryIds=${encodeURIComponent(crumb.allCategoryIds.join(","))}&categoryName=${encodeURIComponent(crumb.name)}`}
+                    className="font-medium text-muted-foreground hover:text-foreground"
+                  >
                     {crumb.name}
-                  </span>
+                  </Link>
                 </span>
               ))}
               <span className="flex items-center gap-2">
@@ -809,21 +836,21 @@ export default async function B2CProductDetailsPage({
         backLabel={serverT(locale, "general.back")}
       />
 
-      <section className="border-b bg-background">
-        <div className="w-full px-4 py-2 sm:px-10">
+      <section className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur-md">
+        <div className="mx-auto flex w-full max-w-8xl items-center px-4 py-2 sm:px-10">
           {rootCategories.length > 0 ? (
-            <nav className="flex w-full items-center gap-2 overflow-x-auto">
+            <nav className="flex w-full items-center gap-1">
               {rootCategories.map((category) => (
                 <div key={category.id} className="group/cat relative">
                   <button
                     type="button"
-                    className="inline-flex h-10 items-center gap-1 rounded-xl px-4 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+                    className="inline-flex h-9 items-center gap-1 rounded-lg px-3 text-sm font-medium text-foreground transition-colors hover:bg-muted"
                   >
                     {translateCategoryName(locale, category.name)}
                     <svg className="ml-1 h-3 w-3 transition-transform group-hover/cat:rotate-180" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
                   </button>
 
-                  <div className="pointer-events-none absolute left-0 top-full z-50 mt-2 w-screen max-w-[75rem] scale-95 rounded-xl border bg-popover p-6 opacity-0 shadow-lg transition-all duration-200 group-hover/cat:pointer-events-auto group-hover/cat:scale-100 group-hover/cat:opacity-100">
+                  <div className="invisible absolute left-0 top-full z-50 mt-0 w-screen max-w-[75rem] rounded-xl border bg-popover p-6 opacity-0 shadow-lg transition-all group-hover/cat:visible group-hover/cat:opacity-100">
                     {category.under.length > 0 ? (
                       <div className="grid w-full grid-cols-1 gap-x-8 gap-y-6 pr-1 md:grid-cols-2 lg:grid-cols-4">
                         {category.under.map((item) => (

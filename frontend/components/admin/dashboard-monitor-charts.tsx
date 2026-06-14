@@ -1,4 +1,4 @@
-import { getProductListings } from "@/services/admin/product-listings"
+import { getProductListings } from "@/services/product-listings"
 import type { ProductListing } from "@/utils/types"
 
 import DashboardMonitorChartsClient from "@/components/admin/dashboard-monitor-charts-client"

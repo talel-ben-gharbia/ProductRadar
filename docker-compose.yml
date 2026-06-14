@@ -30,6 +30,20 @@ services:
       timeout: 3s
       retries: 5
 
+  mailpit:
+    image: axllent/mailpit:v2
+    container_name: productrdar-mailpit
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8025/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
   backend:
     build:
       context: ./backend
@@ -40,9 +54,15 @@ services:
       APP_SECRET: 1bfea173865bc97ebf26ffdf0bae218b
       DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:0000@db:5432/productRadar?serverVersion=18&charset=utf8}
       REDIS_URL: redis://redis:6379
+      MAILER_DSN: smtp://mailpit:1025
+      B2B_NOTIFICATIONS_FROM: noreply@productradar.tn
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
+      STRIPE_CURRENCY: usd
     ports:
       - "8001:8000"
     depends_on:
+      mailpit:
+        condition: service_healthy
       redis:
         condition: service_healthy
     command: >
@@ -57,6 +77,8 @@ services:
       NEXT_PUBLIC_BACKEND_URL: http://localhost:8001
       BACKEND_INTERNAL_URL: http://backend:8000
       REDIS_URL: redis://redis:6379
+      MAILPIT_URL: http://mailpit:8025
+      NEXT_PUBLIC_N8N_URL: http://localhost:5678
       ADMIN_SESSION_SECRET: dev-session-secret-change-in-production
       B2C_SESSION_SECRET: dev-b2c-session-secret-change-in-production
     ports:

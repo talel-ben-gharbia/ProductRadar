@@ -84,6 +84,22 @@ final class UserManagementController extends AbstractController
 
         return $this->cachedGet($this->cache, $cacheKey, function () use ($userRepository, $alertRepository, $favoriteRepository, $limit, $offset, $filters): array {
             $result = $userRepository->paginateForAdmin($filters, $limit, $offset);
+
+            $subscriptionRepo = $userRepository->getEntityManager()->getRepository(Subscription::class);
+            foreach ($result['items'] as $user) {
+                if ($user instanceof B2BCompany || $user instanceof B2BMarket) {
+                    $ownerType = $user instanceof B2BCompany ? 'COMPANY' : 'MARKET';
+                    $subscription = $subscriptionRepo->findOneBy([
+                        'owner_type' => $ownerType,
+                        'owner_id' => $user->getId(),
+                        'active' => true,
+                    ]);
+                    if ($subscription !== null) {
+                        $user->setSubscription($subscription);
+                    }
+                }
+            }
+
             $userIds = array_values(array_filter(array_map(
                 static fn (User $user): ?int => $user->getId(),
                 $result['items'],
@@ -138,6 +154,10 @@ final class UserManagementController extends AbstractController
 
         $user->setAccountStatus($status);
         $user->setIsActive($status === 'ACTIVE');
+
+        if ($user instanceof B2BCompany || $user instanceof B2BMarket) {
+            $user->setB2bStatus($status);
+        }
 
         $entityManager->flush();
 

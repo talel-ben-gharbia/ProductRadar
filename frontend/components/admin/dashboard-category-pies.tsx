@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/chart"
 import {
   getCategoriesWithParents,
-} from "@/services/admin/categories"
+} from "@/services/categories"
 import type { CategoryWithParent } from "@/utils/types"
 
 type PieDatum = {

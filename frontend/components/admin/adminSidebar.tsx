@@ -15,11 +15,14 @@ import {
   Shield,
   User,
   ChevronRight,
+  Zap,
+  Mail,
+  CreditCard,
 } from "lucide-react"
 
 import { useAdmin } from "@/components/admin/admin-context"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { SIDEBAR_CONSTANTS, SUPER_ADMIN_SIDEBAR_CONSTANTS } from "@/utils/admin/constants"
+import { SIDEBAR_CONSTANTS, SUPER_ADMIN_SIDEBAR_CONSTANTS, N8N_URL, STRIPE_URL } from "@/utils/admin/constants"
 import {
   Sidebar,
   SidebarHeader,
@@ -756,6 +759,44 @@ function AdminSidebar() {
             </SidebarGroup>
           </>
         )}
+
+        {admin?.role === "ROLE_SUPER_ADMIN" && (
+          <>
+            <SidebarSeparator className="mx-2" />
+            <SidebarGroup className="px-2 py-1">
+              <SidebarGroupLabel className="flex items-center gap-1.5 px-2">
+                <Zap className="size-3" />
+                External Tools
+              </SidebarGroupLabel>
+              <SidebarMenu className="gap-1">
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild tooltip="n8n Workflow Automation">
+                    <a href={N8N_URL} target="_blank" rel="noopener noreferrer">
+                      <Zap className="size-4" />
+                      <span>n8n Workflows</span>
+                    </a>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild tooltip="Mailpit Email Inbox">
+                    <a href={`/api/mailpit/redirect${admin?.role === "ROLE_SUPER_ADMIN" ? "?admin=true" : `?email=${encodeURIComponent(admin?.email ?? "")}`}`} target="_blank" rel="noopener noreferrer">
+                      <Mail className="size-4" />
+                      <span>Mailpit (Email Inbox)</span>
+                    </a>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild tooltip="Stripe Dashboard">
+                    <a href={STRIPE_URL} target="_blank" rel="noopener noreferrer">
+                      <CreditCard className="size-4" />
+                      <span>Stripe Dashboard</span>
+                    </a>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroup>
+          </>
+        )}
       </SidebarContent>
 
       <SidebarSeparator/>
@@ -797,10 +838,10 @@ function AdminSidebar() {
           </SidebarMenu>
 
           <div
-            className={`absolute bottom-0 left-full z-50 ml-3 w-72 origin-left rounded-2xl border bg-popover p-1.5 text-popover-foreground shadow-2xl transition-all duration-250 ease-out group-data-[collapsible=icon]:hidden ${
+            className={`absolute bottom-0 left-full z-50 ml-3 w-72 origin-left rounded-2xl border bg-popover p-1.5 text-popover-foreground shadow-2xl group-data-[collapsible=icon]:hidden ${
               menuOpen
-                ? "pointer-events-auto translate-x-0 scale-100 opacity-100"
-                : "pointer-events-none translate-x-2 scale-95 opacity-0"
+                ? "visible opacity-100"
+                : "invisible opacity-0"
             }`}
           >
             <div className="flex items-center gap-3 rounded-xl px-3 py-3">

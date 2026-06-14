@@ -1,6 +1,6 @@
 "use client"
 
-import { createContext, useCallback, useContext, useEffect, useState } from "react"
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react"
 import { FR_DICT, EN_DICT } from "@/lib/translations"
 
 type Locale = "fr" | "en"
@@ -22,8 +22,8 @@ const I18nContext = createContext<I18nContextValue>({
   t: (key: string) => key,
 })
 
-export function I18nProvider({ children }: { children: React.ReactNode }) {
-  const [locale, setLocaleState] = useState<Locale>("fr")
+export function I18nProvider({ children, defaultLocale }: { children: React.ReactNode; defaultLocale?: Locale }) {
+  const [locale, setLocaleState] = useState<Locale>(defaultLocale ?? "fr")
 
   useEffect(() => {
     try {
@@ -61,8 +61,10 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
     [locale],
   )
 
+  const ctxValue = useMemo(() => ({ locale, setLocale, t }), [locale, setLocale, t])
+
   return (
-    <I18nContext.Provider value={{ locale, setLocale, t }}>
+    <I18nContext.Provider value={ctxValue}>
       {children}
     </I18nContext.Provider>
   )

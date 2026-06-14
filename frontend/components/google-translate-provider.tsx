@@ -8,7 +8,30 @@ import {
   useRef,
   useState,
 } from "react"
-import { usePathname } from "next/navigation"
+
+
+/* ------------------------------------------------------------------ */
+/*  Monkey-patch React's DOM Unmount to survive Google Translate       */
+/* ------------------------------------------------------------------ */
+if (typeof window !== "undefined" && typeof Node === "function" && Node.prototype) {
+  const originalRemoveChild = Node.prototype.removeChild
+  Node.prototype.removeChild = function <T extends Node>(this: Node, child: T): T {
+    if (child.parentNode !== this) {
+      // Google Translate or another extension moved/removed the node
+      return child
+    }
+    return originalRemoveChild.call(this, child) as T
+  }
+
+  const originalInsertBefore = Node.prototype.insertBefore
+  Node.prototype.insertBefore = function <T extends Node>(this: Node, newNode: T, referenceNode: Node | null): T {
+    if (referenceNode && referenceNode.parentNode !== this) {
+      // Google Translate or another extension moved the reference node
+      return newNode
+    }
+    return originalInsertBefore.call(this, newNode, referenceNode) as T
+  }
+}
 
 /* ------------------------------------------------------------------ */
 /*  Supported languages                                                */
@@ -21,13 +44,6 @@ export type SupportedLanguage = {
   flag: string
 }
 
-/**
- * SOURCE_LANGUAGE = The language the database content is written in (French).
- * DEFAULT_LANGUAGE = The language the user sees by default (English).
- *
- * Google Translate needs to know the SOURCE so it can translate accurately.
- * The cookie format is: googtrans=/SOURCE/TARGET
- */
 export const SOURCE_LANGUAGE = "fr"
 export const DEFAULT_LANGUAGE = "en"
 
@@ -72,91 +88,6 @@ export function useGoogleTranslate() {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Helper: nuke any Google Translate UI from the DOM                   */
-/* ------------------------------------------------------------------ */
-
-function hideGoogleTranslateUI() {
-  // Reset body/html positioning that Google Translate forcibly changes
-  document.body.style.top = "0px"
-  document.body.style.position = ""
-  document.documentElement.style.top = "0px"
-
-  // Aggressively hide ALL known Google Translate selectors
-  const killSelectors = [
-    ".goog-te-banner-frame",
-    "iframe.goog-te-banner-frame",
-    "#goog-gt-tt",
-    ".goog-te-balloon-frame",
-    "iframe.goog-te-menu-frame",
-    ".jfk-bubble",
-    ".goog-te-spinner-pos",
-    ".goog-te-spinner-pos div",
-    "div[data-goog-te-banner]",
-    "div.goog-te-banner-frame",
-    ".goog-te-gadget",
-    ".goog-te-gadget-simple",
-    ".goog-te-gadget-icon",
-    ".goog-te-menu-value",
-    ".goog-te-menu2",
-    ".skiptranslate",
-  ]
-  for (const sel of killSelectors) {
-    const els = document.querySelectorAll<HTMLElement>(sel)
-    for (const el of els) {
-      el.style.setProperty("display", "none", "important")
-      el.style.setProperty("visibility", "hidden", "important")
-      el.style.setProperty("height", "0", "important")
-      el.style.setProperty("overflow", "hidden", "important")
-      el.style.setProperty("position", "absolute", "important")
-      el.style.setProperty("top", "-9999px", "important")
-      el.style.setProperty("left", "-9999px", "important")
-      el.style.setProperty("pointer-events", "none", "important")
-    }
-  }
-
-  // Hide .skiptranslate wrappers (but NOT our #google_translate_element container)
-  const skipEls = document.querySelectorAll<HTMLElement>(".skiptranslate")
-  for (const el of skipEls) {
-    if (el.id === "google_translate_element") continue
-    el.style.setProperty("display", "none", "important")
-    el.style.setProperty("visibility", "hidden", "important")
-    el.style.setProperty("height", "0", "important")
-    el.style.setProperty("max-height", "0", "important")
-    el.style.setProperty("overflow", "hidden", "important")
-    el.style.setProperty("position", "absolute", "important")
-    el.style.setProperty("top", "-9999px", "important")
-    el.style.setProperty("left", "-9999px", "important")
-  }
-
-  // Catch ALL iframes from Google Translate domains
-  const allIframes = document.querySelectorAll<HTMLIFrameElement>("iframe")
-  for (const iframe of allIframes) {
-    const src = iframe.src || ""
-    if (src.includes("translate.google") || src.includes("translate.googleapis")) {
-      iframe.style.setProperty("display", "none", "important")
-      iframe.style.setProperty("visibility", "hidden", "important")
-      iframe.style.setProperty("height", "0", "important")
-      iframe.style.setProperty("width", "0", "important")
-      iframe.style.setProperty("position", "absolute", "important")
-      iframe.style.setProperty("top", "-9999px", "important")
-      iframe.style.setProperty("left", "-9999px", "important")
-      iframe.style.setProperty("pointer-events", "none", "important")
-    }
-  }
-
-  // Catch any element with id starting with "goog"
-  const googEls = document.querySelectorAll<HTMLElement>("div[id^='goog'], span[id^='goog']")
-  for (const el of googEls) {
-    if (el.id === "google_translate_element") continue
-    el.style.setProperty("display", "none", "important")
-    el.style.setProperty("visibility", "hidden", "important")
-    el.style.setProperty("position", "absolute", "important")
-    el.style.setProperty("top", "-9999px", "important")
-    el.style.setProperty("pointer-events", "none", "important")
-  }
-}
-
-/* ------------------------------------------------------------------ */
 /*  Provider                                                           */
 /* ------------------------------------------------------------------ */
 
@@ -176,6 +107,32 @@ declare global {
 
 const STORAGE_KEY = "gt_language"
 
+/* ------------------------------------------------------------------ */
+/*  ANTI-BLINK: Capture & disconnect Google's MutationObservers        */
+/*  Patch MutationObserver.prototype.observe BEFORE Google loads.      */
+/* ------------------------------------------------------------------ */
+
+/* ------------------------------------------------------------------ */
+/*  ANTI-BLINK (AGGRESSIVE): Permanently block Google Translate from    */
+/*  creating MutationObservers that watch the DOM. Google uses these   */
+/*  to re-inject <font> wrappers around translated text. When React    */
+/*  re-renders (on hover, scroll, state change), it strips the <font>  */
+/*  elements, Google's observer detects this and re-injects them —     */
+/*  causing a visible blink. By making observe() a silent no-op,       */
+/*  Google can never watch for DOM changes and never re-injects.       */
+/* ------------------------------------------------------------------ */
+
+/* ------------------------------------------------------------------ */
+/*  Anti-blink                                                         */
+/* ------------------------------------------------------------------ */
+
+// We do NOT patch MutationObserver.prototype.observe globally —
+// that breaks Next.js HMR/DevTools which rely on DOM observers.
+// Instead we use:
+//   1. CSS to hide Google Translate injected elements (layout.tsx)
+//   2. `notranslate` class on components Google Translate breaks
+//   3. Periodic cleanup of injected <font> tags via a lightweight interval
+
 export function GoogleTranslateProvider({
   children,
 }: {
@@ -184,44 +141,31 @@ export function GoogleTranslateProvider({
   const [currentLanguage, setCurrentLanguage] = useState(DEFAULT_LANGUAGE)
   const [isReady, setIsReady] = useState(false)
   const initAttempted = useRef(false)
-  const observerRef = useRef<MutationObserver | null>(null)
-  const pathname = usePathname()
 
   /* =================================================================
-     1. CALLBACKS FIRST
+     1. TRANSLATION FUNCTION — uses Google's combo box, NO page reload
      ================================================================= */
 
   const triggerTranslation = useCallback((langCode: string) => {
+    // Try the hidden Google combo select element
     const selectEl = document.querySelector<HTMLSelectElement>(".goog-te-combo")
     if (selectEl) {
-      // "Jog" — reset to source first, then set target.
-      // This forces Google Translate to re-scan ALL text nodes.
-      selectEl.value = ""
+      selectEl.value = langCode
       selectEl.dispatchEvent(new Event("change", { bubbles: true }))
-      setTimeout(() => {
-        selectEl.value = langCode
-        selectEl.dispatchEvent(new Event("change", { bubbles: true }))
-        requestAnimationFrame(hideGoogleTranslateUI)
-      }, 80)
       return
     }
-    const frame = document.querySelector<HTMLIFrameElement>(
-      "iframe.goog-te-menu-frame"
-    )
+
+    // Fallback: try clicking inside the hidden iframe
+    const frame = document.querySelector<HTMLIFrameElement>("iframe.goog-te-menu-frame")
     if (frame?.contentDocument) {
       const links = frame.contentDocument.querySelectorAll<HTMLAnchorElement>(
         ".goog-te-menu2-item a, a.goog-te-menu2-item"
       )
+      const lang = SUPPORTED_LANGUAGES.find((l) => l.code === langCode)
       for (const link of links) {
         const text = link.textContent?.trim().toLowerCase() || ""
-        const lang = SUPPORTED_LANGUAGES.find((l) => l.code === langCode)
-        if (
-          lang &&
-          (text.includes(lang.name.toLowerCase()) ||
-            text.includes(lang.nativeName.toLowerCase()))
-        ) {
+        if (lang && (text.includes(lang.name.toLowerCase()) || text.includes(lang.nativeName.toLowerCase()))) {
           link.click()
-          requestAnimationFrame(hideGoogleTranslateUI)
           return
         }
       }
@@ -230,43 +174,19 @@ export function GoogleTranslateProvider({
 
   const translateTo = useCallback(
     (langCode: string) => {
-      try {
-        localStorage.setItem(STORAGE_KEY, langCode)
-      } catch {}
-
+      try { localStorage.setItem(STORAGE_KEY, langCode) } catch {}
       setCurrentLanguage(langCode)
 
-      if (langCode === SOURCE_LANGUAGE) {
-        // Restore to original French (source) — clear cookie and reload
-        document.cookie =
-          "googtrans=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;"
-        document.cookie =
-          "googtrans=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=" +
-          window.location.hostname +
-          ";"
-        const selectEl = document.querySelector<HTMLSelectElement>(
-          ".goog-te-combo"
-        )
-        if (selectEl) {
-          selectEl.value = ""
-          selectEl.dispatchEvent(new Event("change", { bubbles: true }))
-        }
-        setTimeout(() => window.location.reload(), 50)
-        return
-      }
+      // Set the cookie for server-side Google Translate
+      document.cookie = `googtrans=/auto/${langCode}; path=/; SameSite=Lax`
 
-      // Cookie: /SOURCE/TARGET — Google translates FROM source TO target
-      document.cookie = `googtrans=/${SOURCE_LANGUAGE}/${langCode}; path=/; SameSite=Lax`
-
-      if (isReady) {
-        triggerTranslation(langCode)
-        setTimeout(hideGoogleTranslateUI, 100)
-        setTimeout(hideGoogleTranslateUI, 500)
-      } else {
-        window.location.reload()
-      }
+      // For translation to work, Google's TranslateElement internally
+      // calls its own translation mechanism. The cookie-based approach
+      // (googtrans cookie) already handles the initial translation.
+      // We do NOT need to let Google re-observe — the cookie is sufficient.
+      triggerTranslation(langCode)
     },
-    [isReady, triggerTranslation]
+    [triggerTranslation]
   )
 
   /* =================================================================
@@ -283,89 +203,35 @@ export function GoogleTranslateProvider({
     } catch {}
   }, [])
 
-  /** Pre-set googtrans cookie for instant translation on load */
+  /** Pre-set googtrans cookie so Google translates on first paint */
   useEffect(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEY)
-      // If no stored preference, default to English (translate from French)
       const target = stored || DEFAULT_LANGUAGE
       if (target !== SOURCE_LANGUAGE) {
-        if (!document.cookie.includes(`googtrans=/${SOURCE_LANGUAGE}/${target}`)) {
-          document.cookie = `googtrans=/${SOURCE_LANGUAGE}/${target}; path=/; SameSite=Lax`
+        if (!document.cookie.includes(`googtrans=/auto/${target}`)) {
+          document.cookie = `googtrans=/auto/${target}; path=/; SameSite=Lax`
         }
       }
     } catch {}
   }, [])
 
-  /** MutationObserver — watch for Google Translate DOM injections and hide them */
-  useEffect(() => {
-    let rafId: number | null = null
-    let lastHide = 0
-    const debouncedHide = () => {
-      if (rafId !== null) return
-      rafId = requestAnimationFrame(() => {
-        const now = Date.now()
-        if (now - lastHide > 100) {
-          hideGoogleTranslateUI()
-          lastHide = now
-        }
-        rafId = null
-      })
-    }
-
-    // Observe only direct children of body (where Google injects elements)
-    // and attribute changes on those children — not full subtree
-    observerRef.current = new MutationObserver(debouncedHide)
-    observerRef.current.observe(document.body, {
-      childList: true,
-    })
-
-    hideGoogleTranslateUI()
-
-    // Lightweight periodic fallback to catch any late injections
-    const intervalId = setInterval(hideGoogleTranslateUI, 3000)
-
-    const timers = [
-      setTimeout(hideGoogleTranslateUI, 200),
-      setTimeout(hideGoogleTranslateUI, 500),
-      setTimeout(hideGoogleTranslateUI, 1000),
-      setTimeout(hideGoogleTranslateUI, 2500),
-    ]
-
-    return () => {
-      observerRef.current?.disconnect()
-      clearInterval(intervalId)
-      timers.forEach(clearTimeout)
-      if (rafId !== null) cancelAnimationFrame(rafId)
-    }
-  }, [])
-
-  /** Inject Google Translate script — load IMMEDIATELY */
+  /** Inject Google Translate script — only once */
   useEffect(() => {
     if (initAttempted.current) return
     initAttempted.current = true
-
-    if (!document.getElementById("google_translate_element")) {
-      const div = document.createElement("div")
-      div.id = "google_translate_element"
-      div.style.cssText =
-        "position:absolute!important;top:-9999px!important;left:-9999px!important;height:0!important;width:0!important;overflow:hidden!important;opacity:0!important;pointer-events:none!important;"
-      document.body.appendChild(div)
-    }
 
     window.googleTranslateElementInit = () => {
       if (window.google?.translate?.TranslateElement) {
         new window.google.translate.TranslateElement(
           {
-            // SOURCE language = French (the actual language of the text)
-            pageLanguage: SOURCE_LANGUAGE,
+            pageLanguage: "auto",
             autoDisplay: false,
             includedLanguages: SUPPORTED_LANGUAGES.map((l) => l.code).join(","),
           },
           "google_translate_element"
         )
         setIsReady(true)
-        hideGoogleTranslateUI()
       }
     }
 
@@ -377,52 +243,38 @@ export function GoogleTranslateProvider({
       script.onerror = () => {
         console.warn("Google Translate failed to load")
       }
-      document.body.appendChild(script)
+      document.head.appendChild(script)
     }
   }, [])
 
-  /** Apply stored language once Google Translate is ready */
+  /** Once Google is ready, apply stored language */
   useEffect(() => {
     if (!isReady) return
-
-    hideGoogleTranslateUI()
-
     try {
       const stored = localStorage.getItem(STORAGE_KEY)
       const target = stored || DEFAULT_LANGUAGE
       if (target !== SOURCE_LANGUAGE) {
-        requestAnimationFrame(() => {
-          triggerTranslation(target)
-          setTimeout(hideGoogleTranslateUI, 200)
-        })
+        requestAnimationFrame(() => triggerTranslation(target))
       }
     } catch {}
   }, [isReady, triggerTranslation])
 
-  /** Re-translate + hide widget on EVERY page navigation */
+  /** Periodic cleanup disabled to prevent React DOM tracking interference */
   useEffect(() => {
-    hideGoogleTranslateUI()
+    // Disabled interval
+  }, [isReady])
 
-    if (!isReady) return
+  /** Add 'translating' class to body when language differs from source */
+  useEffect(() => {
+    if (currentLanguage !== SOURCE_LANGUAGE) {
+      document.body.classList.add("translating")
+    } else {
+      document.body.classList.remove("translating")
+    }
+    return () => document.body.classList.remove("translating")
+  }, [currentLanguage])
 
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY)
-      const target = stored || DEFAULT_LANGUAGE
-      if (target !== SOURCE_LANGUAGE) {
-        const t1 = setTimeout(() => {
-          triggerTranslation(target)
-          hideGoogleTranslateUI()
-        }, 50)
-        const t2 = setTimeout(hideGoogleTranslateUI, 200)
-        const t3 = setTimeout(hideGoogleTranslateUI, 500)
-        return () => {
-          clearTimeout(t1)
-          clearTimeout(t2)
-          clearTimeout(t3)
-        }
-      }
-    } catch {}
-  }, [pathname, isReady, triggerTranslation])
+  /* -- Hover tooltip / hovercard elements are handled by CSS in layout.tsx -- */
 
   /* ================================================================= */
 
@@ -432,10 +284,7 @@ export function GoogleTranslateProvider({
       const stored = localStorage.getItem(STORAGE_KEY)
       const target = stored || DEFAULT_LANGUAGE
       if (target !== SOURCE_LANGUAGE) {
-        requestAnimationFrame(() => {
-          triggerTranslation(target)
-          setTimeout(hideGoogleTranslateUI, 200)
-        })
+        requestAnimationFrame(() => triggerTranslation(target))
       }
     } catch {}
   }, [isReady, triggerTranslation])
@@ -444,6 +293,19 @@ export function GoogleTranslateProvider({
     <GoogleTranslateContext.Provider
       value={{ currentLanguage, translateTo, retranslate, isReady }}
     >
+      <div 
+        id="google_translate_element" 
+        style={{
+          position: "absolute",
+          top: "-9999px",
+          left: "-9999px",
+          height: "0",
+          width: "0",
+          overflow: "hidden",
+          opacity: 0,
+          pointerEvents: "none"
+        }} 
+      />
       {children}
     </GoogleTranslateContext.Provider>
   )

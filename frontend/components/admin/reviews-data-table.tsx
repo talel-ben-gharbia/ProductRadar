@@ -14,8 +14,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { getAutoModerationSuggestion } from "@/services/admin/enhanced-reviews"
-import { downloadReviewsCsv, getReviews, type ReviewItem, updateReviewStatus } from "@/services/admin/reviews"
+import { getAutoModerationSuggestion } from "@/services/enhanced-reviews"
+import { downloadReviewsCsv, getReviews, type ReviewItem, updateReviewStatus } from "@/services/reviews"
 
 const PAGE_SIZE = 20
 

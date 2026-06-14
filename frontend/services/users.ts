@@ -122,9 +122,9 @@ export const getUsers = withCache(async (
     b2bStatus: filters.b2bStatus,
   })
 
-  const cacheKey = `users:list:${limit}:${offset}`
+  const cacheKey = `users:list:${limit}:${offset}:${query}`
 
-  return cachedFetch<PaginatedUsersResponse>(`/api/admin/users`, {
+  return cachedFetch<PaginatedUsersResponse>(`/api/admin/users${query}`, {
     cacheKey,
     cacheTtl: 300,
   })
@@ -161,9 +161,9 @@ export const getPendingB2BUsers = withCache(async (
   search?: string,
 ): Promise<PaginatedUsersResponse> => {
   const query = buildQuery({ limit, offset, search })
-  const cacheKey = `users:b2b_pending:${limit}:${offset}`
+  const cacheKey = `users:b2b_pending:${limit}:${offset}:${query}`
 
-  return cachedFetch<PaginatedUsersResponse>(`/api/admin/users/b2b/pending`, {
+  return cachedFetch<PaginatedUsersResponse>(`/api/admin/users/b2b/pending${query}`, {
     cacheKey,
     cacheTtl: 300,
   })
@@ -191,9 +191,9 @@ export async function updateB2BStatus(
     }),
   })
 
-  const data = (await parseJson(response)) as { error?: string }
+  const data = (await parseJson(response)) as { error?: string; detail?: string }
   if (!response.ok) {
-    throw new Error(data.error || "Failed to update B2B status.")
+    throw new Error(data.detail || data.error || "Failed to update B2B status.")
   }
 
   return data as AdminUser
@@ -201,9 +201,9 @@ export async function updateB2BStatus(
 
 export const getRecentB2BReviews = withCache(async (limit = 10): Promise<RecentB2BReviewsResponse> => {
   const query = buildQuery({ limit })
-  const cacheKey = `users:b2b_recent:${limit}`
+  const cacheKey = `users:b2b_recent:${limit}:${query}`
 
-  return cachedFetch<RecentB2BReviewsResponse>(`/api/admin/users/b2b/recent`, {
+  return cachedFetch<RecentB2BReviewsResponse>(`/api/admin/users/b2b/recent${query}`, {
     cacheKey,
     cacheTtl: 300,
   })

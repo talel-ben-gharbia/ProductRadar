@@ -261,15 +261,141 @@ span[id^="goog"] {
 }
 
 /* --- Remove text highlighting on translated text --- */
-.goog-text-highlight {
+.goog-text-highlight,
+.goog-text-highlight:hover,
+.goog-text-highlight * {
   background: none !important;
   background-color: transparent !important;
   box-shadow: none !important;
   border: none !important;
+  outline: none !important;
+  text-shadow: none !important;
 }
 
-/* --- Fix font styling Google sometimes injects --- */
-font[style],
-font > font {
-  vertical-align: unset !important;
+/* --- Hide ALL Google Translate hover tooltip / hovercard / bubble elements --- */
+.goog-te-hovercard,
+.goog-te-tooltip,
+.goog-te-bubble,
+.goog-te-bubble-frame,
+.goog-te-balloon,
+.goog-te-balloon-frame,
+.goog-te-hovercard *,
+.goog-te-tooltip *,
+.goog-te-bubble *,
+.jfk-bubble,
+.jfk-bubble-hovercard,
+.goog-tooltip,
+.goog-tooltip:hover,
+#goog-gt-tt,
+#goog-gt-tt * {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  position: absolute !important;
+  top: -9999px !important;
+  left: -9999px !important;
+  z-index: -1 !important;
+  width: 0 !important;
+  height: 0 !important;
+  overflow: hidden !important;
+}
+
+/* ================================================================== */
+/*  CRITICAL: Prevent Google Translate <font> wrappers from causing     */
+/*  visible blinking/flickering during scroll. Google wraps translated  */
+/*  text in <font> elements with inline styles. When React re-renders  */
+/*  (triggered by scroll repaints), it removes these elements, then    */
+/*  Google re-applies them — causing a visible flash. all:unset strips  */
+/*  every inline style Google adds, making the <font> wrapper visually */
+/*  identical to its parent — so adding/removing it is invisible.      */
+/* ================================================================== */
+
+font {
+  display: inline !important;
+  background: transparent !important;
+  background-color: transparent !important;
+  color: inherit !important;
+  font-family: inherit !important;
+  font-size: inherit !important;
+  font-weight: inherit !important;
+  font-style: inherit !important;
+  text-decoration: inherit !important;
+  line-height: inherit !important;
+  letter-spacing: inherit !important;
+  text-shadow: none !important;
+  box-shadow: none !important;
+  border: none !important;
+  outline: none !important;
+  transition: none !important;
+  animation: none !important;
+  cursor: inherit !important;
+  pointer-events: none !important;
+}
+
+font:hover,
+font:active,
+font:focus {
+  background: transparent !important;
+  background-color: transparent !important;
+  color: inherit !important;
+  text-shadow: none !important;
+  box-shadow: none !important;
+  border: none !important;
+  outline: none !important;
+  text-decoration: inherit !important;
+  cursor: inherit !important;
+  pointer-events: none !important;
+}
+
+/* Prevent ALL Google Translate font inline styles from having any effect */
+font[style] {
+  all: unset !important;
+  display: inline !important;
+  pointer-events: none !important;
+  transition: none !important;
+  animation: none !important;
+}
+
+/* Global: prevent text-related flickering from any source */
+.translating * {
+  transition-property: none !important;
+}
+
+.translating a,
+.translating span,
+.translating p,
+.translating h1,
+.translating h2,
+.translating h3,
+.translating h4,
+.translating h5,
+.translating h6,
+.translating li,
+.translating td,
+.translating th,
+.translating label,
+.translating button {
+  transition: none !important;
+}
+
+/* --- Hide Google Translate popup/icon/branding elements --- */
+.goog-te-banner-frame,
+.goog-te-gadget-icon,
+.goog-te-gadget-simple,
+.goog-te-gadget img,
+.goog-logo-link,
+#goog-gt-tt,
+.goog-te-balloon-frame,
+.goog-te-spinner-pos,
+.goog-te-spinner,
+.goog-te-gadget span:not(.goog-te-combo),
+.skiptranslate + .skiptranslate,
+iframe#goog-te-banner,
+iframe.goog-te-banner-frame {
+  display: none !important;
+}
+
+body {
+  top: 0px !important;
 }

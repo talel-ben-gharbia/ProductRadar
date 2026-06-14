@@ -1,42 +1,23 @@
-"use client"
-
-import dynamic from "next/dynamic"
-import { usePathname } from "next/navigation"
+import { cookies } from "next/headers"
 import type { ReactNode } from "react"
 
-import { AdminProvider } from "@/components/admin/admin-context"
-import AdminNavbar from "@/components/admin/adminNavbar"
-import { SidebarProvider } from "@/components/ui/sidebar"
-
-const AdminSidebar = dynamic(() => import("@/components/admin/adminSidebar"), {
-  ssr: false,
-  loading: () => <div className="w-64 shrink-0" />,
-})
+import { COOKIE_NAME, verifySessionToken } from "@/lib/admin-session"
+import AdminLayoutClient from "./admin-layout-client"
 
 type AdminLayoutProps = {
   children: ReactNode
 }
 
-function AdminLayout({ children }: AdminLayoutProps) {
-  const pathname = usePathname()
+async function AdminLayout({ children }: AdminLayoutProps) {
+  const cookieStore = await cookies()
+  const token = cookieStore.get(COOKIE_NAME)?.value
+  const session = token ? await verifySessionToken(token) : null
 
-  if (pathname === "/admin/login") {
-    return <>{children}</>
-  }
+  const initialAdmin = session
+    ? { id: session.id, email: session.email, role: session.role }
+    : null
 
-  return (
-    <AdminProvider>
-      <SidebarProvider>
-        <div className="flex min-h-svh w-full">
-          <AdminSidebar />
-          <div className="min-w-0 flex-1">
-            <AdminNavbar />
-            <main className="w-full px-4 py-4 sm:px-6 sm:py-5 lg:px-8">{children}</main>
-          </div>
-        </div>
-      </SidebarProvider>
-    </AdminProvider>
-  )
+  return <AdminLayoutClient initialAdmin={initialAdmin}>{children}</AdminLayoutClient>
 }
 
 export default AdminLayout

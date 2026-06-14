@@ -6,8 +6,10 @@ import {
   Home,
   Layers,
   ListTree,
+  Mail,
   MessageSquare,
   Package,
+  Settings,
   Store,
   Tag,
   Users,
@@ -17,6 +19,11 @@ const BACKEND_URL =
   process.env.BACKEND_INTERNAL_URL ??
   process.env.NEXT_PUBLIC_BACKEND_URL ??
   "http://127.0.0.1:8000"
+
+const N8N_URL =
+  process.env.NEXT_PUBLIC_N8N_URL ?? "http://localhost:5678"
+
+const STRIPE_URL = "https://dashboard.stripe.com/acct_1SkBbCJhDNNCD8LD/test/dashboard"
 
 type SidebarSubItem = {
   title: string
@@ -141,6 +148,10 @@ const SIDEBAR_CONSTANTS: SidebarItem[] = [
         url: "/admin/b2b-workflows/renewals",
       },
       {
+        title: "Upgrade Requests",
+        url: "/admin/b2b-workflows/upgrades",
+      },
+      {
         title: "Ads Requests",
         url: "/admin/b2b-workflows/ads-requests",
       },
@@ -238,7 +249,7 @@ const SUPER_ADMIN_SIDEBAR_CONSTANTS: SidebarItem[] = [
   {
     id: "/admin/administration",
     name: "Administration",
-    icon: Activity,
+    icon: Settings,
     items: [
       {
         title: "Overview",
@@ -252,17 +263,22 @@ const SUPER_ADMIN_SIDEBAR_CONSTANTS: SidebarItem[] = [
         title: "Manage Roles",
         url: "/admin/admins/roles",
       },
-      {
-        title: "Activity Log",
-        url: "/admin/activity-log",
-      },
-      {
-        title: "System Health",
-        url: "/admin/system-health",
-      },
-    ],
+    {
+      title: "Activity Log",
+      url: "/admin/activity-log",
+    },
+    {
+      title: "Mailpit (Email Inbox)",
+      url: "/api/mailpit/redirect",
+    },
+  ],
+  },
+  {
+    id: "/admin/system-health",
+    name: "System Health",
+    icon: Activity,
   },
 ]
 
-export { BACKEND_URL, SIDEBAR_CONSTANTS, SUPER_ADMIN_SIDEBAR_CONSTANTS }
+export { BACKEND_URL, N8N_URL, STRIPE_URL, SIDEBAR_CONSTANTS, SUPER_ADMIN_SIDEBAR_CONSTANTS }
 export type { SidebarItem, SidebarSection, SidebarSubItem }

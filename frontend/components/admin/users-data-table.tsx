@@ -13,7 +13,7 @@ import {
   type AdminUser,
   type UserAccountStatus,
   updateUserStatus,
-} from "@/services/admin/users"
+} from "@/services/users"
 
 const PAGE_SIZE = 20
 

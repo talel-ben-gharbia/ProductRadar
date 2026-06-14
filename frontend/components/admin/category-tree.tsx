@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import { ChevronRight, Folder, FolderOpen, Tag } from "lucide-react"
 
 import { Spinner } from "@/components/ui/spinner"
-import { getRawCategories, type CategoryRaw } from "@/services/admin/categories"
+import { getRawCategories, type CategoryRaw } from "@/services/categories"
 
 type TreeNode = {
   id: number

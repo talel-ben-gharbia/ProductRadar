@@ -2,6 +2,7 @@
 
 namespace App\Controller;
 
+use App\Entity\Admin;
 use App\Entity\B2B;
 use App\Entity\B2BAdsCampaign;
 use App\Entity\B2BRequest;
@@ -14,6 +15,7 @@ use App\Entity\Notification;
 use App\Entity\Product;
 use App\Entity\ProductListing;
 use App\Entity\Seller;
+use App\Repository\AdminRepository;
 use App\Repository\ProductListingRepository;
 use App\Repository\UserRepository;
 use App\Service\B2BNotificationService;
@@ -34,7 +36,10 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use Symfony\Component\Mailer\MailerInterface;
+use Symfony\Component\Mime\Email;
 use Symfony\Component\Routing\Attribute\Route;
+use Psr\Log\LoggerInterface;
 
 #[Route('/api/b2b/workspace')]
 final class B2BWorkspaceController extends AbstractController
@@ -63,6 +68,7 @@ final class B2BWorkspaceController extends AbstractController
         private readonly CacheVersionManager $cacheVersionManager,
         private readonly B2BCompareService $compareService,
         private readonly BrandDiscoveryService $brandDiscoveryService,
+        private readonly AdminRepository $adminRepository,
         #[Autowire(service: 'general.cache')]
         private readonly CacheItemPoolInterface $cache,
     ) {
@@ -176,10 +182,10 @@ final class B2BWorkspaceController extends AbstractController
         $conn = $entityManager->getConnection();
 
         $brands = $conn->fetchFirstColumn(
-            'SELECT DISTINCT COALESCE(b.name, p.brand) FROM product p
+            'SELECT DISTINCT b.name FROM product p
              LEFT JOIN brand b ON b.id = p.brand_id
-             WHERE b.name IS NOT NULL OR (p.brand IS NOT NULL AND TRIM(p.brand) != \'\')
-             ORDER BY COALESCE(b.name, p.brand) ASC'
+             WHERE b.name IS NOT NULL 
+             ORDER BY b.name ASC'
         );
 
         $brands = array_map('trim', $brands);
@@ -230,7 +236,7 @@ final class B2BWorkspaceController extends AbstractController
 
         if (!empty($allIds)) {
             $rows = $conn->fetchAllAssociative(
-                'SELECT COALESCE(b.name, p.brand) as brand, COUNT(DISTINCT p.id) as product_count,
+                'SELECT b.name as brand, COUNT(DISTINCT p.id) as product_count,
                         COUNT(pl.id) as listing_count,
                         ROUND(AVG(ts.score)::numeric, 1) as avg_trust
                  FROM product p
@@ -242,7 +248,7 @@ final class B2BWorkspaceController extends AbstractController
                      ORDER BY created_at DESC LIMIT 1
                  ) ts ON true
                  WHERE p.id IN (:ids)
-                 GROUP BY COALESCE(b.name, p.brand)
+                 GROUP BY b.name
                  ORDER BY product_count DESC',
                 ['ids' => $allIds],
                 ['ids' => ArrayParameterType::INTEGER]
@@ -387,7 +393,7 @@ final class B2BWorkspaceController extends AbstractController
         }
 
         $products = $conn->fetchAllAssociative(
-            'SELECT p.id, p.name, COALESCE(b.name, p.brand) as brand, p.image_url, c.name as category_name,
+            'SELECT p.id, p.name, b.name as brand, p.image_url, c.name as category_name,
                     COUNT(pl.id) FILTER (WHERE pl.is_active = true) as active_sellers,
                     MIN(pl.price) FILTER (WHERE pl.is_active = true AND pl.price > 0) as lowest_price,
                     ROUND(AVG(ts.score) FILTER (WHERE pl.is_active = true)::numeric, 1) as avg_trust,
@@ -403,7 +409,7 @@ final class B2BWorkspaceController extends AbstractController
                  ORDER BY created_at DESC LIMIT 1
              ) ts ON true
               WHERE p.id IN (:ids)
-             GROUP BY p.id, p.name, COALESCE(b.name, p.brand), p.image_url, c.name
+             GROUP BY p.id, p.name, b.name, p.image_url, c.name
              ORDER BY active_sellers DESC, p.name ASC',
             ['ids' => $pageIds],
             ['ids' => ArrayParameterType::INTEGER]
@@ -662,7 +668,7 @@ final class B2BWorkspaceController extends AbstractController
             }
 
             $products = $conn->fetchAllAssociative(
-                 'SELECT p.id, p.name, COALESCE(b.name, p.brand) as brand, p.image_url, c.name as category_name
+                 'SELECT p.id, p.name, b.name as brand, p.image_url, c.name as category_name, p.specs_json
                   FROM product p
                  LEFT JOIN brand b ON b.id = p.brand_id
                  LEFT JOIN category c ON c.id = p.category_id
@@ -746,6 +752,7 @@ final class B2BWorkspaceController extends AbstractController
                     'product_brand' => $product['brand'],
                     'product_image' => $product['image_url'],
                     'category_name' => $product['category_name'],
+                    'specs' => $product['specs_json'] ? json_decode($product['specs_json'], true) : [],
                     'match_type' => $winner['matchType'] ?? null,
                     'match_reason' => $winner['reason'] ?? null,
                     'lowest_price' => $listingStats['lowest_price'] !== null ? (float) $listingStats['lowest_price'] : null,
@@ -1382,6 +1389,11 @@ final class B2BWorkspaceController extends AbstractController
 
     private function compressImage(string $filePath, string $mimeType): ?string
     {
+        if (!function_exists('imagecreatefromjpeg')) {
+            $data = file_get_contents($filePath);
+            return $data !== false ? $data : null;
+        }
+
         $image = match ($mimeType) {
             'image/jpeg' => @imagecreatefromjpeg($filePath),
             'image/png' => @imagecreatefrompng($filePath),
@@ -1631,6 +1643,8 @@ final class B2BWorkspaceController extends AbstractController
         string $firebaseUid,
         UserRepository $userRepository,
         EntityManagerInterface $entityManager,
+        MailerInterface $mailer,
+        LoggerInterface $logger,
     ): JsonResponse {
         $user = $this->resolveWorkspaceUser($firebaseUid, $userRepository);
         if ($user instanceof JsonResponse) {
@@ -1672,6 +1686,9 @@ final class B2BWorkspaceController extends AbstractController
         $entityManager->persist($notification);
         $entityManager->flush();
 
+        // Notify admins via email
+        $this->notifyAdminsOfSubscriptionRequest($mailer, $logger, $user, 'renewal', $currentSub->getPlanType() ?? 'B2B_SILVER');
+
         return $this->json(['id' => $newSub->getId(), 'status' => 'PENDING', 'message' => 'Renewal request submitted. Awaiting admin approval.'], 201);
     }
 
@@ -1680,6 +1697,8 @@ final class B2BWorkspaceController extends AbstractController
         string $firebaseUid,
         UserRepository $userRepository,
         EntityManagerInterface $entityManager,
+        MailerInterface $mailer,
+        LoggerInterface $logger,
     ): JsonResponse {
         $user = $this->resolveWorkspaceUser($firebaseUid, $userRepository);
         if ($user instanceof JsonResponse) {
@@ -1715,6 +1734,9 @@ final class B2BWorkspaceController extends AbstractController
         if ($user instanceof B2BMarket) $notification->setMarket($user);
         $entityManager->persist($notification);
         $entityManager->flush();
+
+        // Notify admins via email
+        $this->notifyAdminsOfSubscriptionRequest($mailer, $logger, $user, 'upgrade', 'B2B_GOLD');
 
         return $this->json(['id' => $newSub->getId(), 'status' => 'PENDING', 'message' => 'Upgrade request submitted. Awaiting admin approval.'], 201);
     }
@@ -1769,7 +1791,7 @@ final class B2BWorkspaceController extends AbstractController
                 ));
             } else {
                 $productIds = array_map('intval', $conn->fetchFirstColumn(
-                    'SELECT p.id FROM product p LEFT JOIN brand b ON b.id = p.brand_id WHERE COALESCE(LOWER(b.name), TRIM(LOWER(p.brand))) = :brand',
+                    'SELECT p.id FROM product p LEFT JOIN brand b ON b.id = p.brand_id WHERE LOWER(b.name) = :brand',
                     ['brand' => mb_strtolower($brand)]
                 ));
             }
@@ -1885,12 +1907,12 @@ final class B2BWorkspaceController extends AbstractController
             return $this->json(['error' => 'brandId or brand parameter is required.'], 400);
         }
 
-        $where = $brandId > 0 ? 'p.brand_id = :brandId' : 'COALESCE(LOWER(b.name), LOWER(p.brand)) = :brand';
+        $where = $brandId > 0 ? 'p.brand_id = :brandId' : 'LOWER(b.name) = :brand';
         $params = $brandId > 0 ? ['brandId' => $brandId] : ['brand' => mb_strtolower($brand)];
 
         // Get brand's products with their avg price and category avg price
         $products = $conn->fetchAllAssociative(
-            'SELECT p.id, p.name, COALESCE(b.name, p.brand) as brand, c.name as category_name,
+            'SELECT p.id, p.name, b.name as brand, c.name as category_name,
                     ROUND(AVG(pl.price)::numeric, 3) as brand_avg_price,
                     (SELECT ROUND(AVG(pl2.price)::numeric, 3)
                      FROM product_listing pl2
@@ -1902,7 +1924,7 @@ final class B2BWorkspaceController extends AbstractController
              JOIN product_listing pl ON pl.product_id = p.id AND pl.is_active = true AND pl.price > 0
              JOIN category c ON c.id = p.category_id
              WHERE ' . $where . '
-             GROUP BY p.id, p.name, COALESCE(b.name, p.brand), c.name, p.category_id
+             GROUP BY p.id, p.name, b.name, c.name, p.category_id
              ORDER BY p.name ASC',
             $params
         );
@@ -1955,7 +1977,7 @@ final class B2BWorkspaceController extends AbstractController
 
         // Get all products with their details
         $products = $conn->fetchAllAssociative(
-            'SELECT p.id, p.name, COALESCE(b.name, p.brand) as brand, p.image_url, c.name as category_name
+            'SELECT p.id, p.name, b.name as brand, p.image_url, c.name as category_name
              FROM product p
              LEFT JOIN brand b ON b.id = p.brand_id
              LEFT JOIN category c ON c.id = p.category_id
@@ -2132,10 +2154,10 @@ final class B2BWorkspaceController extends AbstractController
 
         return $this->cachedGet($this->cache, $this->buildUserCacheKey($this->cacheVersionManager, $firebaseUid, self::CACHE_KEY_WATCHLIST_SEARCH_PREFIX . md5($q)), static function () use ($entityManager, $q): array {
             $qb = $entityManager->getRepository(Product::class)->createQueryBuilder('p')
-                ->select('p.id, p.name, COALESCE(b.name, p.brand) as brand')
+                ->select('p.id, p.name, b.name as brand')
                 ->leftJoin('p.brandEntity', 'b')
                 ->where('LOWER(p.name) LIKE LOWER(:q)')
-                ->orWhere('LOWER(COALESCE(b.name, p.brand)) LIKE LOWER(:q)')
+                ->orWhere('LOWER(b.name) LIKE LOWER(:q)')
                 ->setParameter('q', '%' . $q . '%')
                 ->setMaxResults(20)
                 ->orderBy('p.name', 'ASC');
@@ -2567,10 +2589,20 @@ final class B2BWorkspaceController extends AbstractController
     private function resolveWorkspaceSubscription(B2B $user, EntityManagerInterface $entityManager): array
     {
         $ownerType = $user instanceof B2BCompany ? 'COMPANY' : 'MARKET';
+
+        // Prefer the latest ACTIVE subscription over a pending upgrade/renewal.
         $current = $entityManager->getRepository(Subscription::class)->findOneBy(
-            ['owner_type' => $ownerType, 'owner_id' => $user->getId()],
+            ['owner_type' => $ownerType, 'owner_id' => $user->getId(), 'active' => true],
             ['created_at' => 'DESC', 'id' => 'DESC']
         );
+
+        if (!$current instanceof Subscription) {
+            // No active subscription — fall back to the latest overall (may be a pending upgrade)
+            $current = $entityManager->getRepository(Subscription::class)->findOneBy(
+                ['owner_type' => $ownerType, 'owner_id' => $user->getId()],
+                ['created_at' => 'DESC', 'id' => 'DESC']
+            );
+        }
 
         if (!$current instanceof Subscription) {
             return [
@@ -3316,13 +3348,13 @@ final class B2BWorkspaceController extends AbstractController
                 ->groupBy('c.id, s.name');
         } else {
             $qb = $entityManager->createQueryBuilder()
-                ->select('c.id as categoryId, COALESCE(b.name, p.brand) as competitorName, COUNT(p.id) as itemCount')
+                ->select('c.id as categoryId, b.name as competitorName, COUNT(p.id) as itemCount')
                 ->from(\App\Entity\Product::class, 'p')
                 ->join('p.category', 'c')
                 ->leftJoin('p.brandEntity', 'b')
                 ->where('c.id IN (:categoryIds)')
                 ->setParameter('categoryIds', $categoryIds)
-                ->groupBy('c.id, b.name, p.brand');
+                ->groupBy('c.id, b.name');
         }
 
         $categoryStats = $qb->getQuery()->getResult();
@@ -4021,7 +4053,7 @@ final class B2BWorkspaceController extends AbstractController
             $rows = [];
             if (!empty($productIds)) {
                 $products = $conn->fetchAllAssociative(
-                    'SELECT p.id, p.name, COALESCE(b.name, p.brand) as brand,
+                    'SELECT p.id, p.name, b.name as brand,
                             ROUND(AVG(r.rating)::numeric, 2) as avg_rating,
                             COUNT(r.id) as total_reviews,
                             COUNT(r.id) FILTER (WHERE r.rating >= 4) as positive_count,
@@ -4030,7 +4062,7 @@ final class B2BWorkspaceController extends AbstractController
                      LEFT JOIN brand b ON b.id = p.brand_id
                      LEFT JOIN review r ON r.product_id = p.id AND r.status = \'approved\'
                      WHERE p.id IN (:pids)
-                     GROUP BY p.id, p.name, COALESCE(b.name, p.brand)
+                     GROUP BY p.id, p.name, b.name
                      ORDER BY p.name ASC',
                     ['pids' => $productIds],
                     ['pids' => ArrayParameterType::INTEGER]
@@ -4421,5 +4453,44 @@ final class B2BWorkspaceController extends AbstractController
             return $trimmed === '' ? null : $trimmed;
         }
         return null;
+    }
+
+    private function buildUserCacheKey(CacheVersionManager $versionManager, string $firebaseUid, string $prefix): string
+    {
+        return $prefix . $versionManager->getVersion($firebaseUid) . '.' . $firebaseUid;
+    }
+
+    private function notifyAdminsOfSubscriptionRequest(MailerInterface $mailer, LoggerInterface $logger, B2B $user, string $action, string $planType): void
+    {
+        $from = $_SERVER['B2B_NOTIFICATIONS_FROM'] ?? $_ENV['B2B_NOTIFICATIONS_FROM'] ?? 'noreply@productradar.tn';
+        $admins = $this->adminRepository->findAll();
+        $companyName = $user->getName() ?? 'A B2B partner';
+
+        foreach ($admins as $admin) {
+            $emailAddress = $admin->getEmail();
+            if ($emailAddress === null || $emailAddress === '') {
+                continue;
+            }
+            try {
+                $email = (new Email())
+                    ->from($from)
+                    ->to($emailAddress)
+                    ->subject(sprintf('[ProductRadar] %s request: %s - %s', ucfirst($action), $companyName, $planType))
+                    ->text(sprintf(
+                        "Hello,\n\n%s has requested a subscription %s to the %s plan.\n\nPlease review and approve or reject this request in the admin dashboard.\n\nBest regards,\nProductRadar Team",
+                        $companyName,
+                        $action,
+                        $planType
+                    ));
+                $mailer->send($email);
+            } catch (\Throwable $e) {
+                $logger->error('Failed to send subscription request email to admin.', [
+                    'admin_email' => $emailAddress,
+                    'company' => $companyName,
+                    'action' => $action,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
     }
 }

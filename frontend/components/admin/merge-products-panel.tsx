@@ -7,7 +7,7 @@ import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { mergeProducts } from "@/services/admin/quality"
+import { mergeProducts } from "@/services/quality"
 
 type CandidateItem = {
   productId: number

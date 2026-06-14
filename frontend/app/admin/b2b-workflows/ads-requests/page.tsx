@@ -38,10 +38,30 @@ type AdsRequest = {
 
 type ApprovalDraft = {
   startsAt: string
-  width: string
-  height: string
+  dimensions: string
   durationDays: string
 }
+
+const BANNER_DIMENSIONS = [
+  { label: "728×90 (Leaderboard)", value: "728x90" },
+  { label: "300×250 (Medium Rectangle)", value: "300x250" },
+  { label: "336×280 (Large Rectangle)", value: "336x280" },
+  { label: "320×100 (Large Mobile)", value: "320x100" },
+  { label: "468×60 (Full Banner)", value: "468x60" },
+  { label: "970×90 (Pushdown)", value: "970x90" },
+  { label: "250×250 (Square)", value: "250x250" },
+  { label: "200×200 (Small Square)", value: "200x200" },
+  { label: "120×600 (Skyscraper)", value: "120x600" },
+  { label: "160×600 (Wide Skyscraper)", value: "160x600" },
+  { label: "300×600 (Half Page)", value: "300x600" },
+  { label: "970×250 (Billboard)", value: "970x250" },
+]
+
+const DURATION_OPTIONS = [
+  { label: "7 days", value: "7" },
+  { label: "15 days", value: "15" },
+  { label: "30 days (Recommended)", value: "30" },
+]
 
 function timeAgo(dateStr?: string): string {
   if (!dateStr) return ""
@@ -79,14 +99,15 @@ export default function AdsRequestsAdminPage() {
     try {
       const endpoint = status.toUpperCase() === "APPROVED" ? "approve" : "reject"
       const draft = approvalDrafts[id]
+      const dims = draft?.dimensions?.split("x") ?? []
       await fetch(`/api/admin/b2b-workflows/ads-requests/${id}/${endpoint}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: status.toUpperCase() === "APPROVED"
           ? JSON.stringify({
               starts_at: draft?.startsAt || new Date().toISOString(),
-              width: draft?.width ? Number(draft.width) : null,
-              height: draft?.height ? Number(draft.height) : null,
+              width: dims[0] ? Number(dims[0]) : null,
+              height: dims[1] ? Number(dims[1]) : null,
               duration_days: draft?.durationDays ? Number(draft.durationDays) : null,
             })
           : JSON.stringify({}),
@@ -98,7 +119,7 @@ export default function AdsRequestsAdminPage() {
   const updateDraft = (id: number, field: keyof ApprovalDraft, value: string) => {
     setApprovalDrafts((current) => ({
       ...current,
-      [id]: { ...(current[id] ?? { startsAt: "", width: "", height: "", durationDays: "" }), [field]: value },
+      [id]: { ...(current[id] ?? { startsAt: "", dimensions: "", durationDays: "" }), [field]: value },
     }))
   }
 
@@ -239,7 +260,7 @@ export default function AdsRequestsAdminPage() {
                         {/* Actions */}
                         <td className="px-4 py-3 text-right">
                           {r.status?.toUpperCase() === "PENDING" && r.id && (
-                            <div className="ml-auto flex min-w-[260px] flex-col gap-2">
+                            <div className="ml-auto flex min-w-[280px] flex-col gap-2">
                               <div className="grid grid-cols-2 gap-2">
                                 <div className="space-y-1">
                                   <Label className="text-xs text-muted-foreground">Start</Label>
@@ -251,37 +272,31 @@ export default function AdsRequestsAdminPage() {
                                   />
                                 </div>
                                 <div className="space-y-1">
-                                  <Label className="text-xs text-muted-foreground">Duration (d)</Label>
-                                  <input
-                                    type="number"
+                                  <Label className="text-xs text-muted-foreground">Duration</Label>
+                                  <select
                                     value={approvalDrafts[r.id]?.durationDays ?? ""}
                                     onChange={(e) => updateDraft(r.id!, "durationDays", e.target.value)}
-                                    placeholder="30"
                                     className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm text-foreground"
-                                  />
+                                  >
+                                    <option value="">Select</option>
+                                    {DURATION_OPTIONS.map((o) => (
+                                      <option key={o.value} value={o.value}>{o.label}</option>
+                                    ))}
+                                  </select>
                                 </div>
                               </div>
-                              <div className="grid grid-cols-2 gap-2">
-                                <div className="space-y-1">
-                                  <Label className="text-xs text-muted-foreground">Width (px)</Label>
-                                  <input
-                                    type="number"
-                                    value={approvalDrafts[r.id]?.width ?? ""}
-                                    onChange={(e) => updateDraft(r.id!, "width", e.target.value)}
-                                    placeholder="728"
-                                    className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm text-foreground"
-                                  />
-                                </div>
-                                <div className="space-y-1">
-                                  <Label className="text-xs text-muted-foreground">Height (px)</Label>
-                                  <input
-                                    type="number"
-                                    value={approvalDrafts[r.id]?.height ?? ""}
-                                    onChange={(e) => updateDraft(r.id!, "height", e.target.value)}
-                                    placeholder="90"
-                                    className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm text-foreground"
-                                  />
-                                </div>
+                              <div className="space-y-1">
+                                <Label className="text-xs text-muted-foreground">Dimensions</Label>
+                                <select
+                                  value={approvalDrafts[r.id]?.dimensions ?? ""}
+                                  onChange={(e) => updateDraft(r.id!, "dimensions", e.target.value)}
+                                  className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm text-foreground"
+                                >
+                                  <option value="">Select</option>
+                                  {BANNER_DIMENSIONS.map((d) => (
+                                    <option key={d.value} value={d.value}>{d.label}</option>
+                                  ))}
+                                </select>
                               </div>
                               <div className="flex items-center justify-end gap-1">
                                 <Button variant="ghost" size="sm" onClick={() => updateStatus(r.id!, "APPROVED")} className="gap-1.5 text-sm text-emerald-600 hover:text-emerald-700">

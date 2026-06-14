@@ -1,9 +1,12 @@
+import React, { Suspense } from "react"
+
 import ProductsDataTable from "@/components/admin/products-data-table"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   getCategoriesWithParents,
-} from "@/services/admin/categories"
-import { getProductListings } from "@/services/admin/product-listings"
-import { getProducts } from "@/services/admin/products"
+} from "@/services/categories"
+import { getProductListings } from "@/services/product-listings"
+import { getProducts } from "@/services/products"
 import type { CategoryWithParent, Product } from "@/utils/types"
 
 type ProductsPageProps = {
@@ -93,21 +96,13 @@ async function loadProductsCategoriesData(): Promise<ProductsCategoriesData> {
   return { categories, fetchError }
 }
 
-export default async function ProductsPage({ searchParams }: ProductsPageProps) {
-  const resolvedParams = await searchParams
-  const rawCategoryId = resolvedParams?.categoryId
-  const parsedCategoryId = rawCategoryId ? Number(rawCategoryId) : undefined
-  const categoryId =
-    parsedCategoryId !== undefined && Number.isFinite(parsedCategoryId)
-      ? parsedCategoryId
-      : undefined
-
+async function ProductsPageContent({ categoryId }: { categoryId?: number }) {
   const { products, fetchError } = await loadProductsPageData(categoryId)
   const { categories, fetchError: categoriesFetchError } =
     await loadProductsCategoriesData()
 
   return (
-    <section className="w-full max-w-none space-y-4">
+    <>
       <h1 className="text-2xl font-bold">Products</h1>
 
       <ProductsDataTable
@@ -117,6 +112,40 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
         categoriesError={categoriesFetchError}
         initialCategoryId={categoryId}
       />
+    </>
+  )
+}
+
+function ProductsFallback() {
+  return (
+    <div className="space-y-4">
+      <Skeleton className="h-8 w-40" />
+      <div className="rounded-lg border bg-card p-4">
+        <Skeleton className="h-10 w-full" />
+        <div className="mt-4 space-y-2">
+          <Skeleton className="h-8 w-full" />
+          <Skeleton className="h-8 w-full" />
+          <Skeleton className="h-8 w-full" />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export default async function ProductsPage({ searchParams }: ProductsPageProps) {
+  const resolvedParams = await searchParams
+  const rawCategoryId = resolvedParams?.categoryId
+  const parsedCategoryId = rawCategoryId ? Number(rawCategoryId) : undefined
+  const categoryId =
+    parsedCategoryId !== undefined && Number.isFinite(parsedCategoryId)
+      ? parsedCategoryId
+      : undefined
+
+  return (
+    <section className="w-full max-w-none space-y-4">
+      <Suspense fallback={<ProductsFallback />}>
+        <ProductsPageContent categoryId={categoryId} />
+      </Suspense>
     </section>
   )
 }

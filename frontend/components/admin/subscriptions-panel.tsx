@@ -19,7 +19,7 @@ import {
   getSubscriptions,
   resyncAllSubscriptions,
   type SubscriptionItem,
-} from "@/services/admin/subscriptions"
+} from "@/services/subscriptions"
 
 const PAGE_SIZE = 20
 

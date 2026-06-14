@@ -2,8 +2,11 @@
 
 namespace App\Service;
 
+use App\Entity\B2B;
+use App\Entity\B2BMarket;
 use App\Entity\Subscription;
 use App\Entity\User;
+use App\Repository\SubscriptionRepository;
 
 final class SubscriptionLifecycleService
 {
@@ -11,8 +14,35 @@ final class SubscriptionLifecycleService
     public const PLAN_PREMIUM_MONTHLY = 'PREMIUM_MONTHLY';
     public const PLAN_PREMIUM_YEARLY = 'PREMIUM_YEARLY';
 
+    public function __construct(
+        private readonly SubscriptionRepository $subscriptionRepository,
+    ) {
+    }
+
     public function ensureDefaultFreePlan(User $user): Subscription
     {
+        if ($user instanceof B2B) {
+            $ownerType = $user instanceof B2BMarket ? 'MARKET' : 'COMPANY';
+            $existing = $this->subscriptionRepository->findActiveByOwner($ownerType, (int) $user->getId());
+            if ($existing !== null) {
+                $user->setSubscription($existing);
+                return $existing;
+            }
+            $subscription = new Subscription();
+            $subscription->setOwnerType($ownerType);
+            $subscription->setOwnerId((int) $user->getId());
+            $subscription->setPlanType('B2B_SILVER');
+            $subscription->setStartDate(new \DateTimeImmutable());
+            $subscription->setEndDate((new \DateTimeImmutable())->modify('+100 years'));
+            $subscription->setCreatedAt(new \DateTimeImmutable());
+            $subscription->setActive(true);
+            $subscription->setFavoritesLimit(999);
+            $subscription->setAlertsLimit(20);
+            $subscription->setPriceHistoryAccess(12);
+            $user->setSubscription($subscription);
+            return $subscription;
+        }
+
         $subscription = $user->getSubscription();
         if ($subscription instanceof Subscription) {
             return $subscription;
@@ -32,11 +62,23 @@ final class SubscriptionLifecycleService
     {
         $changed = false;
         $normalizedPlan = $this->normalizePlanType((string) $subscription->getPlanType());
-        $expected = $this->getPlanLimits($normalizedPlan);
 
-        if ($subscription->getPlanType() !== $normalizedPlan) {
-            $subscription->setPlanType($normalizedPlan);
-            $changed = true;
+        if (in_array($normalizedPlan, ['B2B_SILVER', 'B2B_GOLD'], true)) {
+            $expected = [
+                'favorites' => 999,
+                'alerts' => 20,
+                'priceHistoryAccess' => 12,
+            ];
+            if ($subscription->getPlanType() !== $normalizedPlan) {
+                $subscription->setPlanType($normalizedPlan);
+                $changed = true;
+            }
+        } else {
+            $expected = $this->getPlanLimits($normalizedPlan);
+            if ($subscription->getPlanType() !== $normalizedPlan) {
+                $subscription->setPlanType($normalizedPlan);
+                $changed = true;
+            }
         }
 
         if ($subscription->getFavoritesLimit() !== $expected['favorites']) {
@@ -93,6 +135,7 @@ final class SubscriptionLifecycleService
             'FREE', 'FREEMIUM' => self::PLAN_FREE,
             'PREMIUM', 'PREMIUM_MONTHLY' => self::PLAN_PREMIUM_MONTHLY,
             'PREMIUM_YEARLY' => self::PLAN_PREMIUM_YEARLY,
+            'B2B_SILVER', 'B2B_GOLD' => $plan,
             default => self::PLAN_FREE,
         };
     }
@@ -105,6 +148,8 @@ final class SubscriptionLifecycleService
             'PREMIUM',
             'PREMIUM_MONTHLY',
             'PREMIUM_YEARLY',
+            'B2B_SILVER',
+            'B2B_GOLD',
         ], true);
     }
 

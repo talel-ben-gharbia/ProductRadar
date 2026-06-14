@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
-import { Bell, BellRing, Heart, Menu, Search, Target, X } from "lucide-react"
+import { Bell, BellRing, Heart, Mail, Menu, MessageSquare, Search, Target, X } from "lucide-react"
 
 import { B2CNavAuth } from "@/components/B2C/b2c-nav-auth"
 import { Button } from "@/components/ui/button"
@@ -59,10 +59,13 @@ export function B2CNavbar({ title, backHref, backLabel }: B2CNavbarProps) {
   const [notificationsLoading, setNotificationsLoading] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [mounted, setMounted] = useState(false)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [sessionType, setSessionType] = useState<SessionType>(null)
   const [firebaseUid, setFirebaseUid] = useState<string | null>(null)
+  const [userEmail, setUserEmail] = useState("")
   const [b2bUnreadCount, setB2bUnreadCount] = useState(0)
+  const [mailUnreadCount, setMailUnreadCount] = useState(0)
   const containerRef = useRef<HTMLDivElement | null>(null)
   const notificationsRef = useRef<HTMLDivElement | null>(null)
   const abortRef = useRef<AbortController | null>(null)
@@ -79,6 +82,7 @@ export function B2CNavbar({ title, backHref, backLabel }: B2CNavbarProps) {
       }
     }
     document.addEventListener("mousedown", handleOutsideClick)
+    setMounted(true)
     return () => document.removeEventListener("mousedown", handleOutsideClick)
   }, [])
 
@@ -145,12 +149,13 @@ export function B2CNavbar({ title, backHref, backLabel }: B2CNavbarProps) {
 
     fetch("/api/b2c/auth/me", { cache: "no-store" })
 .then((r) => r.json())
-      .then((data: { customer?: { id?: number; type?: SessionType; firebase_uid?: string } | null }) => {
+      .then((data: { customer?: { id?: number; type?: SessionType; firebase_uid?: string; email?: string } | null }) => {
         if (cancelled) return
         const authenticated = Boolean(data.customer?.id)
         setIsAuthenticated(authenticated)
         setSessionType(authenticated ? (data.customer?.type ?? null) : null)
         setFirebaseUid(data.customer?.firebase_uid ?? null)
+        if (data.customer?.email) setUserEmail(data.customer.email)
         if (authenticated) loadNotifications(true)
         else setNotifications([])
       })
@@ -166,6 +171,16 @@ export function B2CNavbar({ title, backHref, backLabel }: B2CNavbarProps) {
       cancelled = true
     }
   }, [])
+
+  useEffect(() => {
+    if (!userEmail) { setMailUnreadCount(0); return }
+    let cancelled = false
+    fetch(`/api/mailpit/unread?email=${encodeURIComponent(userEmail)}`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((data: { count: number }) => { if (!cancelled) setMailUnreadCount(data.count) })
+      .catch(() => { if (!cancelled) setMailUnreadCount(0) })
+    return () => { cancelled = true }
+  }, [userEmail])
 
   useEffect(() => {
     if (notificationsOpen && isAuthenticated) loadNotifications()
@@ -398,6 +413,19 @@ export function B2CNavbar({ title, backHref, backLabel }: B2CNavbarProps) {
             {notificationsOpen && NotificationsDropdown}
           </div>
 
+          {isAuthenticated && userEmail && (
+            <Button asChild variant="ghost" size="icon" className="relative h-9 w-9 rounded-full text-muted-foreground hover:text-foreground">
+              <a href={`/api/mailpit/redirect?email=${encodeURIComponent(userEmail)}`} target="_blank" rel="noopener noreferrer" aria-label="Email Inbox">
+                <Mail className="h-4 w-4" />
+                {mailUnreadCount > 0 && (
+                  <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+                    {mailUnreadCount > 99 ? "99+" : mailUnreadCount}
+                  </span>
+                )}
+              </a>
+            </Button>
+          )}
+
           <LanguageSelector />
 
           {!isB2BSession && (
@@ -431,10 +459,17 @@ export function B2CNavbar({ title, backHref, backLabel }: B2CNavbarProps) {
             </Button>
           )}
 
+          <Button asChild variant="ghost" size="sm" className="h-9 rounded-full text-muted-foreground hover:text-foreground">
+            <Link href="/B2C/contact-us">
+              <MessageSquare className="mr-1 h-4 w-4" />
+              Contact
+            </Link>
+          </Button>
+
           <div className="ml-1 flex items-center gap-2">
             <B2CNavAuth />
 
-            {!isB2BSession && (
+            {mounted && !isAuthenticated && (
               <Button asChild size="sm" className="h-9 rounded-full px-4">
                 <Link href="/B2B">{t("nav.become_partner")}</Link>
               </Button>
@@ -510,7 +545,7 @@ export function B2CNavbar({ title, backHref, backLabel }: B2CNavbarProps) {
               <Heart className="h-4 w-4 text-muted-foreground" />
               {t("nav.favorites")}
             </button>
-            {isB2BSession ? (
+            {mounted && isB2BSession ? (
               <Link
                 href="/B2B/dashboard"
                 onClick={() => setMobileMenuOpen(false)}
@@ -518,7 +553,7 @@ export function B2CNavbar({ title, backHref, backLabel }: B2CNavbarProps) {
               >
                 {t("nav.b2b_dashboard")}
               </Link>
-            ) : (
+            ) : mounted && !isAuthenticated ? (
               <Link
                 href="/B2B"
                 onClick={() => setMobileMenuOpen(false)}
@@ -526,7 +561,31 @@ export function B2CNavbar({ title, backHref, backLabel }: B2CNavbarProps) {
               >
                 {t("nav.become_partner")}
               </Link>
+            ) : null}
+            {mounted && isAuthenticated && userEmail && (
+              <a
+                href={`/api/mailpit/redirect?email=${encodeURIComponent(userEmail)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="relative flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm transition-colors hover:bg-slate-50"
+              >
+                <Mail className="h-4 w-4 text-muted-foreground" />
+                Email Inbox
+                {mailUnreadCount > 0 && (
+                  <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-bold text-white">
+                    {mailUnreadCount > 99 ? "99+" : mailUnreadCount}
+                  </span>
+                )}
+              </a>
             )}
+            <Link
+              href="/B2C/contact-us"
+              onClick={() => setMobileMenuOpen(false)}
+              className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm transition-colors hover:bg-slate-50"
+            >
+              <MessageSquare className="h-4 w-4 text-muted-foreground" />
+              Contactez-nous
+            </Link>
             <div className="border-t pt-2 mt-2">
               <div className="px-3">
                 <MobileLanguageSelector onClose={() => setMobileMenuOpen(false)} />

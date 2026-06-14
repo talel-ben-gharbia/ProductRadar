@@ -1,7 +1,7 @@
 "use client"
 
 import { getAuth, signOut } from "firebase/auth"
-import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from "react"
+import { createContext, useContext, useEffect, useMemo, useState, useCallback, type ReactNode } from "react"
 
 export type B2BUserInfo = {
   id?: number | null
@@ -137,8 +137,13 @@ export function B2BProvider({ children, initialSummary, firebaseUid }: {
     window.location.href = "/"
   }, [])
 
+  const ctxValue = useMemo(() => ({
+    summary, loading, error, firebaseUid, mode, planType, isGold, isSilver,
+    brandFilter, setBrandFilter, sellerId, setSellerId, refresh, logout,
+  }), [summary, loading, error, firebaseUid, mode, planType, isGold, isSilver, brandFilter, setBrandFilter, sellerId, setSellerId, refresh, logout])
+
   return (
-    <B2BContext.Provider value={{ summary, loading, error, firebaseUid, mode, planType, isGold, isSilver, brandFilter, setBrandFilter, sellerId, setSellerId, refresh, logout }}>
+    <B2BContext.Provider value={ctxValue}>
       {children}
     </B2BContext.Provider>
   )

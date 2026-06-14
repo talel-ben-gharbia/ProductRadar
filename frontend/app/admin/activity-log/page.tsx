@@ -1,3 +1,4 @@
+import React, { Suspense } from "react"
 import Link from "next/link"
 import { cookies } from "next/headers"
 
@@ -5,6 +6,7 @@ import { verifySessionToken, COOKIE_NAME } from "@/lib/admin-session"
 import { BACKEND_URL } from "@/utils/admin/constants"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Skeleton } from "@/components/ui/skeleton"
 
 import {
   Table,
@@ -59,26 +61,24 @@ function parseNonNegativeInt(value: string | undefined, fallback: number): numbe
   return parsed
 }
 
-export default async function ActivityLogPage({ searchParams }: ActivityLogPageProps) {
+async function ActivityLogPageContent({
+  limit,
+  offset,
+  search,
+  entityType,
+  action,
+  query,
+}: {
+  limit: number
+  offset: number
+  search: string
+  entityType: string
+  action: string
+  query: URLSearchParams
+}) {
   let rows: ActivityLogItem[] = []
   let fetchError: string | null = null
   let total = 0
-
-  const resolvedSearchParams = (await searchParams) ?? {}
-  const limit = Math.min(100, parsePositiveInt(resolvedSearchParams.limit, 25))
-  const offset = parseNonNegativeInt(resolvedSearchParams.offset, 0)
-  const search = (resolvedSearchParams.search ?? "").trim()
-  const entityType = (resolvedSearchParams.entity_type ?? "").trim().toUpperCase()
-  const action = (resolvedSearchParams.action ?? "").trim().toUpperCase()
-
-  const query = new URLSearchParams({
-    limit: String(limit),
-    offset: String(offset),
-  })
-
-  if (search !== "") query.set("search", search)
-  if (entityType !== "") query.set("entity_type", entityType)
-  if (action !== "") query.set("action", action)
 
   const cookieStore = await cookies()
   const token = cookieStore.get(COOKIE_NAME)?.value
@@ -130,32 +130,7 @@ export default async function ActivityLogPage({ searchParams }: ActivityLogPageP
   nextParams.set("offset", String(offset + limit))
 
   return (
-    <section className="w-full max-w-none space-y-4">
-      <div className="space-y-1">
-        <h1 className="text-2xl font-bold">Activity Log</h1>
-        <p className="text-sm text-muted-foreground">
-          Search and audit admin actions with filters and pagination.
-        </p>
-      </div>
-
-      <form method="GET" className="grid gap-3 rounded-lg border bg-card p-4 md:grid-cols-4">
-        <Input name="search" defaultValue={search} placeholder="Search email, action, entity" />
-        <Input name="entity_type" defaultValue={entityType} placeholder="Entity type (ex: ADMIN)" />
-        <Input name="action" defaultValue={action} placeholder="Action (ex: ADMIN_DELETE)" />
-        <div className="flex items-center gap-2">
-          <Input
-            type="number"
-            min={1}
-            max={100}
-            name="limit"
-            defaultValue={String(limit)}
-            placeholder="Limit"
-          />
-          <input type="hidden" name="offset" value="0" />
-          <Button type="submit" className="shrink-0">Apply</Button>
-        </div>
-      </form>
-
+    <>
       <div className="w-full rounded-lg border bg-card">
         <Table>
           <TableHeader>
@@ -215,6 +190,75 @@ export default async function ActivityLogPage({ searchParams }: ActivityLogPageP
           </div>
         </div>
       )}
+    </>
+  )
+}
+
+function ActivityLogFallback() {
+  return (
+    <div className="space-y-4">
+      <Skeleton className="h-8 w-36" />
+      <Skeleton className="h-4 w-64" />
+      <Skeleton className="h-16 w-full rounded-lg" />
+      <Skeleton className="h-48 w-full rounded-lg" />
+    </div>
+  )
+}
+
+export default async function ActivityLogPage({ searchParams }: ActivityLogPageProps) {
+  const resolvedSearchParams = (await searchParams) ?? {}
+  const limit = Math.min(100, parsePositiveInt(resolvedSearchParams.limit, 25))
+  const offset = parseNonNegativeInt(resolvedSearchParams.offset, 0)
+  const search = (resolvedSearchParams.search ?? "").trim()
+  const entityType = (resolvedSearchParams.entity_type ?? "").trim().toUpperCase()
+  const action = (resolvedSearchParams.action ?? "").trim().toUpperCase()
+
+  const query = new URLSearchParams({
+    limit: String(limit),
+    offset: String(offset),
+  })
+
+  if (search !== "") query.set("search", search)
+  if (entityType !== "") query.set("entity_type", entityType)
+  if (action !== "") query.set("action", action)
+
+  return (
+    <section className="w-full max-w-none space-y-4">
+      <div className="space-y-1">
+        <h1 className="text-2xl font-bold">Activity Log</h1>
+        <p className="text-sm text-muted-foreground">
+          Search and audit admin actions with filters and pagination.
+        </p>
+      </div>
+
+      <form method="GET" className="grid gap-3 rounded-lg border bg-card p-4 md:grid-cols-4">
+        <Input name="search" defaultValue={search} placeholder="Search email, action, entity" />
+        <Input name="entity_type" defaultValue={entityType} placeholder="Entity type (ex: ADMIN)" />
+        <Input name="action" defaultValue={action} placeholder="Action (ex: ADMIN_DELETE)" />
+        <div className="flex items-center gap-2">
+          <Input
+            type="number"
+            min={1}
+            max={100}
+            name="limit"
+            defaultValue={String(limit)}
+            placeholder="Limit"
+          />
+          <input type="hidden" name="offset" value="0" />
+          <Button type="submit" className="shrink-0">Apply</Button>
+        </div>
+      </form>
+
+      <Suspense fallback={<ActivityLogFallback />}>
+        <ActivityLogPageContent
+          limit={limit}
+          offset={offset}
+          search={search}
+          entityType={entityType}
+          action={action}
+          query={query}
+        />
+      </Suspense>
     </section>
   )
 }

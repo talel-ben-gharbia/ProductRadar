@@ -177,7 +177,7 @@ class ProductListingRepository extends ServiceEntityRepository
             ->addSelect('pl.is_active AS is_active')
             ->addSelect('p.id AS productId')
             ->addSelect('p.name AS productName')
-            ->addSelect('COALESCE(b.name, p.brand) AS productBrand')
+            ->addSelect('b.name AS productBrand')
             ->addSelect('p.image_url AS productImageUrl')
             ->addSelect('IDENTITY(p.brandEntity) AS brandId')
             ->addSelect('c.id AS categoryId')
@@ -263,7 +263,7 @@ SQL;
         return $this->createQueryBuilder('pl')
             ->join('pl.product', 'p')
             ->leftJoin('p.brandEntity', 'b')
-            ->where('LOWER(COALESCE(b.name, p.brand)) = :brand')
+            ->where('LOWER(b.name) = :brand')
             ->setParameter('brand', mb_strtolower(trim($brandName)))
             ->getQuery()
             ->getResult();

@@ -48,10 +48,10 @@ final class Scheduler extends Command
         }
 
         $tasks = [
-            'app:b2b:detect-alerts'       => [],
-            'app:trust-score:recalculate' => [],
-            'app:b2b:check-expiry'        => [],
-            'app:events:consume'          => ['--one-shot' => true],
+            'app:b2b:detect-alerts'          => [],
+            'app:trust-score:recalculate'    => [],
+            'app:b2b:check-expiry'           => [],
+            'app:events:consume'             => ['--one-shot' => true],
         ];
 
         $exitCode = Command::SUCCESS;

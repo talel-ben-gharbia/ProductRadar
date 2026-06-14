@@ -64,6 +64,7 @@ type CompareProduct = {
   price_history?: PriceHistoryPoint[]
   match_type?: "Direct Match" | "Step-Up Alternative" | "Budget Alternative" | null
   match_reason?: string | null
+  specs?: Record<string, any>
 }
 
 const MATCH_TYPE_STYLES: Record<string, { badge: string; label: string }> = {
@@ -121,8 +122,13 @@ export default function ProductComparePage() {
   const lastClickRef = useRef(0)
   const { mode, isGold } = useB2B()
   const fetchedRef = useRef(false)
+  const [mounted, setMounted] = useState(false)
 
-  if (!isGold) return <B2BPlanGate featureName="Multi-Product AI Comparison" />
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+
 
   const fetchCategories = useCallback(async () => {
     try {
@@ -332,6 +338,24 @@ export default function ProductComparePage() {
     })
   }, [compareResults])
 
+  const allSpecsKeys = useMemo(() => {
+    const keys = new Set<string>()
+    for (const p of compareResults) {
+      if (p.specs) {
+        for (const k of Object.keys(p.specs)) {
+          keys.add(k)
+        }
+      }
+    }
+    return Array.from(keys).sort()
+  }, [compareResults])
+
+  if (!mounted) {
+    return null
+  }
+
+  if (!isGold) return <B2BPlanGate featureName="Multi-Product AI Comparison" />
+
   return (
     <div className="space-y-6">
       <div>
@@ -348,31 +372,36 @@ export default function ProductComparePage() {
               <span className="text-sm font-medium">Category:</span>
             </div>
             <Select value={selectedCategory} onValueChange={handleCategoryChange}>
-              <SelectTrigger className="w-56">
-                <SelectValue placeholder="Select category..." />
+              <SelectTrigger className="w-56" suppressHydrationWarning data-lpignore="true" data-1p-ignore="true">
+                <span suppressHydrationWarning>
+                  <SelectValue placeholder="Select category..." />
+                </span>
               </SelectTrigger>
               <SelectContent>
                 {visibleCategories.map((cat) => (
-                  <SelectItem key={cat.id} value={String(cat.id)}>{cat.name}</SelectItem>
+                  <SelectItem key={cat.id} value={String(cat.id)}><span>{cat.name}</span></SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
 
-          {selectedCategory && (
-            <>
-              {/* Brand filter */}
-              {brandOptions.length > 1 && (
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">Brand:</span>
-                  <Select value={selectedBrand} onValueChange={setSelectedBrand}>
-                    <SelectTrigger className="w-44 h-8 text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
+          <div className="flex flex-col gap-4">
+            {selectedCategory && (
+              <div className="space-y-4">
+                {/* Brand filter */}
+                {brandOptions.length > 1 && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">Brand:</span>
+                    <Select value={selectedBrand} onValueChange={setSelectedBrand}>
+                      <SelectTrigger className="w-44 h-8 text-xs" suppressHydrationWarning data-lpignore="true" data-1p-ignore="true">
+                        <span suppressHydrationWarning>
+                          <SelectValue />
+                        </span>
+                      </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">All Brands</SelectItem>
+                      <SelectItem value="all"><span>All Brands</span></SelectItem>
                       {brandOptions.map((brand) => (
-                        <SelectItem key={brand} value={brand}>{brand}</SelectItem>
+                        <SelectItem key={brand} value={brand}><span>{brand}</span></SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -382,7 +411,7 @@ export default function ProductComparePage() {
                       onClick={() => setSelectedBrand("all")}
                       className="inline-flex items-center gap-0.5 rounded-full border border-slate-200 px-2 py-1 text-[10px] text-muted-foreground hover:bg-muted/50"
                     >
-                      <X className="h-3 w-3" /> Clear
+                      <X className="h-3 w-3" /> <span>Clear</span>
                     </button>
                   )}
                 </div>
@@ -399,7 +428,7 @@ export default function ProductComparePage() {
                 />
                 {searchMatchCount !== null && searchTerm && (
                   <span className="text-[10px] text-muted-foreground whitespace-nowrap">
-                    {searchMatchCount} match{searchMatchCount !== 1 ? "es" : ""}
+                    <span>{searchMatchCount} match{searchMatchCount !== 1 ? "es" : ""}</span>
                   </span>
                 )}
               </div>
@@ -432,7 +461,7 @@ export default function ProductComparePage() {
                         }`}
                       >
                         {isSelected ? <CheckCircle2 className="h-3 w-3" /> : <Plus className="h-3 w-3" />}
-                        {product.name}
+                        <span>{product.name}</span>
                         {product.brand && <span className="text-[10px] opacity-60">({product.brand})</span>}
                       </button>
                     )
@@ -444,25 +473,26 @@ export default function ProductComparePage() {
               {selectedIds.length >= 1 && (
                 <div className="flex items-center gap-2 border-t pt-4">
                   <Button onClick={handleCompare} disabled={comparing}>
-                    {progressText ?? "Compare with Competitors"}
+                    <span>{progressText ?? "Compare with Competitors"}</span>
                   </Button>
                   <Button variant="ghost" size="sm" onClick={clearAll}>
-                    <X className="mr-1 h-3.5 w-3.5" /> Clear all
+                    <X className="mr-1 h-3.5 w-3.5" /> <span>Clear all</span>
                   </Button>
-                </div>
-              )}
-            </>
-          )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </CardContent>
       </Card>
 
       {/* Comparison Results */}
-      {compareResults.length >= 2 && (
+      <div className={compareResults.length >= 2 ? "block" : "hidden"}>
         <Card className="border-border/50 overflow-hidden">
           <CardHeader className="border-b bg-muted/20 pb-3">
             <CardTitle className="flex items-center gap-2 text-base">
               <BarChart3 className="h-4 w-4 text-indigo-500" />
-              Head-to-Head Comparison
+              <span>Head-to-Head Comparison</span>
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
@@ -517,7 +547,7 @@ export default function ProductComparePage() {
                             }`}>
                               <div className="flex items-center justify-center gap-1">
                                 {isBest && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />}
-                                {metric.format(val)}
+                                <span>{metric.format(val)}</span>
                               </div>
                             </td>
                           )
@@ -526,20 +556,37 @@ export default function ProductComparePage() {
                     )
                   })}
                 </tbody>
+                {allSpecsKeys.length > 0 && (
+                  <tbody className="divide-y border-t-2 border-muted">
+                    <tr>
+                      <td colSpan={compareResults.length + 1} className="bg-muted/10 px-4 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                        <span>Specifications</span>
+                      </td>
+                    </tr>
+                    {allSpecsKeys.map((key) => (
+                      <tr key={key} className="transition-colors hover:bg-muted/20">
+                        <td className="px-4 py-3 font-medium text-muted-foreground capitalize"><span>{key.replace(/_/g, " ")}</span></td>
+                        {compareResults.map((p) => (
+                          <td key={p.product_id} className="px-4 py-3 text-center text-foreground">
+                            <span className="text-xs">{p.specs?.[key] ? String(p.specs[key]) : "-"}</span>
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                )}
               </table>
             </div>
           </CardContent>
 
           {/* Price History Chart */}
-          {chartData.length > 1 && (
+          <div className={chartData.length > 1 ? "block" : "hidden"}>
             <CardHeader className="border-t bg-muted/10 pb-2">
               <CardTitle className="flex items-center gap-2 text-sm">
                 <BarChart3 className="h-4 w-4 text-indigo-500" />
-                Price History (60 days)
+                <span>Price History (60 days)</span>
               </CardTitle>
             </CardHeader>
-          )}
-          {chartData.length > 1 && (
             <CardContent className="h-72 pt-2">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={chartData}>
@@ -562,9 +609,9 @@ export default function ProductComparePage() {
                 </LineChart>
               </ResponsiveContainer>
             </CardContent>
-          )}
+          </div>
         </Card>
-      )}
+      </div>
     </div>
   )
 }

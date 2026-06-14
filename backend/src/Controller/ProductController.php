@@ -18,7 +18,7 @@ final class ProductController extends AbstractController
 {
     private const CACHE_KEY_PRODUCTS = 'products.all';
     private const CACHE_KEY_PRODUCT_PREFIX = 'product.';
-    private const CACHE_TTL = 300;
+    private const CACHE_TTL = 600;
 
     public function __construct(
         #[Autowire(service: 'products.cache')]
@@ -45,7 +45,7 @@ final class ProductController extends AbstractController
             static fn($product) => [
                 'id' => $product->getId(),
                 'name' => $product->getName(),
-                'brand' => $product->getBrand() ?? $product->getBrandEntity()?->getName(),
+'brand' => $product->getBrandEntity()?->getName(),
                 'description' => $product->getDescription(),
                 'specs_json' => $product->getSpecsJson(),
                 'image_url' => $product->getImageUrl(),
@@ -71,7 +71,7 @@ final class ProductController extends AbstractController
             return $this->json($cacheItem->get());
         }
 
-        $product = $productRepository->find($id);
+        $product = $productRepository->findWithListingsAndSellers($id);
         if (!$product) {
             return $this->json(['error' => 'Product not found.'], 404);
         }
@@ -79,7 +79,7 @@ final class ProductController extends AbstractController
         $data = [
             'id' => $product->getId(),
             'name' => $product->getName(),
-            'brand' => $product->getBrand() ?? $product->getBrandEntity()?->getName(),
+            'brand' => $product->getBrandEntity()?->getName(),
             'description' => $product->getDescription(),
             'specs_json' => $product->getSpecsJson(),
             'image_url' => $product->getImageUrl(),

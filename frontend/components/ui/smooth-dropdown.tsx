@@ -93,10 +93,10 @@ export default function SmoothDropdown({
       </button>
 
       <div
-        className={`absolute z-20 mt-2 w-full origin-top rounded-md border bg-background p-1 shadow transition-all duration-200 ease-out ${
+        className={`absolute z-20 mt-2 w-full origin-top rounded-md border bg-background p-1 shadow ${
           isOpen
-            ? "pointer-events-auto translate-y-0 scale-100 opacity-100"
-            : "pointer-events-none -translate-y-1 scale-95 opacity-0"
+            ? "visible opacity-100"
+            : "invisible opacity-0"
         }`}
       >
         {searchable && (

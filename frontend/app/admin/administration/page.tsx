@@ -1,5 +1,3 @@
-"use client"
-
 import Link from "next/link"
 import {
   ArrowUpRight,
@@ -84,7 +82,7 @@ export default function AdministrationHubPage() {
             <Link
               key={tool.href}
               href={tool.href}
-              className="group relative flex flex-col rounded-2xl border border-border/60 bg-card p-5 shadow-xs transition-all duration-200 hover:shadow-md hover:border-border/100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              className="group relative flex flex-col rounded-2xl border border-border/60 bg-card p-5 shadow-xs hover:shadow-md hover:border-border/100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             >
               {/* Icon */}
               <div

@@ -1,8 +1,9 @@
 "use client"
 
 import { FormEvent, useState } from "react"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { Building2, Globe, Loader2, Mail, MapPin, Store, User } from "lucide-react"
+import { ArrowLeft, Building2, Globe, Loader2, Mail, MapPin, Store, User } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
@@ -15,6 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { useI18n } from "@/lib/i18n-context"
 
 const COUNTRY_OPTIONS = [
   { code: "AE", name: "United Arab Emirates" },
@@ -39,6 +41,7 @@ const COUNTRY_OPTIONS = [
 
 export default function B2BPartnerSignup() {
   const router = useRouter()
+  const { locale, setLocale, t } = useI18n()
   const [fullName, setFullName] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
@@ -89,11 +92,36 @@ export default function B2BPartnerSignup() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-50 via-white to-indigo-50/40 p-4">
+    <div className="flex min-h-screen flex-col bg-gradient-to-br from-slate-50 via-white to-indigo-50/40">
+      {/* Header */}
+      <header className="sticky top-0 z-50 border-b border-slate-200/80 bg-white/95 backdrop-blur-md">
+        <div className="mx-auto flex w-full max-w-2xl items-center justify-between px-4 py-3 sm:px-6">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            {t("general.back")}
+          </Link>
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold tracking-tight text-slate-800">{t("nav.brand")}</span>
+            <button
+              type="button"
+              onClick={() => setLocale(locale === "en" ? "fr" : "en")}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50"
+            >
+              <Globe className="h-3.5 w-3.5" />
+              {locale === "en" ? "FR" : "EN"}
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <div className="flex flex-1 items-center justify-center p-4">
       <div className="w-full max-w-lg">
         <div className="mb-6 text-center">
-          <h1 className="text-2xl font-bold tracking-tight">Become a Partner</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Choose your account type and fill in your details.</p>
+          <h1 className="text-2xl font-bold tracking-tight">{t("b2b.partner_title")}</h1>
+          <p className="mt-1 text-sm text-muted-foreground">{t("b2b.partner_subtitle")}</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -204,6 +232,7 @@ export default function B2BPartnerSignup() {
             {loading ? "Submitting..." : "Submit partner request"}
           </Button>
         </form>
+      </div>
       </div>
     </div>
   )

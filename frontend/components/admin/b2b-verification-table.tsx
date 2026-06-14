@@ -14,7 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Building, ShieldCheck, Clock, Store, Tag, XCircle, CheckCircle } from "lucide-react"
+import { ShieldCheck, Clock, Store, Tag, XCircle, CheckCircle, ExternalLink } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import {
   Table,
@@ -32,10 +32,12 @@ import {
   type B2BStatus,
   type B2BReviewActivity,
   updateB2BStatus,
-} from "@/services/admin/users"
-import { getSellers, type Seller } from "@/services/admin/sellers"
+} from "@/services/users"
+import { getSellers, type Seller } from "@/services/sellers"
 
 const PAGE_SIZE = 20
+
+
 
 function formatDate(value: string | null): string {
   if (!value) return "-"
@@ -67,6 +69,13 @@ export default function B2BVerificationTable() {
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null)
 
   const reviewActionLabel = reviewAction === "APPROVED" ? "approve" : "reject"
+
+  const reviewTargetsIncludeMarket = useMemo(() => {
+    return reviewTargetIds.some((id) => {
+      const user = users.find((u) => u.id === id)
+      return user?.account_type === "B2B_MARKET"
+    })
+  }, [reviewTargetIds, users])
 
   async function loadRecentReviews() {
     try {
@@ -329,8 +338,7 @@ export default function B2BVerificationTable() {
                     )}
                   </TableCell>
                   <TableCell>{formatDate(user.joined_at)}</TableCell>
-                  <TableCell className="space-x-2 text-right">
-                    <Button
+                  <TableCell className="space-x-2 text-right">                      <Button
                       size="sm"
                       variant="outline"
                       onClick={() => {
@@ -429,7 +437,7 @@ export default function B2BVerificationTable() {
       </div>
 
       <Dialog open={detailsDialogOpen} onOpenChange={setDetailsDialogOpen}>
-        <DialogContent className="sm:max-w-2xl">
+        <DialogContent className="sm:max-w-3xl max-h-[85vh] flex flex-col overflow-hidden">
           <DialogHeader>
             <DialogTitle>Partner Request Details</DialogTitle>
             <DialogDescription>
@@ -438,7 +446,7 @@ export default function B2BVerificationTable() {
           </DialogHeader>
 
           {selectedUser && (
-            <div className="grid gap-6 py-4">
+            <div className="grid gap-6 py-4 overflow-y-auto flex-1 pr-2">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Account Type</p>
@@ -491,21 +499,39 @@ export default function B2BVerificationTable() {
               </div>
 
               {selectedUser.company_website && (
-                 <div className="space-y-2">
-                    <p className="text-xs font-semibold text-muted-foreground">Website Verification Preview</p>
-                    <div className="overflow-hidden rounded-xl border bg-slate-100 dark:bg-slate-900">
-                       <iframe 
-                         src={selectedUser.company_website} 
-                         className="h-48 w-full border-0 opacity-50 grayscale transition-all hover:opacity-100 hover:grayscale-0"
-                         title="Website Preview"
-                       />
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-semibold">Website Verification</p>
+                      <p className="text-xs text-muted-foreground">{selectedUser.company_website}</p>
                     </div>
-                 </div>
+                    <a
+                      href={selectedUser.company_website}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1.5 rounded-lg border bg-background px-3 py-1.5 text-xs font-medium shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground"
+                    >
+                      <ExternalLink className="size-3" />
+                      Visit Site
+                    </a>
+                  </div>
+                  <div className="overflow-hidden rounded-xl border">
+                    {/* eslint-disable-next-line react/iframe-missing-sandbox */}
+                    <iframe
+                      src={selectedUser.company_website}
+                      title="Website Verification"
+                      className="w-full rounded-xl border-0"
+                      style={{ height: "500px" }}
+                      sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
+                      loading="lazy"
+                    />
+                  </div>
+                </div>
               )}
             </div>
           )}
 
-          <DialogFooter>
+          <DialogFooter className="border-t pt-4 mt-auto">
             <Button variant="outline" onClick={() => setDetailsDialogOpen(false)}>Close</Button>
             <Button variant="destructive" onClick={() => { setDetailsDialogOpen(false); openReviewDialog([selectedUser!.id], "REJECTED"); }}>Reject</Button>
             <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={() => { setDetailsDialogOpen(false); openReviewDialog([selectedUser!.id], "APPROVED"); }}>Approve Request</Button>
@@ -556,22 +582,24 @@ export default function B2BVerificationTable() {
                   </p>
                 </div>
 
-                <div className="space-y-2 rounded-xl border bg-indigo-50/50 p-4 dark:bg-indigo-950/20">
-                  <label className="flex items-center gap-2 text-sm font-semibold text-indigo-800 dark:text-indigo-400">
-                    <Tag className="size-4" />
-                    Brand Name
-                  </label>
-                  <Input
-                    value={brandName}
-                    onChange={(e) => setBrandName(e.target.value)}
-                    placeholder="e.g. Apple, Samsung, Sony..."
-                    disabled={processing}
-                    className="focus-visible:ring-indigo-500"
-                  />
-                  <p className="text-[11px] leading-relaxed text-muted-foreground">
-                    Universal brand assigned to this market. All products of this brand will be discovered across all sellers. Required for B2B Market accounts.
-                  </p>
-                </div>
+                {reviewTargetsIncludeMarket && (
+                  <div className="space-y-2 rounded-xl border bg-indigo-50/50 p-4 dark:bg-indigo-950/20">
+                    <label className="flex items-center gap-2 text-sm font-semibold text-indigo-800 dark:text-indigo-400">
+                      <Tag className="size-4" />
+                      Brand Name
+                    </label>
+                    <Input
+                      value={brandName}
+                      onChange={(e) => setBrandName(e.target.value)}
+                      placeholder="e.g. Apple, Samsung, Sony..."
+                      disabled={processing}
+                      className="focus-visible:ring-indigo-500"
+                    />
+                    <p className="text-[11px] leading-relaxed text-muted-foreground">
+                      Universal brand assigned to this market. All products of this brand will be discovered across all sellers. Required for B2B Market accounts.
+                    </p>
+                  </div>
+                )}
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2 rounded-xl border border-emerald-100 bg-emerald-50/50 p-4 dark:border-emerald-900/30 dark:bg-emerald-950/20">

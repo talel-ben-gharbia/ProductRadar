@@ -204,7 +204,7 @@ class B2BCompareService
     {
         $conn = $this->entityManager->getConnection();
         $target = $conn->fetchAssociative(
-            'SELECT p.id, p.name, COALESCE(b.name, p.brand) AS brand, p.brand_id, p.description, p.specs_json, p.category_id,
+            'SELECT p.id, p.name, b.name AS brand, p.brand_id, p.description, p.specs_json, p.category_id,
                      (SELECT MIN(pl.price) FROM product_listing pl
                       WHERE pl.product_id = p.id AND pl.is_active = true AND pl.price > 0) as target_price
              FROM product p
@@ -234,7 +234,7 @@ class B2BCompareService
 
         $sql = <<<'SQL'
 WITH product_base AS (
-    SELECT p.id, p.name, COALESCE(b.name, p.brand) AS brand, p.brand_id, p.description, p.specs_json,
+    SELECT p.id, p.name, b.name AS brand, p.brand_id, p.description, p.specs_json,
            MIN(pl.price) FILTER (WHERE pl.is_active = true AND pl.price > 0) AS best_price
     FROM product p
     LEFT JOIN brand b ON b.id = p.brand_id

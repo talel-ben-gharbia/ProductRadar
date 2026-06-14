@@ -19,7 +19,7 @@ import {
   ChartTooltipContent,
   type ChartConfig,
 } from "@/components/ui/chart"
-import { getProducts } from "@/services/admin/products"
+import { getProducts } from "@/services/products"
 import type { Product } from "@/utils/types"
 
 type BrandBarDatum = {

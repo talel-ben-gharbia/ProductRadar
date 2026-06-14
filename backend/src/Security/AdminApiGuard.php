@@ -2,6 +2,9 @@
 
 namespace App\Security;
 
+use App\Entity\Admin;
+use App\Repository\AdminRepository;
+use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 
@@ -11,8 +14,9 @@ final class AdminApiGuard
 
     private string $apiKey;
 
-    public function __construct()
-    {
+    public function __construct(
+        private readonly EntityManagerInterface $entityManager,
+    ) {
         $this->apiKey = $_ENV['ADMIN_API_KEY'] ?? $_SERVER['ADMIN_API_KEY'] ?? 'dev-admin-api-key-change-me';
     }
 
@@ -30,6 +34,22 @@ final class AdminApiGuard
 
         if ($superAdminOnly && $role !== 'ROLE_SUPER_ADMIN') {
             return new JsonResponse(['error' => 'Only super admins can perform this action.'], 403);
+        }
+
+        // Check if the admin is suspended or banned
+        $adminId = $this->getAdminId($request);
+        if ($adminId !== null) {
+            $adminRepository = $this->entityManager->getRepository(Admin::class);
+            $admin = $adminRepository->find($adminId);
+            if ($admin instanceof Admin) {
+                $status = $admin->getStatus();
+                if ($status === 'suspended') {
+                    return new JsonResponse(['error' => 'Your account has been suspended.'], 403);
+                }
+                if ($status === 'banned') {
+                    return new JsonResponse(['error' => 'Your account has been banned.'], 403);
+                }
+            }
         }
 
         return null;

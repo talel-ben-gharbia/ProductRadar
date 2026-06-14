@@ -1,12 +1,9 @@
-import { cookies } from "next/headers"
 import { NextRequest, NextResponse } from "next/server"
-
-import { verifySessionToken, COOKIE_NAME } from "@/lib/admin-session"
+import { getAdminSession, adminHeaders } from "@/lib/admin-api-helper"
+import { cachedFetch } from "@/lib/fetch-with-cache"
 import { BACKEND_URL } from "@/utils/admin/constants"
 
 type Params = { params: Promise<{ path: string[] }> }
-
-const ADMIN_API_KEY = process.env.ADMIN_API_KEY ?? "dev-admin-api-key-change-me"
 
 function buildBackendCandidates(baseUrl: string): string[] {
   const normalized = baseUrl.replace(/\/+$/, "")
@@ -22,32 +19,7 @@ function buildBackendCandidates(baseUrl: string): string[] {
   return [normalized]
 }
 
-async function getAdminSession() {
-  const cookieStore = await cookies()
-  const token = cookieStore.get(COOKIE_NAME)?.value
-  if (!token) return null
-
-  const session = await verifySessionToken(token)
-  if (!session) return null
-
-  if (!["ROLE_SUPER_ADMIN", "ROLE_SUB_ADMIN"].includes(session.role)) {
-    return null
-  }
-
-  return session
-}
-
-async function parseBackendResponse(response: Response): Promise<unknown> {
-  const contentType = response.headers.get("content-type") ?? ""
-  if (contentType.includes("application/json")) {
-    return response.json().catch(() => ({}))
-  }
-
-  const text = await response.text().catch(() => "")
-  return { error: text.trim() || "Backend returned a non-JSON response." }
-}
-
-async function proxyRequest(request: NextRequest, params: Params, method: "GET" | "PATCH") {
+export async function GET(request: NextRequest, params: Params) {
   const session = await getAdminSession()
   if (!session) {
     return NextResponse.json({ error: "Forbidden." }, { status: 403 })
@@ -55,56 +27,75 @@ async function proxyRequest(request: NextRequest, params: Params, method: "GET" 
 
   const { path } = await params.params
   const suffix = path.length > 0 ? `/${path.map(encodeURIComponent).join("/")}` : ""
+
   const candidates = buildBackendCandidates(BACKEND_URL)
+  const cacheKey = `admin:api:users${suffix || "/all"}`
 
-  const headers: HeadersInit = {
-    "X-Admin-Api-Key": ADMIN_API_KEY,
-    "X-Admin-Role": session.role,
-    "X-Admin-Id": String(session.id),
+  let lastError = ""
+
+  for (const candidate of candidates) {
+    const targetUrl = `${candidate}/admin/api/users${suffix}${request.nextUrl.search}`
+
+    try {
+      const data = await cachedFetch<unknown>(targetUrl, {
+        cacheKey,
+        cacheTtl: 30,
+        headers: adminHeaders(session),
+      })
+      return NextResponse.json(data)
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : String(error)
+    }
   }
 
-  let body: string | undefined
-  if (method !== "GET") {
-    const rawBody = await request.text()
-    headers["Content-Type"] = "application/json"
-    body = rawBody
+  return NextResponse.json(
+    { error: `Unable to connect to the backend. ${lastError}` },
+    { status: 502 },
+  )
+}
+
+export async function PATCH(request: NextRequest, params: Params) {
+  const session = await getAdminSession()
+  if (!session) {
+    return NextResponse.json({ error: "Forbidden." }, { status: 403 })
   }
 
-  let lastErrorMessage = "Unable to connect to the backend."
+  const { path } = await params.params
+  const suffix = path.length > 0 ? `/${path.map(encodeURIComponent).join("/")}` : ""
+
+  const candidates = buildBackendCandidates(BACKEND_URL)
+  let lastError = ""
 
   for (const candidate of candidates) {
     const targetUrl = `${candidate}/admin/api/users${suffix}${request.nextUrl.search}`
 
     try {
       const response = await fetch(targetUrl, {
-        method,
-        headers,
-        body,
+        method: "PATCH",
+        headers: { ...adminHeaders(session), "Content-Type": "application/json" },
+        body: await request.text(),
         cache: "no-store",
       })
 
-      const data = await parseBackendResponse(response)
+      const data = await response.json().catch(() => ({}))
       if (!response.ok) {
-        const error = (data as { error?: string }).error || "Backend request failed."
-        return NextResponse.json({ error }, { status: response.status })
+        return NextResponse.json(
+          {
+            error: (data as { error?: string }).error || "Backend request failed.",
+            detail: (data as { detail?: string }).detail || undefined,
+          },
+          { status: response.status },
+        )
       }
 
       return NextResponse.json(data)
     } catch (error) {
-      lastErrorMessage = error instanceof Error ? error.message : lastErrorMessage
+      lastError = error instanceof Error ? error.message : String(error)
     }
   }
 
   return NextResponse.json(
-    { error: `Unable to connect to the backend. ${lastErrorMessage}` },
+    { error: `Unable to connect to the backend. ${lastError}` },
     { status: 502 },
   )
-}
-
-export async function GET(request: NextRequest, params: Params) {
-  return proxyRequest(request, params, "GET")
-}
-
-export async function PATCH(request: NextRequest, params: Params) {
-  return proxyRequest(request, params, "PATCH")
 }

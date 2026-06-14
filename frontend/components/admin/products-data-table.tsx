@@ -101,10 +101,10 @@ function SmoothDropdown({
       </button>
 
       <div
-        className={`absolute z-20 mt-2 w-full origin-top rounded-md border bg-background p-1 shadow transition-all duration-200 ease-out ${
+        className={`absolute z-20 mt-2 w-full origin-top rounded-md border bg-background p-1 shadow ${
           isOpen
-            ? "pointer-events-auto translate-y-0 scale-100 opacity-100"
-            : "pointer-events-none -translate-y-1 scale-95 opacity-0"
+            ? "visible opacity-100"
+            : "invisible opacity-0"
         }`}
       >
         {options.map((option) => (
@@ -522,10 +522,10 @@ export default function ProductsDataTable({
             </Button>
 
             <div
-              className={`absolute right-0 z-20 mt-2 w-52 origin-top-right rounded-md border bg-background p-2 shadow transition-all duration-200 ease-out ${
+              className={`absolute right-0 z-20 mt-2 w-52 origin-top-right rounded-md border bg-background p-2 shadow ${
                 isColumnsOpen
-                  ? "pointer-events-auto translate-y-0 scale-100 opacity-100"
-                  : "pointer-events-none -translate-y-1 scale-95 opacity-0"
+                  ? "visible opacity-100"
+                  : "invisible opacity-0"
               }`}
             >
               {(
@@ -667,6 +667,10 @@ export default function ProductsDataTable({
                           loading="lazy"
                           referrerPolicy="no-referrer"
                           className="h-12 w-12 rounded-md border object-cover"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).style.display = "none";
+                            (e.target as HTMLImageElement).insertAdjacentHTML("afterend", '<div class="flex h-12 w-12 items-center justify-center rounded-md border text-xs text-muted-foreground">Broken</div>');
+                          }}
                         />
                       ) : (
                         <div className="flex h-12 w-12 items-center justify-center rounded-md border text-xs text-muted-foreground">

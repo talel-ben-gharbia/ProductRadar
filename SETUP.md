@@ -54,7 +54,20 @@ Si tu veux Redis :
 
 ## 5. Mailpit (emails en local)
 
-Pour capturer les emails sans les envoyer vraiment :
+Mailpit capture les emails sans les envoyer vraiment.
+
+### Avec Docker Compose (recommandé)
+
+Mailpit est déjà défini dans `docker-compose.yml` — il démarre automatiquement avec :
+
+```bash
+docker compose up -d
+```
+
+- SMTP : `mailpit:1025` (interne au réseau Docker)
+- Interface web : http://localhost:8025
+
+### Sans Docker Compose (backend natif)
 
 ```bash
 docker run -d --name mailpit -p 1025:1025 -p 8025:8025 axllent/mailpit
@@ -63,9 +76,10 @@ docker run -d --name mailpit -p 1025:1025 -p 8025:8025 axllent/mailpit
 - SMTP : `localhost:1025`
 - Interface web : http://localhost:8025
 
-Dans `backend/.env.local`, mets :
+Dans `backend/.env.local` (ou `.env`) :
 ```ini
 MAILER_DSN=smtp://localhost:1025
+B2B_NOTIFICATIONS_FROM=noreply@productradar.tn
 ```
 
 ---

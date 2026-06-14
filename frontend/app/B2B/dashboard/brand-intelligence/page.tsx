@@ -202,6 +202,7 @@ type SortKey = "name" | "price" | "sellers" | "trust"
 
 export default function BrandIntelligencePage() {
   const { firebaseUid, isGold } = useB2B()
+  const [mounted, setMounted] = useState(false)
 
   const [brandScope, setBrandScope] = useState<BrandScopeResponse | null>(null)
   const [scopeLoading, setScopeLoading] = useState(true)
@@ -215,7 +216,9 @@ export default function BrandIntelligencePage() {
   const [sortKey, setSortKey] = useState<SortKey>("sellers")
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc")
 
-  if (!isGold) return <B2BPlanGate featureName="Brand Intelligence" />
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   const brandName = brandScope?.brand_keywords?.brand_name
   const scopeStats = brandScope?.stats
@@ -255,7 +258,7 @@ export default function BrandIntelligencePage() {
     setScopeLoading(false)
   }, [firebaseUid, loadProducts])
 
-  useEffect(() => { loadScope() }, [loadScope])
+  useEffect(() => { if (mounted) loadScope() }, [mounted, loadScope])
 
   const handleRefresh = async () => {
     setRefreshing(true)
@@ -379,6 +382,9 @@ export default function BrandIntelligencePage() {
     }
     return Object.entries(buckets).map(([name, count]) => ({ name, count }))
   }, [allProducts])
+
+  if (!mounted) return null
+  if (!isGold) return <B2BPlanGate featureName="Brand Intelligence" />
 
   return (
     <div className="space-y-6">

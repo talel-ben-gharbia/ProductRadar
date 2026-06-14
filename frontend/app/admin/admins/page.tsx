@@ -1,9 +1,11 @@
+import React, { Suspense } from "react"
 import { cookies } from "next/headers"
 
 import { verifySessionToken, COOKIE_NAME } from "@/lib/admin-session"
 import AdminsDataTable from "@/components/admin/admins-data-table"
+import { Skeleton } from "@/components/ui/skeleton"
 import { BACKEND_URL } from "@/utils/admin/constants"
-import type { AdminUser } from "@/services/admin/admins"
+import type { AdminUser } from "@/services/admins"
 
 const ADMIN_API_KEY = process.env.ADMIN_API_KEY ?? "dev-admin-api-key-change-me"
 
@@ -42,6 +44,46 @@ type AdminsPageProps = {
   searchParams?: Promise<{ add?: string }>
 }
 
+async function AdminsPageContent({
+  session,
+  openCreateByDefault,
+}: {
+  session: { id: number; role: string } | null
+  openCreateByDefault: boolean
+}) {
+  const { admins, fetchError } = await loadAdmins(session)
+
+  return (
+    <>
+      <h1 className="text-2xl font-bold">Admin Management</h1>
+
+      <AdminsDataTable
+        admins={admins}
+        currentAdminId={session?.id ?? -1}
+        currentAdminRole={session?.role ?? ""}
+        fetchError={fetchError}
+        openCreateByDefault={openCreateByDefault}
+      />
+    </>
+  )
+}
+
+function AdminsFallback() {
+  return (
+    <div className="space-y-4">
+      <Skeleton className="h-8 w-48" />
+      <div className="rounded-lg border bg-card p-4">
+        <Skeleton className="h-10 w-full" />
+        <div className="mt-4 space-y-2">
+          <Skeleton className="h-8 w-full" />
+          <Skeleton className="h-8 w-full" />
+          <Skeleton className="h-8 w-full" />
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default async function AdminsPage({ searchParams }: AdminsPageProps) {
   const resolvedSearchParams = await searchParams
   const cookieStore = await cookies()
@@ -49,18 +91,11 @@ export default async function AdminsPage({ searchParams }: AdminsPageProps) {
   const session = token ? await verifySessionToken(token) : null
   const openCreateByDefault = resolvedSearchParams?.add === "1"
 
-  const { admins, fetchError } = await loadAdmins(session)
-
   return (
     <section className="w-full max-w-none space-y-4">
-      <h1 className="text-2xl font-bold">Admin Management</h1>
-
-      <AdminsDataTable
-        admins={admins}
-        currentAdminId={session?.id ?? -1}
-        fetchError={fetchError}
-        openCreateByDefault={openCreateByDefault}
-      />
+      <Suspense fallback={<AdminsFallback />}>
+        <AdminsPageContent session={session} openCreateByDefault={openCreateByDefault} />
+      </Suspense>
     </section>
   )
 }

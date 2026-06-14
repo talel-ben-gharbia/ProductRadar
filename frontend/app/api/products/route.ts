@@ -8,11 +8,7 @@ import { BACKEND_URL } from "@/utils/admin/constants"
 async function isSuperAdmin(): Promise<boolean> {
   const cookieStore = await cookies()
   const token = cookieStore.get(COOKIE_NAME)?.value
-
-  if (!token) {
-    return false
-  }
-
+  if (!token) return false
   const session = await verifySessionToken(token)
   return session?.role === "ROLE_SUPER_ADMIN"
 }

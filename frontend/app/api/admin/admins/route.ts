@@ -1,10 +1,9 @@
-import { cookies } from "next/headers"
 import { NextRequest, NextResponse } from "next/server"
-
+import { adminHeaders } from "@/lib/admin-api-helper"
+import { cookies } from "next/headers"
 import { verifySessionToken, COOKIE_NAME } from "@/lib/admin-session"
+import { cachedFetch } from "@/lib/fetch-with-cache"
 import { BACKEND_URL } from "@/utils/admin/constants"
-
-const ADMIN_API_KEY = process.env.ADMIN_API_KEY ?? "dev-admin-api-key-change-me"
 
 async function getSuperAdminSession() {
   const cookieStore = await cookies()
@@ -33,21 +32,11 @@ export async function GET() {
   }
 
   try {
-    const response = await fetch(`${BACKEND_URL}/admin/api/admins`, {
-      headers: {
-        "X-Admin-Api-Key": ADMIN_API_KEY,
-        "X-Admin-Role": session.role,
-        "X-Admin-Id": String(session.id),
-      },
-      cache: "no-store",
+    const data = await cachedFetch<unknown>(`${BACKEND_URL}/admin/api/admins`, {
+      cacheKey: "admin:api:admins",
+      cacheTtl: 30,
+      headers: adminHeaders(session),
     })
-    const data = await parseBackendResponse(response)
-    if (!response.ok) {
-      return NextResponse.json(
-        { error: data.error || "Failed to fetch admins." },
-        { status: response.status },
-      )
-    }
     return NextResponse.json(data)
   } catch {
     return NextResponse.json({ error: "Unable to connect to the backend." }, { status: 502 })
@@ -72,9 +61,7 @@ export async function POST(request: NextRequest) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-Admin-Api-Key": ADMIN_API_KEY,
-        "X-Admin-Role": session.role,
-        "X-Admin-Id": String(session.id),
+        ...adminHeaders(session),
       },
       body: JSON.stringify(body),
     })

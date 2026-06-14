@@ -28,7 +28,7 @@ import {
   getSourceHealth,
   type ScrapingLogItem,
   type SourceHealth,
-} from "@/services/admin/scraping-logs"
+} from "@/services/scraping-logs"
 
 type ScrapingLogsPanelProps = {
   limit?: number
@@ -151,6 +151,7 @@ export default function ScrapingLogsPanel({ limit = 25 }: ScrapingLogsPanelProps
             <option value="1">Last 1 day</option>
             <option value="7">Last 7 days</option>
             <option value="30">Last 30 days</option>
+            <option value="0">All time</option>
           </select>
         </div>
 

@@ -179,12 +179,12 @@ export default function StockMonitoringPage() {
       <section className="grid gap-6 xl:grid-cols-[1fr_1.5fr]">
         <Card className="border-border/50 shadow-sm">
           <CardHeader><CardTitle>Stock Distribution</CardTitle></CardHeader>
-          <CardContent className="h-64">
+          <CardContent className="flex h-72 items-center justify-center pb-2">
             {pieData.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height="100%" key={pieData.length}>
                 <PieChart>
-                  <Pie data={pieData} cx="50%" cy="50%" innerRadius={60} outerRadius={90} dataKey="value" paddingAngle={4}
-                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
+                  <Pie data={pieData} cx="50%" cy="55%" innerRadius={35} outerRadius={85} dataKey="value" paddingAngle={4}
+                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
                     {pieData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
                   </Pie>
                   <Tooltip contentStyle={{ borderRadius: "12px", fontSize: "12px" }} />
@@ -199,7 +199,7 @@ export default function StockMonitoringPage() {
             <CardTitle className="flex items-center gap-2"><Zap className="size-4 text-emerald-500" /> Market Opportunities</CardTitle>
             <CardDescription>Products where you have a competitive advantage (e.g. competitors out of stock).</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-3 relative z-10">
+          <CardContent className="relative z-10 max-h-80 space-y-3 overflow-y-auto">
             {opportunities.length === 0 ? (
               <div className="py-12 flex flex-col items-center justify-center text-center">
                 <Shield className="size-10 text-muted-foreground/30 mb-3" />

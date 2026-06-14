@@ -37,7 +37,8 @@ function RenewButton({ firebaseUid, refresh }: { firebaseUid: string; refresh: (
   return (
     <div className="flex flex-col gap-1">
       <Button variant="outline" size="sm" onClick={handleClick} disabled={loading} className="gap-1.5 text-xs">
-        {loading ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
+        <RefreshCw className={`size-3.5 ${loading ? 'hidden' : ''}`} />
+        <Loader2 className={`size-3.5 animate-spin ${loading ? '' : 'hidden'}`} />
         Renew Subscription
       </Button>
       {error && <p className="text-[10px] text-red-500">{error}</p>}
@@ -64,7 +65,8 @@ function UpgradeButton({ firebaseUid, refresh }: { firebaseUid: string; refresh:
   return (
     <div className="flex flex-col gap-1">
       <Button variant="default" size="sm" onClick={handleClick} disabled={loading} className="gap-1.5 text-xs bg-amber-600 hover:bg-amber-700">
-        {loading ? <Loader2 className="size-3.5 animate-spin" /> : <ArrowUp className="size-3.5" />}
+        <ArrowUp className={`size-3.5 ${loading ? 'hidden' : ''}`} />
+        <Loader2 className={`size-3.5 animate-spin ${loading ? '' : 'hidden'}`} />
         Upgrade to Gold
       </Button>
       {error && <p className="text-[10px] text-red-500">{error}</p>}

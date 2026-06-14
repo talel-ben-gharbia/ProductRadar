@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
-import { mergeProducts } from "@/services/admin/quality"
+import { mergeProducts } from "@/services/quality"
 import { SPEC_LABELS } from "@/utils/types"
 
 type CompareItem = {
@@ -59,8 +59,6 @@ type SellerCollisionGroup = {
   sellerName: string
   options: ListingOption[]
 }
-
-type MergeStrategy = "keep-primary" | "keep-duplicate" | "keep-both"
 
 type DuplicateCompareMergePanelProps = {
   items: CompareItem[]
@@ -214,16 +212,27 @@ function buildSellerCollisionGroups(products: ProductDetails[]): SellerCollision
 
   return Array.from(groups.values())
     .filter((group) => group.options.length > 1)
-    .map((group) => ({
-      ...group,
-      options: [...group.options].sort((left, right) => {
-        if (left.productId !== right.productId) {
-          return left.productId - right.productId
-        }
-
-        return left.listing.id - right.listing.id
-      }),
-    }))
+    .map((group) => {
+      const seen = new Set<number>()
+      return {
+        ...group,
+        options: [...group.options]
+          .filter((option) => {
+            if (seen.has(option.listing.id)) {
+              return false
+            }
+            seen.add(option.listing.id)
+            return true
+          })
+          .sort((left, right) => {
+            if (left.productId !== right.productId) {
+              return left.productId - right.productId
+            }
+            return left.listing.id - right.listing.id
+          }),
+      }
+    })
+    .filter((group) => group.options.length > 1)
     .sort((left, right) => left.sellerId - right.sellerId)
 }
 
@@ -285,7 +294,19 @@ export default function DuplicateCompareMergePanel({ items, onActionComplete }: 
   const [loadingComparison, setLoadingComparison] = useState(false)
   const [primaryIdRaw, setPrimaryIdRaw] = useState(mergeCandidates[0] ? String(mergeCandidates[0].productId) : "")
   const [duplicateIdRaw, setDuplicateIdRaw] = useState(mergeCandidates[1] ? String(mergeCandidates[1].productId) : "")
-  const [strategy, setStrategy] = useState<MergeStrategy>("keep-primary")
+  type FieldSelection = {
+    name: "primary" | "duplicate"
+    brand: "primary" | "duplicate"
+    description: "primary" | "duplicate" | "both"
+    specs: "primary" | "duplicate"
+  }
+
+  const [fieldSelections, setFieldSelections] = useState<FieldSelection>({
+    name: "primary",
+    brand: "primary",
+    description: "primary",
+    specs: "primary",
+  })
   const [listingSurvivorBySeller, setListingSurvivorBySeller] = useState<Record<number, number | undefined>>({})
   const [unavailableProductIds, setUnavailableProductIds] = useState<number[]>([])
   const [submitting, setSubmitting] = useState(false)
@@ -503,19 +524,26 @@ export default function DuplicateCompareMergePanel({ items, onActionComplete }: 
 
       const primarySpecs = primaryProduct.specs_json ?? {}
         const duplicateSpecs = duplicateProduct.specs_json ?? {}
-        const mergedSpecs = { ...duplicateSpecs, ...primarySpecs }
+
+        const mergedSpecs = fieldSelections.specs === "duplicate"
+          ? { ...primarySpecs, ...duplicateSpecs }
+          : { ...duplicateSpecs, ...primarySpecs }
 
         const updatePayload: Record<string, unknown> = {
           specs_json: mergedSpecs,
         }
 
-        if (strategy === "keep-duplicate") {
+        if (fieldSelections.name === "duplicate") {
           updatePayload.name = duplicateProduct.name || primaryProduct.name
-          updatePayload.brand = duplicateProduct.brand ?? primaryProduct.brand
+        }
+
+        if (fieldSelections.brand === "duplicate") {
+          updatePayload.brand = duplicateProduct.brand || primaryProduct.brand
+        }
+
+        if (fieldSelections.description === "duplicate") {
           updatePayload.description = duplicateProduct.description || primaryProduct.description
-        } else if (strategy === "keep-both") {
-          updatePayload.name = primaryProduct.name || duplicateProduct.name
-          updatePayload.brand = primaryProduct.brand ?? duplicateProduct.brand
+        } else if (fieldSelections.description === "both") {
           updatePayload.description = buildMergedDescription(primaryProduct, duplicateProduct)
         }
 
@@ -764,36 +792,110 @@ export default function DuplicateCompareMergePanel({ items, onActionComplete }: 
             </div>
           </div>
 
-          <div className="space-y-2">
-            <p className="text-xs font-medium text-muted-foreground">When fields conflict:</p>
-            <div className="flex flex-wrap gap-3 text-sm">
-              <label className="inline-flex items-center gap-2">
-                <input
-                  type="radio"
-                  name="merge-strategy"
-                  checked={strategy === "keep-primary"}
-                  onChange={() => setStrategy("keep-primary")}
-                />
-                Keep primary
-              </label>
-              <label className="inline-flex items-center gap-2">
-                <input
-                  type="radio"
-                  name="merge-strategy"
-                  checked={strategy === "keep-duplicate"}
-                  onChange={() => setStrategy("keep-duplicate")}
-                />
-                Keep duplicate
-              </label>
-              <label className="inline-flex items-center gap-2">
-                <input
-                  type="radio"
-                  name="merge-strategy"
-                  checked={strategy === "keep-both"}
-                  onChange={() => setStrategy("keep-both")}
-                />
-                Keep both descriptions
-              </label>
+          <div className="rounded-md border bg-muted/20 p-3 space-y-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Field-level Selection</p>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-4 rounded border bg-background p-2">
+                <span className="text-sm font-medium">Name</span>
+                <div className="flex gap-3 text-sm">
+                  <label className="inline-flex items-center gap-1">
+                    <input
+                      type="radio"
+                      name="field-name"
+                      checked={fieldSelections.name === "primary"}
+                      onChange={() => setFieldSelections((prev) => ({ ...prev, name: "primary" }))}
+                    />
+                    Keep primary
+                  </label>
+                  <label className="inline-flex items-center gap-1">
+                    <input
+                      type="radio"
+                      name="field-name"
+                      checked={fieldSelections.name === "duplicate"}
+                      onChange={() => setFieldSelections((prev) => ({ ...prev, name: "duplicate" }))}
+                    />
+                    Keep duplicate
+                  </label>
+                </div>
+              </div>
+              <div className="flex items-center justify-between gap-4 rounded border bg-background p-2">
+                <span className="text-sm font-medium">Brand</span>
+                <div className="flex gap-3 text-sm">
+                  <label className="inline-flex items-center gap-1">
+                    <input
+                      type="radio"
+                      name="field-brand"
+                      checked={fieldSelections.brand === "primary"}
+                      onChange={() => setFieldSelections((prev) => ({ ...prev, brand: "primary" }))}
+                    />
+                    Keep primary
+                  </label>
+                  <label className="inline-flex items-center gap-1">
+                    <input
+                      type="radio"
+                      name="field-brand"
+                      checked={fieldSelections.brand === "duplicate"}
+                      onChange={() => setFieldSelections((prev) => ({ ...prev, brand: "duplicate" }))}
+                    />
+                    Keep duplicate
+                  </label>
+                </div>
+              </div>
+              <div className="flex items-center justify-between gap-4 rounded border bg-background p-2">
+                <span className="text-sm font-medium">Description</span>
+                <div className="flex gap-3 text-sm">
+                  <label className="inline-flex items-center gap-1">
+                    <input
+                      type="radio"
+                      name="field-description"
+                      checked={fieldSelections.description === "primary"}
+                      onChange={() => setFieldSelections((prev) => ({ ...prev, description: "primary" }))}
+                    />
+                    Keep primary
+                  </label>
+                  <label className="inline-flex items-center gap-1">
+                    <input
+                      type="radio"
+                      name="field-description"
+                      checked={fieldSelections.description === "duplicate"}
+                      onChange={() => setFieldSelections((prev) => ({ ...prev, description: "duplicate" }))}
+                    />
+                    Keep duplicate
+                  </label>
+                  <label className="inline-flex items-center gap-1">
+                    <input
+                      type="radio"
+                      name="field-description"
+                      checked={fieldSelections.description === "both"}
+                      onChange={() => setFieldSelections((prev) => ({ ...prev, description: "both" }))}
+                    />
+                    Merge both
+                  </label>
+                </div>
+              </div>
+              <div className="flex items-center justify-between gap-4 rounded border bg-background p-2">
+                <span className="text-sm font-medium">Specifications</span>
+                <div className="flex gap-3 text-sm">
+                  <label className="inline-flex items-center gap-1">
+                    <input
+                      type="radio"
+                      name="field-specs"
+                      checked={fieldSelections.specs === "primary"}
+                      onChange={() => setFieldSelections((prev) => ({ ...prev, specs: "primary" }))}
+                    />
+                    Keep primary (wins overlap)
+                  </label>
+                  <label className="inline-flex items-center gap-1">
+                    <input
+                      type="radio"
+                      name="field-specs"
+                      checked={fieldSelections.specs === "duplicate"}
+                      onChange={() => setFieldSelections((prev) => ({ ...prev, specs: "duplicate" }))}
+                    />
+                    Keep duplicate (wins overlap)
+                  </label>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -891,39 +993,7 @@ export default function DuplicateCompareMergePanel({ items, onActionComplete }: 
               <p>Auto-suggestions applied: pair {Object.keys(suggestedPairSurvivors).length}, group {Object.keys(suggestedGroupSurvivors).length} seller(s).</p>
             </div>
           </div>
-          
-          <div className="space-y-2">
-            <p className="text-xs font-medium text-muted-foreground">When product fields conflict:</p>
-            <div className="flex flex-wrap gap-3 text-sm">
-              <label className="inline-flex items-center gap-2">
-                <input
-                  type="radio"
-                  name="merge-strategy"
-                  checked={strategy === "keep-primary"}
-                  onChange={() => setStrategy("keep-primary")}
-                />
-                Keep primary
-              </label>
-              <label className="inline-flex items-center gap-2">
-                <input
-                  type="radio"
-                  name="merge-strategy"
-                  checked={strategy === "keep-duplicate"}
-                  onChange={() => setStrategy("keep-duplicate")}
-                />
-                Keep duplicate
-              </label>
-              <label className="inline-flex items-center gap-2">
-                <input
-                  type="radio"
-                  name="merge-strategy"
-                  checked={strategy === "keep-both"}
-                  onChange={() => setStrategy("keep-both")}
-                />
-                Keep both descriptions
-              </label>
-            </div>
-          </div>
+
 
           <div className="flex flex-wrap gap-2">
             <Button type="button" onClick={handleSingleMerge} disabled={submitting || unresolvedPairSellerCollisionGroups.length > 0 || unavailableProductIds.length > 0}>

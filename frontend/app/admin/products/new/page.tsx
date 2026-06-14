@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import SmoothDropdown, { type SmoothDropdownOption } from "@/components/ui/smooth-dropdown"
-import { getCategoriesWithParents } from "@/services/admin/categories"
+import { getCategoriesWithParents } from "@/services/categories"
 import type { CategoryWithParent } from "@/utils/types"
 
 export default function NewProductPage() {

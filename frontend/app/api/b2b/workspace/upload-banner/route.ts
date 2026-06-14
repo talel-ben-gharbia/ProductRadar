@@ -32,7 +32,16 @@ export async function POST(request: Request) {
       headers: { "X-B2B-Auth": signB2BAuth(uid) },
       body: await request.formData(),
     })
-    const data = await response.json()
+    const text = await response.text()
+    let data: Record<string, unknown>
+    try {
+      data = JSON.parse(text)
+    } catch {
+      return NextResponse.json(
+        { error: `Backend returned non-JSON (${response.status}): ${text.slice(0, 200)}` },
+        { status: 502 },
+      )
+    }
     return NextResponse.json(data, { status: response.status })
   } catch (err) {
     return NextResponse.json(

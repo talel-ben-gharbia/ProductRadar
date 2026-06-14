@@ -1,12 +1,24 @@
-import React from "react"
+import dynamic from "next/dynamic"
+import React, { Suspense } from "react"
 import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
 
-import DashboardCategoryPies from "@/components/admin/dashboard-category-pies"
 import DashboardMonitorCharts from "@/components/admin/dashboard-monitor-charts"
-import DashboardPopularBrands from "@/components/admin/dashboard-popular-brands"
 import DashboardStatsCards from "@/components/admin/dashboard-stats-cards"
+import { Spinner } from "@/components/ui/spinner"
 import { COOKIE_NAME, verifySessionToken } from "@/lib/admin-session"
+
+const DashboardCategoryPies = dynamic(() => import("@/components/admin/dashboard-category-pies"))
+const DashboardPopularBrands = dynamic(() => import("@/components/admin/dashboard-popular-brands"))
+
+function DashboardSkeleton() {
+  return (
+    <div className="flex items-center justify-center py-12 text-muted-foreground">
+      <Spinner className="mr-2 size-4" />
+      Loading dashboard data...
+    </div>
+  )
+}
 
 export default async function AdminDashboard() {
   const cookieStore = await cookies()
@@ -23,16 +35,24 @@ export default async function AdminDashboard() {
   }
 
   return (
-    <div className="w-full space-y-6" suppressHydrationWarning>
+    <div className="w-full space-y-6">
       <h1 className="text-2xl font-bold">Admin Dashboard</h1>
 
-      <DashboardStatsCards />
+      <Suspense fallback={<DashboardSkeleton />}>
+        <DashboardStatsCards />
+      </Suspense>
 
-      <DashboardMonitorCharts />
+      <Suspense fallback={<DashboardSkeleton />}>
+        <DashboardMonitorCharts />
+      </Suspense>
 
-      <DashboardPopularBrands />
+      <Suspense fallback={<DashboardSkeleton />}>
+        <DashboardPopularBrands />
+      </Suspense>
 
-      <DashboardCategoryPies />
+      <Suspense fallback={<DashboardSkeleton />}>
+        <DashboardCategoryPies />
+      </Suspense>
     </div>
   )
 }

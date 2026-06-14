@@ -2,6 +2,7 @@ import { cookies } from "next/headers"
 import { NextRequest, NextResponse } from "next/server"
 
 import { BACKEND_URL } from "@/utils/admin/constants"
+import { cachedFetch } from "@/lib/fetch-with-cache"
 
 type Dataset = "products" | "product-listings" | "categories" | "sellers"
 
@@ -35,13 +36,11 @@ function toCsv(rows: Array<Record<string, unknown>>): string {
 }
 
 async function fetchJson(path: string): Promise<unknown[]> {
-  const response = await fetch(`${BACKEND_URL}${path}`, { cache: "no-store" })
-
-  if (!response.ok) {
-    throw new Error(`Failed to fetch ${path}: ${response.status}`)
-  }
-
-  return (await response.json()) as unknown[]
+  const response = await cachedFetch<unknown[]>(`${BACKEND_URL}${path}`, {
+    cacheKey: `export:${path.replace(/\//g, ":")}`,
+    cacheTtl: 3600,
+  })
+  return response
 }
 
 async function getDatasetRows(dataset: Dataset): Promise<Array<Record<string, unknown>>> {

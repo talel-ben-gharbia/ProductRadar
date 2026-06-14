@@ -41,13 +41,13 @@ final class ScrapingLogControllerEnhanced extends AbstractController
         $offset = max(0, $request->query->getInt('offset', 0));
         $source = (string) $request->query->get('source', '');
         $status = (string) $request->query->get('status', '');
-        $daysBack = max(1, $request->query->getInt('days', 7));
+        $daysBack = max(0, $request->query->getInt('days', 7));
 
         $cacheKey = self::CACHE_KEY_FILTERED . ".l{$limit}.o{$offset}." . md5($source) . '.' . md5($status) . ".d{$daysBack}";
 
         return $this->cachedGet($this->cache, $cacheKey, function () use ($scrapingLogRepository, $limit, $offset, $source, $status, $daysBack): array {
-            $dateFrom = (new \DateTimeImmutable())->modify("-{$daysBack} days");
-            $dateTo = new \DateTimeImmutable();
+            $dateFrom = $daysBack > 0 ? (new \DateTimeImmutable())->modify("-{$daysBack} days") : null;
+            $dateTo = $daysBack > 0 ? new \DateTimeImmutable() : null;
 
             $result = $scrapingLogRepository->paginateWithFilters($limit, $offset, $source, $status, $dateFrom, $dateTo);
 

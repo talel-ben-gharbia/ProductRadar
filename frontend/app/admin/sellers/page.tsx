@@ -1,6 +1,9 @@
+import React, { Suspense } from "react"
+
 import SellersManagementTable from "@/components/admin/sellers-management-table"
-import { getProductListings } from "@/services/admin/product-listings"
-import { getSellers } from "@/services/admin/sellers"
+import { Skeleton } from "@/components/ui/skeleton"
+import { getProductListings } from "@/services/product-listings"
+import { getSellers } from "@/services/sellers"
 import type { ProductListing } from "@/utils/types"
 
 type SellerSummary = {
@@ -65,7 +68,7 @@ function buildSellerSummaries(sellers: Awaited<ReturnType<typeof getSellers>>, p
     .sort((a, b) => a.name.localeCompare(b.name))
 }
 
-export default async function SellersPage() {
+async function SellersPageContent() {
   let sellers: SellerSummary[] = []
   let fetchError: string | null = null
 
@@ -77,7 +80,7 @@ export default async function SellersPage() {
   }
 
   return (
-    <section className="w-full max-w-none space-y-4">
+    <>
       <div className="space-y-1">
         <h1 className="text-2xl font-bold">Sellers</h1>
         <p className="text-sm text-muted-foreground">
@@ -92,6 +95,32 @@ export default async function SellersPage() {
       ) : null}
 
       <SellersManagementTable initialSellers={sellers} />
+    </>
+  )
+}
+
+function SellersFallback() {
+  return (
+    <div className="space-y-4">
+      <Skeleton className="h-8 w-32" />
+      <Skeleton className="h-4 w-64" />
+      <div className="rounded-lg border bg-card p-4">
+        <Skeleton className="h-10 w-full" />
+        <div className="mt-4 space-y-2">
+          <Skeleton className="h-8 w-full" />
+          <Skeleton className="h-8 w-full" />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export default async function SellersPage() {
+  return (
+    <section className="w-full max-w-none space-y-4">
+      <Suspense fallback={<SellersFallback />}>
+        <SellersPageContent />
+      </Suspense>
     </section>
   )
 }

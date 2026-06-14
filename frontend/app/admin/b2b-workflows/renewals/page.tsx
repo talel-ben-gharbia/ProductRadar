@@ -43,8 +43,9 @@ export default function B2BRenewalsAdminPage() {
   const approveRenewal = async (id: number) => {
     setActionLoading(id)
     try {
-      await fetch(`/api/admin/b2b-workflows/subscriptions/${id}/approve-renewal`, { method: "POST" })
-      fetchRequests()
+      const res = await fetch(`/api/admin/b2b-workflows/subscriptions/${id}/approve-renewal`, { method: "POST" })
+      if (res.ok) { setRequests(prev => prev.filter(r => r.id !== id)) }
+      else { setError("Failed to approve renewal") }
     } catch { setError("Failed to approve renewal") }
     setActionLoading(null)
   }
@@ -52,8 +53,9 @@ export default function B2BRenewalsAdminPage() {
   const rejectRenewal = async (id: number) => {
     setActionLoading(id)
     try {
-      await fetch(`/api/admin/b2b-workflows/subscriptions/${id}/reject-renewal`, { method: "POST" })
-      fetchRequests()
+      const res = await fetch(`/api/admin/b2b-workflows/subscriptions/${id}/reject-renewal`, { method: "POST" })
+      if (res.ok) { setRequests(prev => prev.filter(r => r.id !== id)) }
+      else { setError("Failed to reject renewal") }
     } catch { setError("Failed to reject renewal") }
     setActionLoading(null)
   }
@@ -132,7 +134,8 @@ export default function B2BRenewalsAdminPage() {
                               disabled={actionLoading === r.id}
                               className="gap-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm shadow-emerald-500/20"
                             >
-                              {actionLoading === r.id ? <RefreshCw className="size-3 animate-spin" /> : <Check className="size-3" />}
+                              <Check className={`size-3 ${actionLoading === r.id ? 'hidden' : ''}`} />
+                              <RefreshCw className={`size-3 animate-spin ${actionLoading === r.id ? '' : 'hidden'}`} />
                               Approve
                             </Button>
                             <Button

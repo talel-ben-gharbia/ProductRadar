@@ -18,7 +18,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { createSeller, deleteSeller, updateSeller, type Seller } from "@/services/admin/sellers"
+import { createSeller, deleteSeller, updateSeller, type Seller } from "@/services/sellers"
 
 type SellerRow = Seller & {
   listingsCount: number

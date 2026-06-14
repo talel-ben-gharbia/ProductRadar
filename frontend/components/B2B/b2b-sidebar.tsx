@@ -17,6 +17,7 @@ import {
   Layers,
   LineChart,
   LogOut,
+  Mail,
   Megaphone,
   MessageSquare,
   Package,
@@ -91,6 +92,17 @@ function B2BSidebar() {
   const unreadCount = useMemo(() => notifications.filter((n) => !n.is_read).length, [notifications])
   const companyName = summary?.user?.name ?? "B2B Workspace"
   const email = summary?.user?.email ?? ""
+  const [mailUnreadCount, setMailUnreadCount] = useState(0)
+
+  useEffect(() => {
+    if (!email) { setMailUnreadCount(0); return }
+    let cancelled = false
+    fetch(`/api/mailpit/unread?email=${encodeURIComponent(email)}`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((data: { count: number }) => { if (!cancelled) setMailUnreadCount(data.count) })
+      .catch(() => { if (!cancelled) setMailUnreadCount(0) })
+    return () => { cancelled = true }
+  }, [email])
 
   useEffect(() => {
     const handleOutsideClick = (event: MouseEvent) => {
@@ -210,6 +222,19 @@ function B2BSidebar() {
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton asChild tooltip="Email Inbox (Mailpit)">
+                <a href={`/api/mailpit/redirect?email=${encodeURIComponent(email)}`} target="_blank" rel="noopener noreferrer">
+                  <Mail className="size-4" />
+                  <span className="flex-1">Email Inbox</span>
+                  {mailUnreadCount > 0 && (
+                    <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-bold text-white">
+                      {mailUnreadCount > 99 ? "99+" : mailUnreadCount}
+                    </span>
+                  )}
+                </a>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
           </SidebarMenu>
         </SidebarGroup>
       </SidebarContent>
@@ -249,10 +274,10 @@ function B2BSidebar() {
           </SidebarMenu>
 
           <div
-            className={`absolute bottom-0 left-full z-50 ml-3 w-72 origin-left rounded-2xl border bg-popover p-1.5 text-popover-foreground shadow-2xl transition-all duration-250 ease-out group-data-[collapsible=icon]:hidden ${
+            className={`absolute bottom-0 left-full z-50 ml-3 w-72 origin-left rounded-2xl border bg-popover p-1.5 text-popover-foreground shadow-2xl group-data-[collapsible=icon]:hidden ${
               menuOpen
-                ? "pointer-events-auto translate-x-0 scale-100 opacity-100"
-                : "pointer-events-none translate-x-2 scale-95 opacity-0"
+                ? "visible opacity-100"
+                : "invisible opacity-0"
             }`}
           >
             <div className="flex items-center gap-3 rounded-xl px-3 py-3">

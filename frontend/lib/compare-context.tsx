@@ -1,6 +1,7 @@
 "use client"
 
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react"
+import { usePathname } from "next/navigation"
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react"
 
 type CompareContextType = {
   comparedIds: number[]
@@ -61,8 +62,12 @@ export function CompareProvider({ children }: { children: ReactNode }) {
 
   const clearCompare = useCallback(() => setComparedIds([]), [])
 
+  const ctxValue = useMemo(() => ({
+    comparedIds, addToCompare, removeFromCompare, toggleCompare, isInCompare, clearCompare,
+  }), [comparedIds, addToCompare, removeFromCompare, toggleCompare, isInCompare, clearCompare])
+
   return (
-    <CompareContext.Provider value={{ comparedIds, addToCompare, removeFromCompare, toggleCompare, isInCompare, clearCompare }}>
+    <CompareContext.Provider value={ctxValue}>
       {children}
       <CompareFloatingBar />
     </CompareContext.Provider>
@@ -76,13 +81,15 @@ export function useCompare() {
 }
 
 function CompareFloatingBar() {
+  const pathname = usePathname()
   const { comparedIds, removeFromCompare, clearCompare } = useCompare()
+  const isB2CRoute = pathname.startsWith("/B2C")
   const [productNames, setProductNames] = useState<Record<number, string>>({})
   const [productImages, setProductImages] = useState<Record<number, string | null>>({})
   const [productPrices, setProductPrices] = useState<Record<number, string>>({})
 
   useEffect(() => {
-    if (comparedIds.length === 0) {
+    if (comparedIds.length === 0 || !isB2CRoute) {
       setProductNames({})
       setProductImages({})
       setProductPrices({})
@@ -102,7 +109,7 @@ function CompareFloatingBar() {
         setProductImages(images)
       })
       .catch(() => {})
-    fetch(`/api/product-listings`)
+    fetch(`/api/product-listings?productIds=${encodeURIComponent(ids)}`)
       .then((r) => r.json())
       .then((listings: any[]) => {
         const prices: Record<number, string> = {}
@@ -116,8 +123,9 @@ function CompareFloatingBar() {
         setProductPrices(prices)
       })
       .catch(() => {})
-  }, [comparedIds])
+  }, [comparedIds, isB2CRoute])
 
+  if (!isB2CRoute) return null
   if (comparedIds.length === 0) return null
 
   return (

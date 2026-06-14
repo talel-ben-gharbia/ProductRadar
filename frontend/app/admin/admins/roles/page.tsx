@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
+import { useAdmin } from "@/components/admin/admin-context"
 import Link from "next/link"
 import { ArrowLeft, Shield, UserCog } from "lucide-react"
 
@@ -16,7 +17,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { getAdmins, updateAdminRole, type AdminUser } from "@/services/admin/admins"
+import { getAdmins, updateAdminRole, type AdminUser } from "@/services/admins"
 
 const ROLE_LABELS: Record<string, string> = {
   ROLE_SUPER_ADMIN: "Super Admin",
@@ -36,6 +37,7 @@ export default function ManageRolesPage() {
   const [updatingId, setUpdatingId] = useState<number | null>(null)
   const [openDropdown, setOpenDropdown] = useState<number | null>(null)
   const dropdownRef = useRef<HTMLDivElement | null>(null)
+  const { admin: currentAdmin } = useAdmin()
 
   useEffect(() => {
     getAdmins()
@@ -140,11 +142,21 @@ export default function ManageRolesPage() {
             ) : (
               filtered.map((admin) => {
                 const isSuperAdmin = admin.role === "ROLE_SUPER_ADMIN"
+                const isSelf = currentAdmin?.id === admin.id
 
                 return (
                   <TableRow key={admin.id}>
                     <TableCell className="text-xs text-muted-foreground">{admin.id}</TableCell>
-                    <TableCell className="text-sm font-medium">{admin.email}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium">{admin.email}</span>
+                        {isSelf && (
+                          <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
+                            you
+                          </span>
+                        )}
+                      </div>
+                    </TableCell>
                     <TableCell>
                       <span
                         className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${
@@ -158,10 +170,9 @@ export default function ManageRolesPage() {
                       </span>
                     </TableCell>
                     <TableCell>
-                      <div
-                        className="relative inline-block"
-                        ref={openDropdown === admin.id ? dropdownRef : undefined}
-                      >
+                      {isSelf ? (
+                        <span className="text-xs text-muted-foreground italic">Cannot change your own role</span>
+                      ) : (
                         <div className="flex gap-2">
                           {ROLE_OPTIONS.filter((opt) => opt.value !== admin.role).map((opt) => {
                             const Icon = opt.icon
@@ -179,7 +190,7 @@ export default function ManageRolesPage() {
                             )
                           })}
                         </div>
-                      </div>
+                      )}
                     </TableCell>
                   </TableRow>
                 )

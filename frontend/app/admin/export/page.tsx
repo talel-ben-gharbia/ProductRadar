@@ -1,7 +1,10 @@
+import React, { Suspense } from "react"
+
 import { Button } from "@/components/ui/button"
-import { getCategoriesWithParents } from "@/services/admin/categories"
-import { getProductListings } from "@/services/admin/product-listings"
-import { getProducts } from "@/services/admin/products"
+import { Skeleton } from "@/components/ui/skeleton"
+import { getCategoriesWithParents } from "@/services/categories"
+import { getProductListings } from "@/services/product-listings"
+import { getProducts } from "@/services/products"
 import type { ProductListing } from "@/utils/types"
 
 type ExportCard = {
@@ -62,7 +65,7 @@ async function loadExportCards(): Promise<ExportCard[]> {
   ]
 }
 
-export default async function ExportDataPage() {
+async function ExportDataPageContent() {
   let cards: ExportCard[] = []
   let fetchError: string | null = null
 
@@ -73,7 +76,7 @@ export default async function ExportDataPage() {
   }
 
   return (
-    <section className="w-full max-w-none space-y-4">
+    <>
       <div className="space-y-1">
         <h1 className="text-2xl font-bold">Export Data</h1>
         <p className="text-sm text-muted-foreground">
@@ -111,6 +114,29 @@ export default async function ExportDataPage() {
           ))}
         </div>
       )}
+    </>
+  )
+}
+
+function ExportDataFallback() {
+  return (
+    <div className="space-y-4">
+      <Skeleton className="h-8 w-36" />
+      <Skeleton className="h-4 w-64" />
+      <div className="grid gap-4 md:grid-cols-2">
+        <Skeleton className="h-32 rounded-xl" />
+        <Skeleton className="h-32 rounded-xl" />
+      </div>
+    </div>
+  )
+}
+
+export default async function ExportDataPage() {
+  return (
+    <section className="w-full max-w-none space-y-4">
+      <Suspense fallback={<ExportDataFallback />}>
+        <ExportDataPageContent />
+      </Suspense>
     </section>
   )
 }

@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { CheckCircle2, Clock, Crown, ImageIcon, Loader2, Megaphone, Package, Search, Sparkles, XCircle } from "lucide-react"
+import { CheckCircle2, ChevronDown, ChevronRight, Clock, Crown, ImageIcon, Loader2, Megaphone, Package, Search, Sparkles, XCircle } from "lucide-react"
 
 import { useB2B } from "@/components/B2B/b2b-context"
 import { QuotaBar } from "@/components/B2B/b2b-quota-bar"
@@ -22,6 +22,8 @@ type ProductItem = {
   product_name: string
   product_brand: string | null
   ref: string | null
+  in_stock: boolean
+  has_active_request: boolean
 }
 
 type SponsoredItem = {
@@ -132,6 +134,14 @@ export default function SponsoredProductsPage() {
 
   const handleSubmit = async () => {
     if (!selectedProduct || !firebaseUid) return
+    if (!selectedProduct.in_stock) {
+      setError("Cannot submit — this product is out of stock.")
+      return
+    }
+    if (selectedProduct.has_active_request) {
+      setError("Cannot submit — this product already has an active or pending sponsorship request.")
+      return
+    }
     setSubmitting(true)
     try {
       const res = await fetch(`/api/b2b/workspace?endpoint=${encodeURIComponent("sponsored")}`, {
@@ -247,6 +257,7 @@ export default function SponsoredProductsPage() {
                 <TabsList className="bg-muted/50">
                   <TabsTrigger value="search" className="text-xs">Search</TabsTrigger>
                   <TabsTrigger value="category" className="text-xs">Browse by Category</TabsTrigger>
+                  <TabsTrigger value="all" className="text-xs">All Listings</TabsTrigger>
                 </TabsList>
                 <TabsContent value="search" className="space-y-3 pt-3">
                   <div className="relative">
@@ -261,20 +272,43 @@ export default function SponsoredProductsPage() {
                   {searching && <Loader2 className="size-4 animate-spin text-muted-foreground" />}
                   {searchResults.length > 0 && (
                     <div className="max-h-48 space-y-1 overflow-y-auto rounded-lg border p-2">
-                      {searchResults.map((item) => (
-                        <button
-                          key={item.listing_id}
-                          type="button"
-                          onClick={() => setSelectedProduct(item)}
-                          className={`w-full rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-muted ${
-                            selectedProduct?.listing_id === item.listing_id ? "bg-indigo-50 ring-1 ring-indigo-500 dark:bg-indigo-950/30" : ""
-                          }`}
-                        >
-                          <span className="font-medium">{item.product_name}</span>
-                          {item.ref && <span className="ml-2 text-muted-foreground">({item.ref})</span>}
-                          {item.product_brand && <span className="ml-2 text-xs text-muted-foreground/60">{item.product_brand}</span>}
-                        </button>
-                      ))}
+                      {searchResults.map((item) => {
+                        const disabled = !item.in_stock || item.has_active_request
+                        return (
+                          <button
+                            key={item.listing_id}
+                            type="button"
+                            onClick={() => !disabled && setSelectedProduct(item)}
+                            disabled={disabled}
+                            className={`w-full rounded-md px-3 py-2 text-left text-sm transition-colors ${
+                              disabled
+                                ? "cursor-not-allowed opacity-50"
+                                : "hover:bg-muted"
+                            } ${
+                              selectedProduct?.listing_id === item.listing_id ? "bg-indigo-50 ring-1 ring-indigo-500 dark:bg-indigo-950/30" : ""
+                            }`}
+                          >
+                            <div className="flex items-center gap-2">
+                              {item.in_stock ? (
+                                <CheckCircle2 className="size-3.5 shrink-0 text-emerald-500" />
+                              ) : (
+                                <XCircle className="size-3.5 shrink-0 text-red-400" />
+                              )}
+                              <span className="font-medium">{item.product_name}</span>
+                            </div>
+                            <div className="ml-5.5 mt-0.5 flex flex-wrap items-center gap-1.5">
+                              {item.ref && <span className="text-muted-foreground">({item.ref})</span>}
+                              {item.product_brand && <span className="text-xs text-muted-foreground/60">{item.product_brand}</span>}
+                              {!item.in_stock && (
+                                <Badge variant="outline" className="text-[10px] border-red-200 text-red-600">Out of stock</Badge>
+                              )}
+                              {item.has_active_request && (
+                                <Badge variant="outline" className="text-[10px] border-amber-200 text-amber-600">Already requested</Badge>
+                              )}
+                            </div>
+                          </button>
+                        )
+                      })}
                     </div>
                   )}
                   {!searching && searchQuery.length >= 2 && searchResults.length === 0 && (
@@ -283,6 +317,13 @@ export default function SponsoredProductsPage() {
                 </TabsContent>
                 <TabsContent value="category" className="space-y-3 pt-3">
                   <CategoryPicker
+                    firebaseUid={firebaseUid}
+                    onSelect={setSelectedProduct}
+                    selectedId={selectedProduct?.listing_id ?? null}
+                  />
+                </TabsContent>
+                <TabsContent value="all" className="space-y-3 pt-3">
+                  <AllListingsPicker
                     firebaseUid={firebaseUid}
                     onSelect={setSelectedProduct}
                     selectedId={selectedProduct?.listing_id ?? null}
@@ -625,6 +666,8 @@ function CategoryPicker({
             product_name: i.productName as string,
             product_brand: i.productBrand as string | null,
             ref: i.ref as string | null,
+            in_stock: (i as any).in_stock ?? true,
+            has_active_request: (i as any).has_active_request ?? false,
           })),
         )
       })
@@ -656,21 +699,179 @@ function CategoryPicker({
       {loading && <Loader2 className="size-4 animate-spin text-muted-foreground" />}
       {products.length > 0 && (
         <div className="max-h-48 space-y-1 overflow-y-auto rounded-lg border p-2">
-          {products.map((item) => (
-            <button
-              key={item.listing_id}
-              type="button"
-              onClick={() => onSelect(item)}
-              className={`w-full rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-muted ${
-                selectedId === item.listing_id ? "bg-indigo-50 ring-1 ring-indigo-500 dark:bg-indigo-950/30" : ""
-              }`}
-            >
-              <span className="font-medium">{item.product_name}</span>
-              {item.ref && <span className="ml-2 text-muted-foreground">({item.ref})</span>}
-            </button>
-          ))}
+          {products.map((item) => {
+            const disabled = !item.in_stock || item.has_active_request
+            return (
+              <button
+                key={item.listing_id}
+                type="button"
+                onClick={() => !disabled && onSelect(item)}
+                disabled={disabled}
+                className={`w-full rounded-md px-3 py-2 text-left text-sm transition-colors ${
+                  disabled ? "cursor-not-allowed opacity-50" : "hover:bg-muted"
+                } ${
+                  selectedId === item.listing_id ? "bg-indigo-50 ring-1 ring-indigo-500 dark:bg-indigo-950/30" : ""
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  {item.in_stock ? (
+                    <CheckCircle2 className="size-3.5 shrink-0 text-emerald-500" />
+                  ) : (
+                    <XCircle className="size-3.5 shrink-0 text-red-400" />
+                  )}
+                  <span className="font-medium">{item.product_name}</span>
+                </div>
+                <div className="ml-5.5 mt-0.5 flex flex-wrap items-center gap-1.5">
+                  {item.ref && <span className="text-muted-foreground">({item.ref})</span>}
+                  {!item.in_stock && (
+                    <Badge variant="outline" className="text-[10px] border-red-200 text-red-600">Out of stock</Badge>
+                  )}
+                  {item.has_active_request && (
+                    <Badge variant="outline" className="text-[10px] border-amber-200 text-amber-600">Already requested</Badge>
+                  )}
+                </div>
+              </button>
+            )
+          })}
         </div>
       )}
+    </div>
+  )
+}
+
+type AllListingsCategory = {
+  category_id: number
+  category_name: string
+  items: Array<{
+    listing_id: number
+    product_id: number
+    product_name: string
+    product_brand: string | null
+    ref: string | null
+    has_active_request: boolean
+  }>
+}
+
+type AllListingsResponse = {
+  categories: AllListingsCategory[]
+}
+
+function AllListingsPicker({
+  firebaseUid,
+  onSelect,
+  selectedId,
+}: {
+  firebaseUid: string | null
+  onSelect: (item: ProductItem) => void
+  selectedId: number | null
+}) {
+  const [categories, setCategories] = useState<AllListingsCategory[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [expandedCats, setExpandedCats] = useState<Set<number>>(new Set())
+  const [retryCount, setRetryCount] = useState(0)
+
+  useEffect(() => {
+    if (!firebaseUid) return
+    setLoading(true)
+    setError(null)
+    fetch("/api/b2b/sponsored/all-eligible", {
+      headers: { "X-Firebase-Uid": firebaseUid },
+    })
+      .then((r) => r.json())
+      .then((body: AllListingsResponse) => {
+        setCategories(body.categories ?? [])
+      })
+      .catch(() => setError("Failed to load eligible listings"))
+      .finally(() => setLoading(false))
+  }, [firebaseUid, retryCount])
+
+  const toggleCategory = (catId: number) => {
+    setExpandedCats((prev) => {
+      const next = new Set(prev)
+      if (next.has(catId)) next.delete(catId)
+      else next.add(catId)
+      return next
+    })
+  }
+
+  if (error) {
+    return (
+      <B2BErrorState
+        message={error}
+        onRetry={() => { setError(null); setRetryCount(n => n + 1) }}
+      />
+    )
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-6">
+        <Loader2 className="size-4 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
+
+  if (categories.length === 0) {
+    return (
+      <p className="text-center text-xs text-muted-foreground py-4">
+        No eligible listings found. All your in-stock listings may already have an active sponsorship request.
+      </p>
+    )
+  }
+
+  return (
+    <div className="space-y-1.5 max-h-80 overflow-y-auto rounded-lg border p-2">
+      {categories.map((cat) => {
+        const isExpanded = expandedCats.has(cat.category_id)
+        return (
+          <div key={cat.category_id} className="rounded-md border border-border/50">
+            <button
+              type="button"
+              onClick={() => toggleCategory(cat.category_id)}
+              className="flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm font-medium hover:bg-muted/50 transition-colors"
+            >
+              <span>{cat.category_name}</span>
+              <span className="flex items-center gap-2">
+                <Badge variant="outline" className="text-[10px]">{cat.items.length} listing{cat.items.length !== 1 ? "s" : ""}</Badge>
+                {isExpanded ? <ChevronDown className="size-3.5 text-muted-foreground" /> : <ChevronRight className="size-3.5 text-muted-foreground" />}
+              </span>
+            </button>
+            {isExpanded && (
+              <div className="space-y-0.5 border-t px-2 py-1.5">
+                {cat.items.map((item) => {
+                  const disabled = item.has_active_request
+                  return (
+                    <button
+                      key={item.listing_id}
+                      type="button"
+                      onClick={() => !disabled && onSelect({ ...item, in_stock: true })}
+                      disabled={disabled}
+                      className={`w-full rounded-md px-3 py-2 text-left text-sm transition-colors ${
+                        disabled ? "cursor-not-allowed opacity-50" : "hover:bg-muted"
+                      } ${
+                        selectedId === item.listing_id ? "bg-indigo-50 ring-1 ring-indigo-500 dark:bg-indigo-950/30" : ""
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="size-3.5 shrink-0 text-emerald-500" />
+                        <span className="font-medium">{item.product_name}</span>
+                      </div>
+                      <div className="ml-5.5 mt-0.5 flex flex-wrap items-center gap-1.5">
+                        {item.ref && <span className="text-muted-foreground">({item.ref})</span>}
+                        {item.product_brand && <span className="text-xs text-muted-foreground/60">{item.product_brand}</span>}
+                        {item.has_active_request && (
+                          <Badge variant="outline" className="text-[10px] border-amber-200 text-amber-600">Already requested</Badge>
+                        )}
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }

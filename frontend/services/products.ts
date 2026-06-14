@@ -18,7 +18,7 @@ async function fetchProductsFromApi(categoryId?: number, locale?: string): Promi
 
     const products = await cachedFetch<Product[]>(endpoint, {
       cacheKey,
-      cacheTtl: 300,
+      cacheTtl: 30,
     })
     return products
   } catch (error) {

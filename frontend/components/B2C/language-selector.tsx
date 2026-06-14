@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { Check, ChevronDown, Globe } from "lucide-react"
 
+import { useGoogleTranslate } from "@/components/google-translate-provider"
 import { useI18n } from "@/lib/i18n-context"
 
 /* ------------------------------------------------------------------ */
@@ -18,6 +19,7 @@ type LangCode = (typeof LANGUAGES)[number]["code"]
 
 export function LanguageSelector({ compact = false }: { compact?: boolean }) {
   const { locale, setLocale } = useI18n()
+  const { translateTo } = useGoogleTranslate()
   const [open, setOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -53,9 +55,10 @@ export function LanguageSelector({ compact = false }: { compact?: boolean }) {
   const handleSelect = useCallback(
     (langCode: string) => {
       setLocale(langCode as LangCode)
+      translateTo(langCode)
       setOpen(false)
     },
-    [setLocale]
+    [setLocale, translateTo]
   )
 
   return (
@@ -158,13 +161,15 @@ export function MobileLanguageSelector({
   onClose?: () => void
 }) {
   const { locale, setLocale } = useI18n()
+  const { translateTo } = useGoogleTranslate()
 
   const handleSelect = useCallback(
     (langCode: string) => {
       setLocale(langCode as LangCode)
+      translateTo(langCode)
       onClose?.()
     },
-    [setLocale, onClose]
+    [setLocale, translateTo, onClose]
   )
 
   return (

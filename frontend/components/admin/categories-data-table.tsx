@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useEffect, useMemo, useRef, useState } from "react"
-import { ChevronDown } from "lucide-react"
+import { ChevronDown, Pencil } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 
@@ -85,10 +85,10 @@ function SmoothDropdown({ value, options, onChange }: SmoothDropdownProps) {
       </button>
 
       <div
-        className={`absolute z-20 mt-2 w-full origin-top rounded-md border bg-background p-1 shadow transition-all duration-200 ease-out ${
+        className={`absolute z-20 mt-2 w-full origin-top rounded-md border bg-background p-1 shadow ${
           isOpen
-            ? "pointer-events-auto translate-y-0 scale-100 opacity-100"
-            : "pointer-events-none -translate-y-1 scale-95 opacity-0"
+            ? "visible opacity-100"
+            : "invisible opacity-0"
         }`}
       >
         {options.map((option) => (
@@ -357,12 +357,13 @@ export default function CategoriesDataTable({
               <TableHead>Child Category</TableHead>
               <TableHead>Sub Category</TableHead>
               <TableHead>Category</TableHead>
+              <TableHead className="w-16">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={5} className="py-6 text-center text-muted-foreground">
+                <TableCell colSpan={6} className="py-6 text-center text-muted-foreground">
                   <div className="flex items-center justify-center gap-2">
                     <Spinner className="size-4" />
                     <span>Loading categories...</span>
@@ -371,13 +372,13 @@ export default function CategoriesDataTable({
               </TableRow>
             ) : fetchError ? (
               <TableRow>
-                <TableCell colSpan={5} className="py-6 text-center text-destructive">
+                <TableCell colSpan={6} className="py-6 text-center text-destructive">
                   {fetchError}
                 </TableCell>
               </TableRow>
             ) : paginatedRows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="py-6 text-center text-muted-foreground">
+                <TableCell colSpan={6} className="py-6 text-center text-muted-foreground">
                   No categories found
                 </TableCell>
               </TableRow>
@@ -396,6 +397,15 @@ export default function CategoriesDataTable({
                   <TableCell>{category.childCategory ?? "-"}</TableCell>
                   <TableCell>{category.subCategory ?? "-"}</TableCell>
                   <TableCell>{category.category ?? "-"}</TableCell>
+                  <TableCell>
+                    <Link
+                      href={`/admin/categories/${category.id}`}
+                      className="inline-flex items-center justify-center rounded-md p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                    >
+                      <Pencil className="size-4" />
+                      <span className="sr-only">Edit</span>
+                    </Link>
+                  </TableCell>
                 </TableRow>
               ))
             )}

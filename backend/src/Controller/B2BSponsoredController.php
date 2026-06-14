@@ -10,6 +10,7 @@ use App\Entity\B2BCompany;
 use App\Entity\B2BMarket;
 use App\Entity\B2BSponsoredArticle;
 use App\Entity\ProductListing;
+use App\Repository\AdminRepository;
 use App\Repository\UserRepository;
 use App\Security\AdminApiGuard;
 use App\Service\B2BNotificationService;
@@ -19,6 +20,8 @@ use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\Mailer\MailerInterface;
+use Symfony\Component\Mime\Email;
 use Symfony\Component\Routing\Attribute\Route;
 
 #[Route('/api/b2b')]
@@ -27,6 +30,7 @@ final class B2BSponsoredController extends AbstractController
     public function __construct(
         private readonly B2BPlanGatingService $gatingService,
         private readonly SubscriptionContextResolver $subscriptionResolver,
+        private readonly AdminRepository $adminRepository,
     ) {
     }
 
@@ -51,12 +55,13 @@ final class B2BSponsoredController extends AbstractController
         }
 
         $qb = $entityManager->createQueryBuilder()
-            ->select('pl.id AS listing_id, p.id AS product_id, p.name AS product_name, COALESCE(b.name, p.brand) AS product_brand, pl.ref')
+            ->select('pl.id AS listing_id, p.id AS product_id, p.name AS product_name, b.name AS product_brand, pl.ref, pl.availability AS in_stock')
             ->from(ProductListing::class, 'pl')
             ->join('pl.product', 'p')
             ->leftJoin('p.brandEntity', 'b')
             ->where('pl.seller = :sellerId')
             ->andWhere('pl.is_active = true')
+            ->andWhere('pl.availability = true')
             ->setParameter('sellerId', $sellerId);
 
         $search = trim((string) $request->query->get('search', ''));
@@ -77,6 +82,17 @@ final class B2BSponsoredController extends AbstractController
 
         $rows = $qb->getQuery()->getResult();
 
+        // Find which listings already have a pending/published request
+        $existingIds = $entityManager->createQueryBuilder()
+            ->select('IDENTITY(a.productListing)')
+            ->from(B2BSponsoredArticle::class, 'a')
+            ->where('a.company_id = :companyId')
+            ->andWhere('a.status IN (:statuses)')
+            ->setParameter('companyId', $user->getId())
+            ->setParameter('statuses', ['PENDING', 'PUBLISHED'])
+            ->getQuery()
+            ->getSingleColumnResult();
+
         return $this->json([
             'items' => array_map(static fn (array $r) => [
                 'listing_id' => (int) $r['listing_id'],
@@ -84,7 +100,78 @@ final class B2BSponsoredController extends AbstractController
                 'product_name' => $r['product_name'],
                 'product_brand' => $r['product_brand'],
                 'ref' => $r['ref'],
+                'in_stock' => (bool) ($r['in_stock'] ?? false),
+                'has_active_request' => in_array((int) $r['listing_id'], $existingIds, true),
             ], $rows),
+        ]);
+    }
+
+    #[Route('/sponsored/all-eligible', name: 'b2b_sponsored_all_eligible', methods: ['GET'])]
+    public function listAllEligible(
+        Request $request,
+        UserRepository $userRepository,
+        EntityManagerInterface $entityManager,
+    ): JsonResponse {
+        $user = $this->resolveUser($request, $userRepository);
+        if (!$user instanceof B2BCompany) {
+            return $this->json(['error' => 'Only B2B companies can sponsor products.'], 403);
+        }
+
+        $sellerId = $user->getSeller()?->getId();
+        if ($sellerId === null) {
+            return $this->json(['categories' => []]);
+        }
+
+        $rows = $entityManager->createQueryBuilder()
+            ->select('pl.id AS listing_id, p.id AS product_id, p.name AS product_name, b.name AS product_brand, pl.ref, c.id AS category_id, c.name AS category_name')
+            ->from(ProductListing::class, 'pl')
+            ->join('pl.product', 'p')
+            ->leftJoin('p.brandEntity', 'b')
+            ->join('p.category', 'c')
+            ->where('pl.seller = :sellerId')
+            ->andWhere('pl.is_active = true')
+            ->andWhere('pl.availability = true')
+            ->setParameter('sellerId', $sellerId)
+            ->orderBy('c.name', 'ASC')
+            ->addOrderBy('p.name', 'ASC')
+            ->getQuery()
+            ->getResult();
+
+        // Find which listings already have a pending/published request
+        $existingIds = $entityManager->createQueryBuilder()
+            ->select('IDENTITY(a.productListing)')
+            ->from(B2BSponsoredArticle::class, 'a')
+            ->where('a.company_id = :companyId')
+            ->andWhere('a.status IN (:statuses)')
+            ->setParameter('companyId', $user->getId())
+            ->setParameter('statuses', ['PENDING', 'PUBLISHED'])
+            ->getQuery()
+            ->getSingleColumnResult();
+
+        // Group by category
+        $grouped = [];
+        foreach ($rows as $r) {
+            $catId = (int) ($r['category_id'] ?? 0);
+            $catName = $r['category_name'] ?? 'Other';
+            if (!isset($grouped[$catId])) {
+                $grouped[$catId] = [
+                    'category_id' => $catId,
+                    'category_name' => $catName,
+                    'items' => [],
+                ];
+            }
+            $grouped[$catId]['items'][] = [
+                'listing_id' => (int) $r['listing_id'],
+                'product_id' => (int) $r['product_id'],
+                'product_name' => $r['product_name'],
+                'product_brand' => $r['product_brand'],
+                'ref' => $r['ref'],
+                'has_active_request' => in_array((int) $r['listing_id'], $existingIds, true),
+            ];
+        }
+
+        return $this->json([
+            'categories' => array_values($grouped),
         ]);
     }
 
@@ -143,6 +230,8 @@ final class B2BSponsoredController extends AbstractController
         Request $request,
         UserRepository $userRepository,
         EntityManagerInterface $entityManager,
+        MailerInterface $mailer,
+        \Psr\Log\LoggerInterface $logger,
     ): JsonResponse {
         $user = $this->resolveWorkspaceUser($firebaseUid, $userRepository);
         if ($user instanceof JsonResponse) return $user;
@@ -170,6 +259,11 @@ final class B2BSponsoredController extends AbstractController
 
         if ($listing->getSeller()?->getId() !== $sellerId) {
             return $this->json(['error' => 'You can only sponsor your own listings.'], 403);
+        }
+
+        // Check listing is in stock
+        if (!$listing->getIsInStock()) {
+            return $this->json(['error' => 'Cannot sponsor a listing that is currently out of stock.'], 409);
         }
 
         // Check not already submitted (pending or published)
@@ -220,6 +314,9 @@ final class B2BSponsoredController extends AbstractController
         $entityManager->flush();
 
         $this->subscriptionResolver->recordUsage($user, 'sponsored_products');
+
+        // Notify admins
+        $this->notifyAdminsOfSponsorshipRequest($mailer, $logger, $user, $listing);
 
         return $this->json($this->serialize($article), 201);
     }
@@ -609,5 +706,39 @@ final class B2BSponsoredController extends AbstractController
             'company_id' => $a->getCompanyId(),
             'ads_request_id' => $a->getAdsRequest()?->getId(),
         ];
+    }
+
+    private function notifyAdminsOfSponsorshipRequest(MailerInterface $mailer, \Psr\Log\LoggerInterface $logger, B2BCompany $company, ProductListing $listing): void
+    {
+        $from = $_SERVER['B2B_NOTIFICATIONS_FROM'] ?? $_ENV['B2B_NOTIFICATIONS_FROM'] ?? 'noreply@productradar.tn';
+        $admins = $this->adminRepository->findAll();
+        $companyName = $company->getName() ?? 'A B2B company';
+        $productName = $listing->getProduct()?->getName() ?? 'Unknown product';
+
+        foreach ($admins as $admin) {
+            $emailAddress = $admin->getEmail();
+            if ($emailAddress === null || $emailAddress === '') {
+                continue;
+            }
+            try {
+                $email = (new Email())
+                    ->from($from)
+                    ->to($emailAddress)
+                    ->subject(sprintf('[ProductRadar] Sponsorship request: %s - %s', $companyName, $productName))
+                    ->text(sprintf(
+                        "Hello,\n\n%s has submitted a new sponsorship request for product \"%s\".\n\nPlease review and approve or reject this request in the admin dashboard.\n\nBest regards,\nProductRadar Team",
+                        $companyName,
+                        $productName
+                    ));
+                $mailer->send($email);
+            } catch (\Throwable $e) {
+                $logger->error('Failed to send sponsorship request email to admin.', [
+                    'admin_email' => $emailAddress,
+                    'company' => $companyName,
+                    'product' => $productName,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
     }
 }

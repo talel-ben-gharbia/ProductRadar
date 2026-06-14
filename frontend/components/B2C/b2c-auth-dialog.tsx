@@ -216,7 +216,7 @@ export function B2CAuthDialogTrigger() {
       </Button>
 
       <Dialog open={isOpen} onOpenChange={handleOpenChange}>
-        <DialogContent className="overflow-hidden rounded-2xl border bg-background p-0 shadow-xl sm:max-w-md">
+        <DialogContent className="overflow-hidden rounded-2xl border bg-background p-0 shadow-xl sm:max-w-md notranslate">
           <DialogHeader className="border-b px-6 pb-4 pt-6">
             <DialogTitle className="text-lg font-semibold tracking-tight">{dialogTitle}</DialogTitle>
             <DialogDescription className="text-muted-foreground">
